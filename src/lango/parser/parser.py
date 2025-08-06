@@ -1,8 +1,7 @@
-import io
 from contextlib import redirect_stdout
 from io import StringIO
 
-from lark import Lark, Token, Transformer, Tree
+from lark import Lark, Token, Tree
 
 
 def build_environment(tree):
@@ -333,7 +332,7 @@ def example(
         raise RuntimeError("No main function defined")
 
     if isTest:
-        f = io.StringIO()
+        f = StringIO()
         with redirect_stdout(f):
             result = interp.eval_func("main")
         output = f.getvalue()
