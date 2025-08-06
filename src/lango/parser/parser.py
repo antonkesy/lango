@@ -1,7 +1,33 @@
 import io
 from contextlib import redirect_stdout
+from io import StringIO
 
 from lark import Lark, Token, Transformer, Tree
+
+
+def build_environment(tree):
+    env = {}
+
+    def visit(node):
+        if isinstance(node, Tree):
+            if node.data == "func_def":
+                func_name = node.children[0].value
+                patterns = node.children[
+                    1:-1
+                ]  # all children between func_name and expr
+                expr = node.children[-1]
+
+                # Support multiple function clauses for pattern matching
+                if func_name not in env:
+                    env[func_name] = ("pattern_match", [])
+
+                # Add this clause to the function's clauses list
+                env[func_name][1].append((patterns, expr))
+            for child in node.children:
+                visit(child)
+
+    visit(tree)
+    return env
 
 
 def collect_functions(tree):
@@ -15,7 +41,13 @@ def collect_functions(tree):
                     1:-1
                 ]  # all children between func_name and expr
                 expr = node.children[-1]
-                env[func_name] = ("lambda", patterns, expr)
+
+                # Support multiple function clauses for pattern matching
+                if func_name not in env:
+                    env[func_name] = ("pattern_match", [])
+
+                # Add this clause to the function's clauses list
+                env[func_name][1].append((patterns, expr))
             for child in node.children:
                 visit(child)
 
@@ -155,30 +187,58 @@ class Interpreter:
             raise TypeError(f"Unknown node type: {type(node)}")
 
     def eval_func(self, name):
-        kind, patterns, expr = self.env[name]
-        if kind != "lambda":
-            raise RuntimeError("Only lambdas supported")
-        if len(patterns) == 0:
-            return self.eval(expr)
+        env_data = self.env[name]
+
+        # Handle both old format (kind, patterns, expr) and new format (kind, data)
+        if len(env_data) == 3:
+            # Old format: ("lambda", patterns, expr)
+            kind, patterns, expr = env_data
+            if kind != "lambda":
+                raise RuntimeError("Only lambdas supported in old format")
+            if len(patterns) == 0:
+                return self.eval(expr)
+            else:
+                return self._create_curried_function([(patterns, expr)])
+        elif len(env_data) == 2:
+            # New format: ("pattern_match", clauses)
+            kind, data = env_data
+            if kind == "pattern_match":
+                clauses = data
+                return self._create_pattern_match_function(clauses)
+            else:
+                raise RuntimeError(f"Unknown function kind: {kind}")
         else:
-            return self._create_curried_function(patterns, expr)
+            raise RuntimeError(f"Invalid environment data format: {env_data}")
 
-    def _create_curried_function(self, patterns, expr):
-        """Create a curried function that handles multiple parameters"""
+    def _create_pattern_match_function(self, clauses):
+        """Create a function that handles pattern matching across multiple clauses"""
 
+        def pattern_match_fn(*args):
+            # Try each clause in order
+            for patterns, expr in clauses:
+                if self._try_match_patterns(patterns, args):
+                    # This clause matches, evaluate it with the matched bindings
+                    old_variables = self.variables.copy()
+                    try:
+                        self._bind_patterns(patterns, args)
+                        result = self.eval(expr)
+                        return result
+                    finally:
+                        self.variables = old_variables
+
+            # No clause matched
+            raise RuntimeError(f"No pattern matched for arguments: {args}")
+
+        # Create curried version for partial application
         def curried_fn(collected_args=[]):
-            if len(collected_args) == len(patterns):
-                # All arguments collected, evaluate the expression
-                old_variables = self.variables.copy()
-                try:
-                    # Bind all parameters to their arguments
-                    for i, pattern in enumerate(patterns):
-                        param_name = pattern.value
-                        self.variables[param_name] = collected_args[i]
-                    result = self.eval(expr)
-                finally:
-                    self.variables = old_variables
-                return result
+            if not clauses:
+                raise RuntimeError("No clauses defined")
+
+            # Check if we have enough arguments for any clause
+            expected_arity = len(clauses[0][0])  # Assume all clauses have same arity
+
+            if len(collected_args) == expected_arity:
+                return pattern_match_fn(*collected_args)
             else:
                 # Return a function that collects the next argument
                 def next_fn(arg):
@@ -187,6 +247,57 @@ class Interpreter:
                 return next_fn
 
         return curried_fn()
+
+    def _create_curried_function(self, clauses):
+        """Create a curried function that handles multiple parameters (backward compatibility)"""
+        # Convert old format to new format
+        return self._create_pattern_match_function(clauses)
+
+    def _try_match_patterns(self, patterns, args):
+        """Check if patterns match the given arguments"""
+        if len(patterns) != len(args):
+            return False
+
+        for pattern, arg in zip(patterns, args):
+            if not self._match_pattern(pattern, arg):
+                return False
+        return True
+
+    def _match_pattern(self, pattern, arg):
+        """Check if a single pattern matches an argument"""
+        if isinstance(pattern, Token):
+            # Variable pattern - always matches
+            return True
+        elif isinstance(pattern, Tree):
+            # Literal pattern - must match exactly
+            pattern_value = self._get_pattern_value(pattern)
+            return pattern_value == arg
+        else:
+            # Unknown pattern type
+            return False
+
+    def _bind_patterns(self, patterns, args):
+        """Bind matched patterns to variables in the current scope"""
+        for pattern, arg in zip(patterns, args):
+            if isinstance(pattern, Token):
+                # Variable pattern - bind to the argument value
+                self.variables[pattern.value] = arg
+            # Literal patterns don't bind anything
+
+    def _get_pattern_value(self, pattern):
+        """Extract the value from a pattern Tree node"""
+        if pattern.data == "int":
+            return int(pattern.children[0])
+        elif pattern.data == "float":
+            return float(pattern.children[0])
+        elif pattern.data == "string":
+            return pattern.children[0][1:-1]
+        elif pattern.data == "true":
+            return True
+        elif pattern.data == "false":
+            return False
+        else:
+            raise RuntimeError(f"Unknown literal pattern: {pattern.data}")
 
     def eval_do_block(self, stmts):
         result = None
@@ -201,7 +312,7 @@ class Interpreter:
 
 
 def example(
-    path: str = "test/files/minio/functions/2Param.minio",
+    path: str = "test/files/minio/functions/patternMatching.minio",
     isTest: bool = False,
 ) -> str:
     parser = Lark.open(
