@@ -6,6 +6,8 @@
 	test
 	run
 
+all: run
+
 prep:
 	python3.13 -m venv .venv
 

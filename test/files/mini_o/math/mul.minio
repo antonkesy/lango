@@ -1,0 +1,4 @@
+-- "30"
+main = do {
+  putStr (show 3 * 10)
+}

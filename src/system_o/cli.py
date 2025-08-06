@@ -1,6 +1,8 @@
 import typer
 from rich.console import Console
 
+from system_o.parser.parser import example
+
 app = typer.Typer()
 console = Console()
 
@@ -14,8 +16,10 @@ def text(
         help="TODO",
     ),
 ):
-    console.print(f"Input file: {input_file}")
+    # TODO
+    console.print("TODO")
 
 
-if __name__ == "__main__":
-    app()
+def main():
+    example()
+    return 0

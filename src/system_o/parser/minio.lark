@@ -1,0 +1,89 @@
+start: (prelude stmt (sep stmt)*)? postlude
+
+prelude: (_NL | COMMENT)*
+sep: (_NL | COMMENT)+
+postlude: (_NL | COMMENT)*
+
+?stmt: data_decl
+     | func_def
+     | func_sig
+
+// --- Data Declarations ---
+data_decl: "data" TYPE "=" constructor ("|" constructor)*
+
+constructor: UIDENT record_constructor
+           | UIDENT type_expr*
+
+record_constructor: "{" [field ("," field)*] "}"
+field: ID "::" type_expr
+
+// --- Function Signatures and Definitions ---
+func_sig: ID "::" type_expr ("->" type_expr)*
+
+func_def: ID pattern* "=" expr
+
+// --- Expressions ---
+PLUS: "+"
+MINUS: "-"
+MUL: "*"
+DIV: "/"
+POW: "^"|"^^"|"**"
+
+operator: PLUS | MINUS | MUL | DIV | POW
+
+do_stmt: "let" ID "=" expr
+    | expr
+
+stmt_list: (do_stmt (_NL | ";")*)+
+
+?expr: "do" _NL? "{" _NL? stmt_list _NL? "}"  -> do_block
+     | expr "++" expr             -> concat
+     | expr "$" expr              -> dollar
+     | expr PLUS expr             -> add
+     | expr MINUS expr            -> sub
+     | expr MUL expr              -> mul
+     | expr DIV expr              -> div
+     | expr POW expr              -> pow
+     | "(" expr ")"               -> grouped
+     | expr expr                  -> app
+     | constructor_expr
+     | UIDENT                     -> constructor
+     | ID                         -> var
+     | literal
+
+constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
+field_assign: ID "=" expr
+
+// --- Types ---
+?type_expr: TYPE
+          | TYPE "->" type_expr
+
+// --- Patterns ---
+?pattern: constructor_pattern
+        | ID
+        | literal
+
+constructor_pattern: "(" UIDENT pattern+ ")"
+
+// --- Literals ---
+?literal: INT     -> int
+        | FLOAT   -> float
+        | STRING  -> string
+        | "True"  -> true
+        | "False" -> false
+
+// --- Tokens ---
+ID: /[a-z][a-zA-Z0-9_]*/
+TYPE: /[A-Z][a-zA-Z0-9_]*/
+UIDENT: TYPE
+STRING: /"[^"]*"/
+INT: /[0-9]+/
+FLOAT: /[0-9]+\.[0-9]+/
+
+COMMENT: /--.*/
+%ignore COMMENT
+%ignore /[ \t]+/
+_NL: /(\r?\n)+/
+
+%import common.WS_INLINE
+%ignore WS_INLINE

@@ -1,0 +1,8 @@
+-- "4,4,4"
+main = do {
+  putStr (show 2 ^ 2)
+  putStr ","
+  putStr (show 2 ^^ 2)
+  putStr ","
+  putStr (show 2 ** 2)
+}

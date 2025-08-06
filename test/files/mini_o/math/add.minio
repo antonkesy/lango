@@ -1,0 +1,6 @@
+-- "3,3.3"
+main = do {
+  putStr (show 1 + 2)
+  putStr ","
+  putStr (show 1 + 2.3)
+}

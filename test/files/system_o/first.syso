@@ -1,0 +1,14 @@
+inst first :: (a,b) -> a
+  first (x,y) = x
+
+inst second :: (a,b) -> b
+  second (x,y) = x
+
+inst first :: (a,b,c) -> a
+  first (x,y,z) = x
+
+inst second :: (a,b,c) -> b
+  second (x,y,z) = y
+
+inst third :: (a,b,c) -> c
+  third (x,y,z) = c

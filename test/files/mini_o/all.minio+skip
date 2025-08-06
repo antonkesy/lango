@@ -1,0 +1,57 @@
+-- Person
+data Person = Person { id :: Int, name :: String }
+
+person1 :: Person
+person1 = Person { id = 1, name = "Alice" }
+
+printPerson :: Person -> String
+printPerson (Person id name) = "ID: " ++ show id ++ ", Name: " ++ name
+
+-- Point
+data Point = MkPoint Float Float
+
+printPoint :: Point -> String
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+
+-- Bool
+isTrue :: Bool -> String
+isTrue True = "True"
+isTrue False = "False"
+
+-- Int
+add1 :: Int -> Int
+add1 x = x + 1
+
+-- do
+t :: Int -> String
+t x = do {
+  let y = x + 1
+  "Result: " ++ show y
+}
+
+-- no parameter
+t1 = 1
+
+main = do {
+  putStrLn "Testing isTrue function:"
+  putStrLn ("isTrue True: " ++ isTrue True)
+  putStrLn $ "isTrue False: " ++ isTrue False
+
+  putStrLn "\nTesting Person data type:"
+  putStrLn $ "Person 1: " ++ printPerson person1
+
+  putStrLn "\nTesting Point data type:"
+  let point = MkPoint 3.0 4.0
+  putStrLn $ "Point: " ++ printPoint point
+
+  putStrLn "\nTesting add1 function:"
+  let number = 5
+  putStrLn $ "add1 " ++ show number ++ ": " ++ show (add1 number)
+
+  putStrLn "\nTesting t function:"
+  let result = t 10
+  putStrLn result
+
+  putStrLn "\nTesting t1 function:"
+  putStrLn $ "t1: " ++ show t1
+}

@@ -1,0 +1,4 @@
+-- "3.0"
+main = do {
+  putStr (show 9 / 3)
+}
