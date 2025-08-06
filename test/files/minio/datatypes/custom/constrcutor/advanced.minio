@@ -1,0 +1,28 @@
+-- "Point(1.0, 2.0),Point(3.5, 4.2),X of p1: 1.0,Y of p2: 4.2"
+data Point = MkPoint Float Float
+
+p1 :: Point
+p1 = MkPoint 1.0 2.0
+
+p2 :: Point
+p2 = MkPoint 3.5 4.2
+
+-- Test that pattern matching extracts values correctly
+getX :: Point -> Float
+getX (MkPoint x y) = x
+
+getY :: Point -> Float
+getY (MkPoint x y) = y
+
+printPoint :: Point -> String
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+
+main = do {
+  putStr (printPoint p1);
+  putStr ","
+  putStr (printPoint p2);
+  putStr ","
+  putStr ("X of p1: " ++ show (getX p1));
+  putStr ","
+  putStr ("Y of p2: " ++ show (getY p2));
+}

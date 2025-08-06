@@ -1,0 +1,12 @@
+-- "Point(1.0, 2.0)"
+data Point = MkPoint Float Float
+
+p1 :: Point
+p1 = MkPoint 1.0 2.0
+
+printPoint :: Point -> String
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+
+main = do {
+  putStr printPoint p1;
+}

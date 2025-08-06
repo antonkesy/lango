@@ -208,6 +208,38 @@ class Interpreter:
 
                     # Return a dictionary representing the record
                     return {"_constructor": constructor_name, **fields}
+                case "constructor":
+                    # handle constructor expressions like MkPoint (used in function application)
+                    constructor_token = node.children[0]
+                    constructor_name = (
+                        constructor_token.value
+                        if isinstance(constructor_token, Token)
+                        else str(constructor_token)
+                    )
+
+                    # Return a curried constructor function
+                    def make_constructor(collected_args=[]):
+                        def constructor_fn(arg):
+                            new_args = collected_args + [arg]
+                            # For a 2-argument constructor like MkPoint, we need to curry properly
+                            # We'll assume we need more args and return another function
+                            # until we determine we have enough (this is a simplification)
+
+                            # Check if this might be the final argument by trying to create the constructor
+                            # For now, let's assume we collect all args and create when we get 2 or more
+                            if len(new_args) >= 2:
+                                # Create the record with the collected arguments
+                                fields = {}
+                                for i, value in enumerate(new_args):
+                                    fields[f"field_{i}"] = value
+                                return {"_constructor": constructor_name, **fields}
+                            else:
+                                # Still collecting arguments
+                                return make_constructor(new_args)
+
+                        return constructor_fn
+
+                    return make_constructor()
                 case _:
                     raise NotImplementedError(f"Unhandled expression: {node.data}")
         elif isinstance(node, Token):
@@ -300,7 +332,12 @@ class Interpreter:
         elif isinstance(pattern, Tree):
             if pattern.data == "constructor_pattern":
                 # Constructor pattern like (Person id name)
-                constructor_name = pattern.children[0].value
+                constructor_token = pattern.children[0]
+                constructor_name = (
+                    constructor_token.value
+                    if isinstance(constructor_token, Token)
+                    else str(constructor_token)
+                )
 
                 # Check if the argument is a record with matching constructor
                 if (
@@ -336,13 +373,36 @@ class Interpreter:
 
                 # Extract field values from the record in the order they were defined
                 if isinstance(arg, dict) and "_constructor" in arg:
-                    # For now, assume fields are bound in the order they appear in the pattern
-                    # This is a simplified approach - in a full implementation, you'd want
-                    # to match field names properly
                     field_values = []
-                    for key, value in arg.items():
-                        if key != "_constructor":
-                            field_values.append(value)
+
+                    # Check if this is a positional constructor (field_0, field_1, etc.)
+                    # or a named constructor (actual field names)
+                    has_positional_fields = any(
+                        key.startswith("field_")
+                        for key in arg.keys()
+                        if key != "_constructor"
+                    )
+
+                    if has_positional_fields:
+                        # Extract positional fields in order (field_0, field_1, etc.)
+                        field_count = len(arg) - 1  # Subtract 1 for _constructor key
+                        for i in range(field_count):
+                            field_key = f"field_{i}"
+                            if field_key in arg:
+                                field_values.append(arg[field_key])
+                    else:
+                        # Extract named fields in the order they appear in the pattern
+                        # For named constructors, we need to match field names to pattern variables
+                        for var_token in pattern_vars:
+                            if isinstance(var_token, Token):
+                                var_name = var_token.value
+                                if var_name in arg:
+                                    field_values.append(arg[var_name])
+                                else:
+                                    # Field not found, this shouldn't happen if pattern matching is correct
+                                    raise RuntimeError(
+                                        f"Field '{var_name}' not found in constructor arguments",
+                                    )
 
                     # Bind pattern variables to field values
                     for var_token, field_value in zip(pattern_vars, field_values):
