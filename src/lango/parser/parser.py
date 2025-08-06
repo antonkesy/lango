@@ -189,8 +189,24 @@ class Interpreter:
                         result = self.eval(stmt)
                     return result
                 case "do_stmt":
-                    # handle do statements
-                    return self.eval_do_block(node.children)
+                    # handle do statements - these can be let statements or expressions
+                    # Based on grammar: "let" ID "=" expr | expr
+                    # If 2 children: it's a let statement (ID, expr)
+                    # If 1 child: it's just an expression
+                    if len(node.children) == 2:
+                        # This is a let statement: the "let" and "=" are consumed by the grammar
+                        var_name_token = node.children[0]
+                        var_name = (
+                            var_name_token.value
+                            if isinstance(var_name_token, Token)
+                            else str(var_name_token)
+                        )
+                        value = self.eval(node.children[1])
+                        self.variables[var_name] = value
+                        return value
+                    else:
+                        # This is just an expression
+                        return self.eval(node.children[0])
                 case "grouped":
                     # handle grouped expressions
                     return self.eval(node.children[0])
@@ -428,8 +444,13 @@ class Interpreter:
     def eval_do_block(self, stmts):
         result = None
         for stmt in stmts:
-            if stmt.data == "let":
-                var_name = stmt.children[0].value
+            if isinstance(stmt, Tree) and stmt.data == "let":
+                var_name_token = stmt.children[0]
+                var_name = (
+                    var_name_token.value
+                    if isinstance(var_name_token, Token)
+                    else str(var_name_token)
+                )
                 value = self.eval(stmt.children[1])
                 self.variables[var_name] = value
             else:
@@ -438,7 +459,7 @@ class Interpreter:
 
 
 def example(
-    path: str = "test/files/minio/datatypes/custom/named.minio",
+    path: str = "examples/minio/example.minio",
     isTest: bool = False,
 ) -> str:
     parser = Lark.open(

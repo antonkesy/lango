@@ -1,0 +1,5 @@
+-- "5"
+main = do {
+  let x = 5
+  putStr show x
+}
