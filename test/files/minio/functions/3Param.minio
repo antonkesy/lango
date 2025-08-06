@@ -1,0 +1,9 @@
+-- "0315"
+add :: Int -> Int -> Int
+add x y z = x + y + z
+
+main = do {
+  putStr show (add 0 0 0)
+  putStr show (add 1 1 1)
+  putStr show (add (add 1 2 3) 4 5)
+}

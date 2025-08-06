@@ -64,12 +64,16 @@ stmt_list: (do_stmt (_NL | ";")*)+
      | expr AND expr              -> and
      | expr OR expr               -> or
      | NOT expr                   -> not
-     | "(" expr ")"               -> grouped
-     | expr expr                  -> app
-     | constructor_expr
-     | UIDENT                     -> constructor
-     | ID                         -> var
-     | literal
+     | app_expr
+
+?app_expr: app_expr atom_expr      -> app
+         | atom_expr
+
+?atom_expr: "(" expr ")"           -> grouped
+          | constructor_expr
+          | UIDENT                 -> constructor
+          | ID                     -> var
+          | literal
 
 constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
 field_assign: ID "=" expr

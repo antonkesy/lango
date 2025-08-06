@@ -11,7 +11,9 @@ def collect_functions(tree):
         if isinstance(node, Tree):
             if node.data == "func_def":
                 func_name = node.children[0].value
-                patterns = node.children[1:-2]  # if using pattern* as children
+                patterns = node.children[
+                    1:-1
+                ]  # all children between func_name and expr
                 expr = node.children[-1]
                 env[func_name] = ("lambda", patterns, expr)
             for child in node.children:
@@ -21,16 +23,30 @@ def collect_functions(tree):
     return env
 
 
+def flexible_putStr(arg):
+    """putStr that can handle both single argument and curried usage"""
+    if callable(arg):
+        # If given a function (like 'show'), return a curried function
+        def curried_putStr(value):
+            result = arg(value)  # Apply the function to the value
+            print(result, end="")
+            return None  # Ensure we return None like the original
+
+        return curried_putStr
+    else:
+        # If given a direct value, print it
+        print(arg, end="")
+        return None
+
+
 builtins = {
     "putStrLn": lambda x: print(x),
-    "putStr": lambda x: print(x, end=""),
+    "putStr": flexible_putStr,
     "getLine": lambda: input(),
     "readInt": lambda: int(input()),
     "readString": lambda: input(),
     "readBool": lambda: input().lower() == "true",
-    "add": lambda x, y: x + y,
     "concat": lambda x, y: x + y,
-    "length": lambda x: len(x),
     "toUpperCase": lambda x: x.upper(),
     "toLowerCase": lambda x: x.lower(),
     "show": lambda x: str(x),
@@ -145,12 +161,32 @@ class Interpreter:
         if len(patterns) == 0:
             return self.eval(expr)
         else:
+            return self._create_curried_function(patterns, expr)
 
-            def fn(arg):
-                self.variables[patterns[0].children[0].value] = arg
-                return self.eval(expr)
+    def _create_curried_function(self, patterns, expr):
+        """Create a curried function that handles multiple parameters"""
 
-            return fn
+        def curried_fn(collected_args=[]):
+            if len(collected_args) == len(patterns):
+                # All arguments collected, evaluate the expression
+                old_variables = self.variables.copy()
+                try:
+                    # Bind all parameters to their arguments
+                    for i, pattern in enumerate(patterns):
+                        param_name = pattern.value
+                        self.variables[param_name] = collected_args[i]
+                    result = self.eval(expr)
+                finally:
+                    self.variables = old_variables
+                return result
+            else:
+                # Return a function that collects the next argument
+                def next_fn(arg):
+                    return curried_fn(collected_args + [arg])
+
+                return next_fn
+
+        return curried_fn()
 
     def eval_do_block(self, stmts):
         result = None
@@ -165,7 +201,7 @@ class Interpreter:
 
 
 def example(
-    path: str = "./test/files/minio/math/logical/not.minio",
+    path: str = "test/files/minio/functions/2Param.minio",
     isTest: bool = False,
 ) -> str:
     parser = Lark.open(

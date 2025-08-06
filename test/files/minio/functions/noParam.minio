@@ -1,0 +1,7 @@
+-- "1"
+get :: Int
+get = 1
+
+main = do {
+  putStr show get
+}
