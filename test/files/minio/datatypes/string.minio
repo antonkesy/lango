@@ -1,0 +1,7 @@
+-- "Hey"
+s :: String
+s = "Hey"
+
+main = do {
+  putStr s
+}

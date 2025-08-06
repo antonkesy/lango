@@ -1,0 +1,7 @@
+-- "42"
+s :: Int
+s = 42
+
+main = do {
+  putStr show s
+}

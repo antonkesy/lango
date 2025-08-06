@@ -1,0 +1,7 @@
+-- "True"
+s :: Bool
+s = True
+
+main = do {
+  putStr show s
+}

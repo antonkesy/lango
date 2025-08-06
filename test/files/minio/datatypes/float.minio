@@ -1,0 +1,7 @@
+-- "0.0"
+s :: Float
+s = 0.0
+
+main = do {
+  putStr show s
+}
