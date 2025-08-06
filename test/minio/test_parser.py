@@ -1,7 +1,7 @@
 import os
 import re
 
-from system_o.parser.parser import example
+from lango.parser.parser import example
 
 
 def get_test_output(file_name: str) -> str:
@@ -14,7 +14,7 @@ def get_test_output(file_name: str) -> str:
 
 
 def get_all_test_files() -> list:
-    test_file_path = "./test/files/mini_o/"
+    test_file_path = "./test/files/minio/"
     test_files = []
     for root, _, files in os.walk(test_file_path):
         for file in files:

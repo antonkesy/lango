@@ -136,11 +136,11 @@ class Interpreter:
 
 
 def example(
-    path: str = "./test/files/mini_o/math/add.minio",
+    path: str = "./test/files/minio/math/add.minio",
     isTest: bool = False,
 ) -> str:
     parser = Lark.open(
-        "./src/system_o/parser/minio.lark",
+        "./src/lango/parser/minio.lark",
         parser="lalr",
     )
 

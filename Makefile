@@ -16,7 +16,7 @@ test: install
 	pytest
 
 uninstall:
-	.venv/bin/pip uninstall system_o -y
+	.venv/bin/pip uninstall lango -y
 
 install: uninstall
 	.venv/bin/pip install .
@@ -26,8 +26,8 @@ install-dev:
 
 run-dev:
 	. .venv/bin/activate && \
-		system_o
+		lango
 
 run:
 	. .venv/bin/activate && \
-	system_o --help
+	lango --help

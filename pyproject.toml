@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "system_o"
+name = "lango"
 version = "0.1.0"
 description = "TODO"
 readme = "README.md"
@@ -22,9 +22,9 @@ dependencies = [
 ]
 
 [project.urls]
-bugs = "https://github.com/antonkesy/systemo/issues"
-homepage = "https://github.com/antonkesy/systemo"
+bugs = "https://github.com/antonkesy/lang-o/issues"
+homepage = "https://github.com/antonkesy/lang-o"
 
 [project.scripts]
-system_o = "system_o.cli:main"
-# system_o = "system_o.cli:app"
+lango = "lango.cli:main"
+# lango = "lango.cli:app"

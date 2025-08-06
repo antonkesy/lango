@@ -1,7 +1,7 @@
 import typer
 from rich.console import Console
 
-from system_o.parser.parser import example
+from lango.parser.parser import example
 
 app = typer.Typer()
 console = Console()
