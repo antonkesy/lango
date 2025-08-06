@@ -65,6 +65,7 @@ class Interpreter:
                         return builtins[name]
                     else:
                         raise RuntimeError(f"Unknown variable: {name}")
+                # Arithmetic
                 case "add":
                     return self.eval(node.children[0]) + self.eval(node.children[2])
                 case "sub":
@@ -75,6 +76,34 @@ class Interpreter:
                     return self.eval(node.children[0]) / self.eval(node.children[2])
                 case "pow":
                     return self.eval(node.children[0]) ** self.eval(node.children[2])
+                case "mod":
+                    return self.eval(node.children[0]) % self.eval(node.children[2])
+                case "neg":
+                    return -self.eval(node.children[0])
+                case "quot":
+                    return self.eval(node.children[0]) // self.eval(node.children[2])
+                # TODO: rem, div?
+                # Comparison
+                case "eq":
+                    return self.eval(node.children[0]) == self.eval(node.children[2])
+                case "neq":
+                    return self.eval(node.children[0]) != self.eval(node.children[2])
+                case "lt":
+                    return self.eval(node.children[0]) < self.eval(node.children[2])
+                case "lteq":
+                    return self.eval(node.children[0]) <= self.eval(node.children[2])
+                case "gt":
+                    return self.eval(node.children[0]) > self.eval(node.children[2])
+                case "gteq":
+                    return self.eval(node.children[0]) >= self.eval(node.children[2])
+                # Logical
+                case "and":
+                    return self.eval(node.children[0]) and self.eval(node.children[2])
+                case "or":
+                    return self.eval(node.children[0]) or self.eval(node.children[2])
+                case "not":
+                    return not self.eval(node.children[1])
+                # String
                 case "concat":
                     return self.eval(node.children[0]) + self.eval(node.children[1])
                 case "app":
@@ -136,7 +165,7 @@ class Interpreter:
 
 
 def example(
-    path: str = "./test/files/minio/math/add.minio",
+    path: str = "./test/files/minio/math/logical/not.minio",
     isTest: bool = False,
 ) -> str:
     parser = Lark.open(

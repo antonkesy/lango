@@ -23,13 +23,24 @@ func_sig: ID "::" type_expr ("->" type_expr)*
 func_def: ID pattern* "=" expr
 
 // --- Expressions ---
+// Arithmetic
 PLUS: "+"
 MINUS: "-"
 MUL: "*"
 DIV: "/"
 POW: "^"|"^^"|"**"
+// Comparison
+EQ: "=="
+NEQ: "/="
+LT: "<"
+LTEQ: "<="
+GT: ">"
+GTEQ: ">="
+// Logical
+AND: "&&"
+OR: "||"
+NOT: "not"
 
-operator: PLUS | MINUS | MUL | DIV | POW
 
 do_stmt: "let" ID "=" expr
     | expr
@@ -44,6 +55,15 @@ stmt_list: (do_stmt (_NL | ";")*)+
      | expr MUL expr              -> mul
      | expr DIV expr              -> div
      | expr POW expr              -> pow
+     | expr EQ expr               -> eq
+     | expr NEQ expr              -> neq
+     | expr LT expr               -> lt
+     | expr LTEQ expr             -> lteq
+     | expr GT expr               -> gt
+     | expr GTEQ expr             -> gteq
+     | expr AND expr              -> and
+     | expr OR expr               -> or
+     | NOT expr                   -> not
      | "(" expr ")"               -> grouped
      | expr expr                  -> app
      | constructor_expr

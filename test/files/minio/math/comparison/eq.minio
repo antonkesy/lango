@@ -1,0 +1,14 @@
+-- "TrueFalse,TrueFalse,TrueFalse,TrueFalse"
+main = do {
+  putStr (show True == True)
+  putStr (show True == False)
+  putStr ","
+  putStr (show False == False)
+  putStr (show False == True)
+  putStr ","
+  putStr (show 1 == 1)
+  putStr (show 1 == 0)
+  putStr ","
+  putStr (show 3.3 == 3.3)
+  putStr (show 3.3 == 3.5)
+}
