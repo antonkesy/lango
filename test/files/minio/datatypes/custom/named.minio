@@ -1,0 +1,12 @@
+-- "ID: 1, Name: Alice"
+data Person = Person { id :: Int, name :: String }
+
+person1 :: Person
+person1 = Person { id = 1, name = "Alice" }
+
+printPerson :: Person -> String
+printPerson (Person id name) = "ID: " ++ show id ++ ", Name: " ++ name
+
+main = do {
+  putStr printPerson person1;
+}

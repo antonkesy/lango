@@ -54,6 +54,22 @@ def collect_functions(tree):
     return env
 
 
+def flexible_putStrLn(arg):
+    """putStrLn that can handle both single argument and curried usage"""
+    if callable(arg):
+        # If given a function (like 'printPerson'), return a curried function
+        def curried_putStrLn(value):
+            result = arg(value)  # Apply the function to the value
+            print(result)
+            return None  # Ensure we return None like the original
+
+        return curried_putStrLn
+    else:
+        # If given a direct value, print it
+        print(arg)
+        return None
+
+
 def flexible_putStr(arg):
     """putStr that can handle both single argument and curried usage"""
     if callable(arg):
@@ -71,7 +87,7 @@ def flexible_putStr(arg):
 
 
 builtins = {
-    "putStrLn": lambda x: print(x),
+    "putStrLn": flexible_putStrLn,
     "putStr": flexible_putStr,
     "getLine": lambda: input(),
     "readInt": lambda: int(input()),
@@ -178,6 +194,20 @@ class Interpreter:
                 case "grouped":
                     # handle grouped expressions
                     return self.eval(node.children[0])
+                case "constructor_expr":
+                    # handle record constructor expressions like Person { id = 1, name = "Alice" }
+                    constructor_name = node.children[0].value
+                    fields = {}
+
+                    # Process field assignments
+                    for field_assign in node.children[1:]:
+                        if field_assign.data == "field_assign":
+                            field_name = field_assign.children[0].value
+                            field_value = self.eval(field_assign.children[1])
+                            fields[field_name] = field_value
+
+                    # Return a dictionary representing the record
+                    return {"_constructor": constructor_name, **fields}
                 case _:
                     raise NotImplementedError(f"Unhandled expression: {node.data}")
         elif isinstance(node, Token):
@@ -268,9 +298,28 @@ class Interpreter:
             # Variable pattern - always matches
             return True
         elif isinstance(pattern, Tree):
-            # Literal pattern - must match exactly
-            pattern_value = self._get_pattern_value(pattern)
-            return pattern_value == arg
+            if pattern.data == "constructor_pattern":
+                # Constructor pattern like (Person id name)
+                constructor_name = pattern.children[0].value
+
+                # Check if the argument is a record with matching constructor
+                if (
+                    isinstance(arg, dict)
+                    and "_constructor" in arg
+                    and arg["_constructor"] == constructor_name
+                ):
+
+                    # Check if the pattern has the right number of fields
+                    pattern_vars = pattern.children[1:]  # Skip constructor name
+                    expected_fields = len(pattern_vars)
+                    actual_fields = len(arg) - 1  # Subtract 1 for _constructor key
+
+                    return expected_fields == actual_fields
+                return False
+            else:
+                # Literal pattern - must match exactly
+                pattern_value = self._get_pattern_value(pattern)
+                return pattern_value == arg
         else:
             # Unknown pattern type
             return False
@@ -281,6 +330,24 @@ class Interpreter:
             if isinstance(pattern, Token):
                 # Variable pattern - bind to the argument value
                 self.variables[pattern.value] = arg
+            elif isinstance(pattern, Tree) and pattern.data == "constructor_pattern":
+                # Constructor pattern like (Person id name)
+                pattern_vars = pattern.children[1:]  # Skip constructor name
+
+                # Extract field values from the record in the order they were defined
+                if isinstance(arg, dict) and "_constructor" in arg:
+                    # For now, assume fields are bound in the order they appear in the pattern
+                    # This is a simplified approach - in a full implementation, you'd want
+                    # to match field names properly
+                    field_values = []
+                    for key, value in arg.items():
+                        if key != "_constructor":
+                            field_values.append(value)
+
+                    # Bind pattern variables to field values
+                    for var_token, field_value in zip(pattern_vars, field_values):
+                        if isinstance(var_token, Token):
+                            self.variables[var_token.value] = field_value
             # Literal patterns don't bind anything
 
     def _get_pattern_value(self, pattern):
@@ -311,7 +378,7 @@ class Interpreter:
 
 
 def example(
-    path: str = "test/files/minio/functions/patternMatching.minio",
+    path: str = "test/files/minio/datatypes/custom/named.minio",
     isTest: bool = False,
 ) -> str:
     parser = Lark.open(
