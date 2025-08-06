@@ -470,9 +470,6 @@ def example(
     with open(path) as f:
         tree = parser.parse(f.read())
 
-    # print(tree.pretty())
-    # print("\n")
-
     env = collect_functions(tree)
     interp = Interpreter(env)
 
