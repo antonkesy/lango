@@ -28,7 +28,8 @@ PLUS: "+"
 MINUS: "-"
 MUL: "*"
 DIV: "/"
-POW: "^"|"^^"|"**"
+POW_INT: "^"
+POW_FLOAT: "^^"|"**"
 // Comparison
 EQ: "=="
 NEQ: "/="
@@ -54,7 +55,8 @@ stmt_list: (do_stmt (_NL | ";")*)+
      | expr MINUS expr            -> sub
      | expr MUL expr              -> mul
      | expr DIV expr              -> div
-     | expr POW expr              -> pow
+     | expr POW_INT expr          -> pow_int
+     | expr POW_FLOAT expr        -> pow_float
      | expr EQ expr               -> eq
      | expr NEQ expr              -> neq
      | expr LT expr               -> lt

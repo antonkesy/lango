@@ -2,7 +2,7 @@
 Main type inference engine using the Hindley-Milner algorithm
 """
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from lark import Token, Tree
 
@@ -16,7 +16,6 @@ from .types import (
     FreshVarGenerator,
     FunctionType,
     Type,
-    TypeCon,
     TypeScheme,
     TypeSubstitution,
     TypeVar,
@@ -133,10 +132,10 @@ class TypeInferrer:
             "+": int_binop,
             "-": int_binop,
             "*": int_binop,
-            "/": float_binop,  # Division returns float
+            "/": float_binop,
             "^": int_binop,
-            "**": int_binop,
-            "^^": int_binop,
+            "**": float_binop,
+            "^^": float_binop,
             "mod": int_binop,
             "quot": int_binop,
             # Comparison
@@ -629,8 +628,47 @@ class TypeInferrer:
                 var_name = pattern.value
                 scheme = TypeScheme(set(), param_type)
                 extended_env = extended_env.extend(var_name, scheme)
+            elif isinstance(pattern, Tree) and pattern.data == "constructor_pattern":
+                # Constructor pattern like (Person id name)
+                ctor_name_token = pattern.children[0]
+                ctor_name = (
+                    ctor_name_token.value
+                    if isinstance(ctor_name_token, Token)
+                    else str(ctor_name_token)
+                )
+
+                # Look up constructor type
+                scheme = extended_env.lookup(ctor_name)
+                if scheme is None:
+                    raise TypeInferenceError(f"Unknown constructor: {ctor_name}")
+
+                ctor_type = scheme.instantiate(self.fresh_var_gen)
+
+                # Extract field types and result type
+                field_types = self._extract_constructor_field_types(ctor_type)
+                result_type = self._extract_constructor_result_type(ctor_type)
+
+                # The parameter type is the data type that this constructor creates
+                param_types.append(result_type)
+
+                # Bind pattern variables to their respective field types
+                pattern_vars = pattern.children[1:]  # Skip constructor name
+                if len(pattern_vars) != len(field_types):
+                    raise TypeInferenceError(
+                        f"Constructor {ctor_name} expects {len(field_types)} arguments, "
+                        f"but pattern has {len(pattern_vars)}",
+                    )
+
+                for var_token, field_type in zip(pattern_vars, field_types):
+                    var_name = (
+                        var_token.value
+                        if isinstance(var_token, Token)
+                        else str(var_token)
+                    )
+                    var_scheme = TypeScheme(set(), field_type)
+                    extended_env = extended_env.extend(var_name, var_scheme)
             else:
-                # TODO: Handle constructor patterns, literals, etc.
+                # Other patterns - create fresh type variable
                 param_type = self.fresh_type_var()
                 param_types.append(param_type)
 
@@ -647,6 +685,27 @@ class TypeInferrer:
         scheme = generalize(env_free_vars, result_type)
 
         return func_name, scheme
+
+    def _extract_constructor_result_type(self, ctor_type: Type) -> Type:
+        """Extract the result type from a constructor type (the data type it constructs)"""
+        if isinstance(ctor_type, FunctionType):
+            # For constructor types like Int -> String -> Person,
+            # we need to go to the rightmost type (Person)
+            return self._extract_constructor_result_type(ctor_type.result)
+        else:
+            # This should be the data type
+            return ctor_type
+
+    def _extract_constructor_field_types(self, ctor_type: Type) -> List[Type]:
+        """Extract the field types from a constructor type"""
+        field_types = []
+        current_type = ctor_type
+
+        while isinstance(current_type, FunctionType):
+            field_types.append(current_type.param)
+            current_type = current_type.result
+
+        return field_types
 
     def infer_program(self, tree: Tree) -> TypeEnvironment:
         """Infer types for an entire program"""

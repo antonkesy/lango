@@ -139,8 +139,14 @@ class Interpreter:
                     return self.eval(node.children[0]) * self.eval(node.children[2])
                 case "div":
                     return self.eval(node.children[0]) / self.eval(node.children[2])
-                case "pow":
-                    return self.eval(node.children[0]) ** self.eval(node.children[2])
+                case "pow_int":
+                    return int(
+                        self.eval(node.children[0]) ** self.eval(node.children[2]),
+                    )
+                case "pow_float":
+                    return float(
+                        self.eval(node.children[0]) ** self.eval(node.children[2]),
+                    )
                 case "mod":
                     return self.eval(node.children[0]) % self.eval(node.children[2])
                 case "neg":
