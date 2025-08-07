@@ -1,5 +1,5 @@
 -- "0315"
-add :: Int -> Int -> Int
+add :: Int -> Int -> Int -> Int
 add x y z = x + y + z
 
 main = do {
