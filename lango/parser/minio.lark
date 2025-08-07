@@ -1,4 +1,8 @@
-start: stmt*
+start: (prelude stmt (sep stmt)*)? postlude
+
+prelude: (_NL | COMMENT)*
+sep: (_NL | COMMENT)+
+postlude: (_NL | COMMENT)*
 
 ?stmt: data_decl
      | func_def
@@ -42,9 +46,9 @@ NOT: "not"
 do_stmt: "let" ID "=" expr
     | expr
 
-stmt_list: do_stmt (";" do_stmt)* ";"?
+stmt_list: (do_stmt (_NL | ";")*)+
 
-?expr: "do" "{" stmt_list "}"     -> do_block
+?expr: "do" _NL? "{" _NL? stmt_list _NL? "}"  -> do_block
      | expr "++" expr             -> concat
      | expr "$" expr              -> dollar
      | expr PLUS expr             -> add
@@ -102,9 +106,12 @@ STRING: /"[^"]*"/
 INT: /[0-9]+/
 FLOAT: /[0-9]+\.[0-9]+/
 
-
-COMMENT: "--" /[^\n]*/   // everything after -- until newline
+COMMENT: /--.*/
 %ignore COMMENT
+%ignore /[ \t]+/
+_NL: /(\r?\n)+/
 
-%import common.WS
-%ignore WS
+// TODO: remove _NL -> switch from WS_INLINE to WS
+
+%import common.WS_INLINE
+%ignore WS_INLINE
