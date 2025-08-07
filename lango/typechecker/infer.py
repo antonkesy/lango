@@ -592,7 +592,49 @@ class TypeInferrer:
 
         for stmt in stmt_list.children:
             if isinstance(stmt, Tree) and stmt.data == "do_stmt":
-                if len(stmt.children) == 2:
+                if len(stmt.children) >= 3 and len(stmt.children) % 2 == 1:
+                    # Let...in statement with multiple assignments
+                    # Structure: var1, value1, var2, value2, ..., varN, valueN, in_expr
+
+                    # Create a local environment for the let...in scope
+                    local_env = current_env.substitute(current_subst)
+                    local_subst = TypeSubstitution()
+
+                    # Process all variable-value pairs (all children except the last one)
+                    for i in range(0, len(stmt.children) - 1, 2):
+                        var_name_token = stmt.children[i]
+                        var_name = (
+                            var_name_token.value
+                            if isinstance(var_name_token, Token)
+                            else str(var_name_token)
+                        )
+
+                        # Infer type of the value expression
+                        expr_type, s1 = self.infer_expr(
+                            stmt.children[i + 1],
+                            local_env.substitute(local_subst),
+                        )
+
+                        # Generalize the type
+                        env_free_vars = local_env.substitute(
+                            local_subst.compose(s1),
+                        ).free_vars()
+                        scheme = generalize(env_free_vars, s1.apply(expr_type))
+
+                        # Extend local environment
+                        local_env = local_env.extend(var_name, scheme)
+                        local_subst = s1.compose(local_subst)
+
+                    # Infer type of the "in" expression (last child) with all new bindings
+                    in_expr = stmt.children[-1]
+                    result_type, s2 = self.infer_expr(
+                        in_expr,
+                        local_env.substitute(local_subst),
+                    )
+
+                    # Compose substitutions
+                    current_subst = s2.compose(local_subst).compose(current_subst)
+                elif len(stmt.children) == 2:
                     # Let statement: let var = expr
                     var_name_token = stmt.children[0]
                     var_name = (

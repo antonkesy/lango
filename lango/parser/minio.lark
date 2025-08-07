@@ -42,8 +42,7 @@ AND: "&&"
 OR: "||"
 NOT: "not"
 
-
-do_stmt: "let" ID "=" expr
+do_stmt: "let" ID "=" expr+ (";" ID "=" expr)* "in" _NL? expr
     | expr
 
 stmt_list: (do_stmt (_NL | ";")*)+
