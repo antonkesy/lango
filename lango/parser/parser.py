@@ -95,10 +95,11 @@ builtins = {
     "readInt": lambda: int(input()),
     "readString": lambda: input(),
     "readBool": lambda: input().lower() == "true",
-    "concat": lambda x, y: x + y,
+    "concat": lambda x: lambda y: x + y,
     "toUpperCase": lambda x: x.upper(),
     "toLowerCase": lambda x: x.lower(),
     "show": lambda x: str(x),
+    "mod": lambda x: lambda y: x % y,
 }
 
 
@@ -147,8 +148,6 @@ class Interpreter:
                     return float(
                         self.eval(node.children[0]) ** self.eval(node.children[2]),
                     )
-                case "mod":
-                    return self.eval(node.children[0]) % self.eval(node.children[2])
                 case "neg":
                     return -self.eval(node.children[0])
                 case "quot":
