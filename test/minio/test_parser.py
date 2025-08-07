@@ -28,12 +28,11 @@ def test_all():
         expected = get_test_output(file_name)
         assert (
             example(file_name, True) == expected
-        ), f"Failed for {file_name}, expected {expected}, got {example(file_name, True)}"
+        ), f"Failed for {file_name}, expected '{expected}', got '{example(file_name, True)}'"
 
 
 def test_type_check():
     for file_name in get_all_test_files():
-        pass
-        # assert are_types_correct(
-        #     file_name
-        # ), f"Type check failed for {file_name}, {get_type_str(file_name)}"
+        assert are_types_correct(
+            file_name
+        ), f"Type check failed for {file_name}, {get_type_str(file_name)}"

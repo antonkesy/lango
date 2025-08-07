@@ -1,0 +1,4 @@
+-- "TEST\n"
+main = do {
+  putStrLn "TEST"
+}
