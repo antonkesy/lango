@@ -3,7 +3,7 @@ from io import StringIO
 
 from lark import Lark, Token, Tree
 
-from lango.typechecker.infer import type_check
+from ..typechecker.infer import type_check
 
 
 def build_environment(tree):
@@ -466,7 +466,7 @@ def example(
     check_types: bool = False,
 ) -> str:
     parser = Lark.open(
-        "./src/lango/parser/minio.lark",
+        "./lango/parser/minio.lark",
         parser="lalr",
     )
 
@@ -509,7 +509,7 @@ def example(
 
 def are_types_correct(path: str) -> bool:
     parser = Lark.open(
-        "./src/lango/parser/minio.lark",
+        "./lango/parser/minio.lark",
         parser="lalr",
     )
 
@@ -525,7 +525,7 @@ def are_types_correct(path: str) -> bool:
 
 def get_type_str(path: str) -> str:
     parser = Lark.open(
-        "./src/lango/parser/minio.lark",
+        "./lango/parser/minio.lark",
         parser="lalr",
     )
 
@@ -548,7 +548,7 @@ def get_type_str(path: str) -> str:
 def type_check_file(path: str) -> None:
     """Type check a file and print results"""
     parser = Lark.open(
-        "./src/lango/parser/minio.lark",
+        "./lango/parser/minio.lark",
         parser="lalr",
     )
 

@@ -30,7 +30,7 @@ run-dev:
 
 run:
 	. .venv/bin/activate && \
-	lango
+	lango run --input_file examples/minio/example.minio
 
 type: install
 	. .venv/bin/activate && \
