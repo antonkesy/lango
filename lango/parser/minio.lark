@@ -48,6 +48,7 @@ do_stmt: "let" ID "=" expr+ (";" ID "=" expr)* "in" _NL? expr
 stmt_list: (do_stmt (_NL | ";")*)+
 
 ?expr: "do" _NL? "{" _NL? stmt_list _NL? "}"  -> do_block
+     | "if" expr _NL? "then" _NL? expr _NL? "else" _NL? expr -> if_else
      | expr "++" expr             -> concat
      | expr "$" expr              -> dollar
      | expr PLUS expr             -> add
@@ -71,6 +72,8 @@ stmt_list: (do_stmt (_NL | ";")*)+
          | atom_expr
 
 ?atom_expr: "(" expr ")"           -> grouped
+          | "(" MINUS INT ")"      -> neg_int
+          | "(" MINUS FLOAT ")"    -> neg_float
           | constructor_expr
           | UIDENT                 -> constructor
           | ID                     -> var
@@ -87,6 +90,8 @@ field_assign: ID "=" expr
 ?pattern: constructor_pattern
         | ID
         | literal
+        | "(" MINUS INT ")"      -> neg_int
+        | "(" MINUS FLOAT ")"    -> neg_float
 
 constructor_pattern: "(" UIDENT pattern+ ")"
 

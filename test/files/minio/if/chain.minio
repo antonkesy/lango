@@ -1,0 +1,9 @@
+-- "<00>0"
+
+f x = if x < 0 then "<0" else if x > 0 then ">0" else "0"
+
+main = do {
+  putStr (f (-1));
+  putStr (f 0);
+  putStr (f 1);
+}

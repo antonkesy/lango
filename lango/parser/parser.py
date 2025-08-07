@@ -115,6 +115,10 @@ class Interpreter:
                     return int(node.children[0])
                 case "float":
                     return float(node.children[0])
+                case "neg_int":
+                    return -int(node.children[1].value)
+                case "neg_float":
+                    return -float(node.children[1].value)
                 case "string":
                     return node.children[0][1:-1]
                 case "true":
@@ -176,6 +180,13 @@ class Interpreter:
                 # String
                 case "concat":
                     return self.eval(node.children[0]) + self.eval(node.children[1])
+                # Conditional
+                case "if_else":
+                    condition = self.eval(node.children[0])
+                    if condition:
+                        return self.eval(node.children[1])
+                    else:
+                        return self.eval(node.children[2])
                 case "app":
                     # handle function application: f x
                     func_node = node.children[0]
@@ -480,6 +491,10 @@ class Interpreter:
             return int(pattern.children[0])
         elif pattern.data == "float":
             return float(pattern.children[0])
+        elif pattern.data == "neg_int":
+            return -int(pattern.children[1])
+        elif pattern.data == "neg_float":
+            return -float(pattern.children[1])
         elif pattern.data == "string":
             return pattern.children[0][1:-1]
         elif pattern.data == "true":

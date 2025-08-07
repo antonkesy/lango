@@ -1,7 +1,11 @@
--- "42"
+-- "42-1"
 s :: Int
 s = 42
 
+n :: Int
+n = (-1)
+
 main = do {
   putStr (show s);
+  putStr (show n);
 }

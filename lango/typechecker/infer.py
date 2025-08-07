@@ -308,10 +308,10 @@ class TypeInferrer:
         """Infer the type of an expression"""
         if isinstance(expr, Tree):
             match expr.data:
-                case "int":
+                case "int" | "neg_int":
                     return INT_TYPE, TypeSubstitution()
 
-                case "float":
+                case "float" | "neg_float":
                     return FLOAT_TYPE, TypeSubstitution()
 
                 case "string":
@@ -563,6 +563,30 @@ class TypeInferrer:
                     # Do block - infer type of last statement
                     stmt_list = expr.children[0]
                     return self.infer_stmt_list(stmt_list, env)
+
+                case "if_else":
+                    # If-else expression: if condition then expr1 else expr2
+                    # condition must be Bool, expr1 and expr2 must have the same type
+                    cond_type, s1 = self.infer_expr(expr.children[0], env)
+                    then_type, s2 = self.infer_expr(
+                        expr.children[1],
+                        env.substitute(s1),
+                    )
+                    else_type, s3 = self.infer_expr(
+                        expr.children[2],
+                        env.substitute(s2.compose(s1)),
+                    )
+
+                    # Unify condition with Bool type
+                    s4 = unify([(s3.compose(s2).apply(cond_type), BOOL_TYPE)])
+
+                    # Unify then and else branches to have the same type
+                    s5 = unify([(s4.compose(s3).apply(then_type), s4.apply(else_type))])
+
+                    final_subst = s5.compose(s4).compose(s3).compose(s2).compose(s1)
+                    result_type = final_subst.apply(then_type)
+
+                    return result_type, final_subst
 
                 case _:
                     raise TypeInferenceError(f"Unhandled expression: {expr.data}")
