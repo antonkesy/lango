@@ -3,7 +3,7 @@ add :: Int -> Int -> Int
 add x y = x + y
 
 main = do {
-  putStr show ((add 0) 1)
-  putStr show ((add 1) 2)
-  putStr show ((add (add 1 1)) 1)
+  putStr (show ((add 0) 1))
+  putStr (show ((add 1) 2))
+  putStr (show ((add (add 1 1)) 1))
 }

@@ -1,8 +1,8 @@
 -- "4,4.0,4.0"
 main = do {
-  putStr show (2 ^ 2)
+  putStr (show (2 ^ 2))
   putStr ","
-  putStr show (2.0 ^^ 2.0)
+  putStr (show (2.0 ^^ 2.0))
   putStr ","
-  putStr show (2 ** 2)
+  putStr (show (2 ** 2))
 }

@@ -8,5 +8,5 @@ printPerson :: Person -> String
 printPerson (Person id name) = "ID: " ++ show id ++ ", Name: " ++ name
 
 main = do {
-  putStr printPerson person1;
+  putStr (printPerson person1);
 }

@@ -416,7 +416,16 @@ class TypeInferrer:
 
                     return final_type, final_subst
 
-                case "add" | "sub" | "mul" | "div" | "pow" | "mod" | "quot":
+                case (
+                    "add"
+                    | "sub"
+                    | "mul"
+                    | "div"
+                    | "pow_int"
+                    | "pow_float"
+                    | "mod"
+                    | "quot"
+                ):
                     # Binary arithmetic operations
                     left_type, s1 = self.infer_expr(expr.children[0], env)
                     right_type, s2 = self.infer_expr(

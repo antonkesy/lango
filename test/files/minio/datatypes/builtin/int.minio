@@ -3,5 +3,5 @@ s :: Int
 s = 42
 
 main = do {
-  putStr show s
+  putStr (show s)
 }

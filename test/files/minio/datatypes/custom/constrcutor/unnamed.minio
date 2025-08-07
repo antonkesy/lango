@@ -8,5 +8,5 @@ printPoint :: Point -> String
 printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
 
 main = do {
-  putStr printPoint p1;
+  putStr (printPoint p1);
 }

@@ -3,5 +3,5 @@ s :: Bool
 s = True
 
 main = do {
-  putStr show s
+  putStr (show s)
 }
