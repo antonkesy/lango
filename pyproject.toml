@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "TODO"
 readme = "README.md"
 authors = [ {name = "Anton Kesy", email = "antonkesy@gmail.com"} ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
