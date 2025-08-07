@@ -1,11 +1,11 @@
 -- Person
-data Person = Person { id :: Int, name :: String }
+data Person = Person { id_ :: Int, name :: String }
 
 person1 :: Person
-person1 = Person { id = 1, name = "Alice" }
+person1 = Person { id_ = 1, name = "Alice" }
 
 printPerson :: Person -> String
-printPerson (Person id name) = "ID: " ++ show id ++ ", Name: " ++ name
+printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name
 
 -- Point
 data Point = MkPoint Float Float

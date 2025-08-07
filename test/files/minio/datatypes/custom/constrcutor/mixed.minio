@@ -1,15 +1,15 @@
--- "ID: 1, Name: Alice,Point(3.5, 4.2)"
-data Person = Person { id :: Int, name :: String }
+-- "id_: 1, Name: Alice,Point(3.5, 4.2)"
+data Person = Person { id_ :: Int, name :: String }
 data Point = MkPoint Float Float
 
 person1 :: Person
-person1 = Person { id = 1, name = "Alice" }
+person1 = Person { id_ = 1, name = "Alice" }
 
 p1 :: Point
 p1 = MkPoint 3.5 4.2
 
 printPerson :: Person -> String
-printPerson (Person id name) = "ID: " ++ show id ++ ", Name: " ++ name
+printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name
 
 printPoint :: Point -> String
 printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
