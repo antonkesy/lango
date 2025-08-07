@@ -435,13 +435,36 @@ class TypeInferrer:
 
                     if expr.data == "div":
                         # Division always returns float
-                        s3 = unify(
-                            [
-                                (s2.apply(left_type), FLOAT_TYPE),
-                                (right_type, FLOAT_TYPE),
-                            ],
-                        )
-                        final_subst = s3.compose(s2).compose(s1)
+                        # Both operands can be Int or Float, but result is always Float
+                        left_after_s2 = s2.apply(left_type)
+
+                        # Try to unify each operand with either Int or Float
+                        try:
+                            # Try Int first for left operand
+                            s3_left = unify([(left_after_s2, INT_TYPE)])
+                        except UnificationError:
+                            try:
+                                # If Int fails, try Float
+                                s3_left = unify([(left_after_s2, FLOAT_TYPE)])
+                            except UnificationError:
+                                raise UnificationError(
+                                    f"Left operand of division must be numeric, got {left_after_s2}",
+                                )
+
+                        try:
+                            # Try Int first for right operand
+                            s3_right = unify([(right_type, INT_TYPE)])
+                        except UnificationError:
+                            try:
+                                # If Int fails, try Float
+                                s3_right = unify([(right_type, FLOAT_TYPE)])
+                            except UnificationError:
+                                raise UnificationError(
+                                    f"Right operand of division must be numeric, got {right_type}",
+                                )
+
+                        # Compose all substitutions
+                        final_subst = s3_right.compose(s3_left).compose(s2).compose(s1)
                         return FLOAT_TYPE, final_subst
                     else:
                         # Other operations preserve type (Int or Float)
