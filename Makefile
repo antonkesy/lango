@@ -13,7 +13,7 @@ prep:
 
 test: install
 	. .venv/bin/activate && \
-	pytest
+	pytest -vvs
 
 uninstall:
 	.venv/bin/pip uninstall lango -y
@@ -30,4 +30,9 @@ run-dev:
 
 run:
 	. .venv/bin/activate && \
-	lango --help
+	lango
+
+type: install
+	. .venv/bin/activate && \
+	lango typecheck test/files/minio/datatypes/custom/constrcutor/mixed.minio
+	# lango typecheck examples/minio/example.minio

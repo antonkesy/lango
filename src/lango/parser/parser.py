@@ -3,6 +3,8 @@ from io import StringIO
 
 from lark import Lark, Token, Tree
 
+from lango.typechecker.infer import type_check
+
 
 def build_environment(tree):
     env = {}
@@ -461,6 +463,7 @@ class Interpreter:
 def example(
     path: str = "examples/minio/example.minio",
     isTest: bool = False,
+    check_types: bool = False,
 ) -> str:
     parser = Lark.open(
         "./src/lango/parser/minio.lark",
@@ -469,6 +472,18 @@ def example(
 
     with open(path) as f:
         tree = parser.parse(f.read())
+
+    # Type checking
+    if check_types:
+        try:
+            type_env = type_check(tree)
+            print("Type checking passed!")
+            print("Function types:")
+            for name, scheme in type_env.items():
+                print(f"  {name} :: {scheme}")
+        except Exception as e:
+            print(f"Type checking failed: {e}")
+            return ""
 
     env = collect_functions(tree)
     interp = Interpreter(env)
@@ -490,3 +505,63 @@ def example(
             f"\n[main] => {result}" if not callable(result) else "[main] is a function",
         )
     return output
+
+
+def are_types_correct(path: str) -> bool:
+    parser = Lark.open(
+        "./src/lango/parser/minio.lark",
+        parser="lalr",
+    )
+
+    with open(path) as f:
+        tree = parser.parse(f.read())
+
+    print(f"Type checking {path}...")
+
+    try:
+        type_check(tree)
+        return True
+    except Exception:
+        return False
+
+
+def get_type_str(path: str) -> str:
+    parser = Lark.open(
+        "./src/lango/parser/minio.lark",
+        parser="lalr",
+    )
+
+    with open(path) as f:
+        tree = parser.parse(f.read())
+
+    res = ""
+
+    try:
+        type_env = type_check(tree)
+        res += "Inferred types:"
+        for name, scheme in type_env.items():
+            res += f"  {name} :: {scheme}"
+    except Exception as e:
+        res += f"Type checking failed: {e}"
+
+    return res
+
+
+def type_check_file(path: str) -> None:
+    """Type check a file and print results"""
+    parser = Lark.open(
+        "./src/lango/parser/minio.lark",
+        parser="lalr",
+    )
+
+    with open(path) as f:
+        tree = parser.parse(f.read())
+
+    try:
+        type_env = type_check(tree)
+        print("✓ Type checking passed!")
+        print("\nInferred types:")
+        for name, scheme in type_env.items():
+            print(f"  {name} :: {scheme}")
+    except Exception as e:
+        print(f"✗ Type checking failed: {e}")
