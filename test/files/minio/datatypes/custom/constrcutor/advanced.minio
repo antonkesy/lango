@@ -19,10 +19,10 @@ printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
 
 main = do {
   putStr (printPoint p1);
-  putStr ","
+  putStr ",";
   putStr (printPoint p2);
-  putStr ","
+  putStr ",";
   putStr ("X of p1: " ++ show (getX p1));
-  putStr ","
+  putStr ",";
   putStr ("Y of p2: " ++ show (getY p2));
 }

@@ -26,13 +26,17 @@ def get_all_test_files() -> list:
 def test_all():
     for file_name in get_all_test_files():
         expected = get_test_output(file_name)
-        assert (
-            example(file_name, True) == expected
-        ), f"Failed for {file_name}, expected '{expected}', got '{example(file_name, True)}'"
+        try:
+            result = example(file_name, True)
+            assert (
+                result == expected
+            ), f"Failed for {file_name}, expected '{expected}', got '{result}'"
+        except Exception as e:
+            assert False, f"Exception for {file_name}: {type(e).__name__}: {e}"
 
 
 def test_type_check():
     for file_name in get_all_test_files():
         assert are_types_correct(
-            file_name
+            file_name,
         ), f"Type check failed for {file_name}, {get_type_str(file_name)}"

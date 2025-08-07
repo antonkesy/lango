@@ -1,4 +1,4 @@
 -- "TEST\n"
 main = do {
-  putStrLn "TEST"
+  putStrLn "TEST";
 }

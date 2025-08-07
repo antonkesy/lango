@@ -3,5 +3,5 @@ s :: String
 s = "Hey"
 
 main = do {
-  putStr s
+  putStr s;
 }

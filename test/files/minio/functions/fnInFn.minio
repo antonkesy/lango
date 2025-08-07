@@ -6,5 +6,5 @@ add3 :: Int -> Int -> Int -> Int
 add3 x y z = x + (add2 y z)
 
 main = do {
-  putStr (show (add3 1 2 3))
+  putStr (show (add3 1 2 3));
 }

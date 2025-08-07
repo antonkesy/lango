@@ -3,5 +3,5 @@ s :: Float
 s = 0.0
 
 main = do {
-  putStr show s
+  putStr (show s);
 }
