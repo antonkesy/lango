@@ -25,7 +25,7 @@ add1 x = x + 1
 -- do
 t :: Int -> String
 t x = do {
-  let y = x + 1
+  let y = x + 1 in
   "Result: " ++ show y
 }
 
@@ -33,25 +33,25 @@ t x = do {
 t1 = 1
 
 main = do {
-  putStrLn "Testing isTrue function:"
-  putStrLn ("isTrue True: " ++ isTrue True)
-  putStrLn ("isTrue False: " ++ isTrue False)
+  putStrLn "Testing isTrue function:";
+  putStrLn ("isTrue True: " ++ isTrue True);
+  putStrLn ("isTrue False: " ++ isTrue False);
 
-  putStrLn "Testing Person data type:"
-  putStrLn ("Person 1: " ++ printPerson person1)
+  putStrLn "Testing Person data type:";
+  putStrLn ("Person 1: " ++ printPerson person1);
 
-  putStrLn "Testing Point data type:"
-  let point = MkPoint 3.0 4.0
-  putStrLn ("Point: " ++ printPoint point)
+  putStrLn "Testing Point data type:";
+  let point = MkPoint 3.0 4.0 in
+  putStrLn ("Point: " ++ printPoint point);
 
-  putStrLn "Testing add1 function:"
-  let number = 5
-  putStrLn ("add1 " ++ show number ++ ": " ++ show (add1 number))
+  putStrLn "Testing add1 function:";
+  let number = 5 in
+  putStrLn ("add1 " ++ show number ++ ": " ++ show (add1 number));
 
-  putStrLn "Testing t function:"
-  let result = t 10
-  putStrLn result
+  putStrLn "Testing t function:";
+  let result = t 10 in
+  putStrLn result;
 
-  putStrLn "Testing t1 function:"
-  putStrLn ("t1: " ++ show t1)
+  putStrLn "Testing t1 function:";
+  putStrLn ("t1: " ++ show t1);
 }
