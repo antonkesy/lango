@@ -516,8 +516,6 @@ def are_types_correct(path: str) -> bool:
     with open(path) as f:
         tree = parser.parse(f.read())
 
-    print(f"Type checking {path}...")
-
     try:
         type_check(tree)
         return True
