@@ -1,5 +1,4 @@
 import os
-import re
 import subprocess
 
 import pytest
@@ -17,12 +16,10 @@ def get_all_test_files():
 
 
 def get_test_output(file_name: str) -> str:
+    # TODO make more robust
     with open(file_name, "r") as file:
-        first_line = file.readline()
-    match = re.search(r'"(.*?)"', first_line)
-    if match:
-        return match.group(1)
-    return ""
+        first_line = file.readline().strip()
+    return first_line[4:-1]
 
 
 def run_haskell_file(path: str) -> str:

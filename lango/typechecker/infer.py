@@ -185,14 +185,33 @@ class TypeInferrer:
 
     def infer_data_decl(self, node: Tree) -> TypeEnvironment:
         """Process a data type declaration and return updated environment"""
-        # data TYPE = constructor (| constructor)*
+        # data TYPE type_param* "=" constructor ("|" constructor)*
         type_name_token = node.children[0]
         type_name = (
             type_name_token.value
             if isinstance(type_name_token, Token)
             else str(type_name_token)
         )
-        constructors = node.children[1:]
+
+        # Extract type parameters
+        type_params = []
+        constructors_start_idx = 1
+
+        # Find where constructors start (after type parameters)
+        for i, child in enumerate(node.children[1:], 1):
+            if isinstance(child, Tree) and child.data == "type_param":
+                param_token = child.children[0]
+                param_name = (
+                    param_token.value
+                    if isinstance(param_token, Token)
+                    else str(param_token)
+                )
+                type_params.append(param_name)
+                constructors_start_idx = i + 1
+            else:
+                break
+
+        constructors = node.children[constructors_start_idx:]
 
         constructor_names = []
         constructor_types = {}
@@ -229,19 +248,26 @@ class TypeInferrer:
                                 field_types.append(field_type)
 
                     # For record constructors, we create a function that takes all fields
-                    result_type = DataType(type_name, [])
+                    type_param_vars = [TypeVar(param) for param in type_params]
+                    result_type = DataType(type_name, type_param_vars)
                     ctor_type = result_type
                     for field_type in reversed(field_types):
                         ctor_type = FunctionType(field_type, ctor_type)
 
-                    constructor_types[ctor_name] = TypeScheme(set(), ctor_type)
+                    # Generalize over the type parameters
+                    bound_vars = set(type_params)
+                    constructor_types[ctor_name] = TypeScheme(bound_vars, ctor_type)
                     self.data_constructors[ctor_name] = (type_name, field_types)
 
                 else:
-                    # Positional constructor: UIDENT type_expr*
+                    # Positional constructor: UIDENT type_atom*
+                    type_param_vars = [TypeVar(param) for param in type_params]
+                    result_type = DataType(type_name, type_param_vars)
+
                     if len(constructor.children) == 1:
                         # Nullary constructor
-                        ctor_type = TypeScheme(set(), DataType(type_name, []))
+                        bound_vars = set(type_params)
+                        ctor_type = TypeScheme(bound_vars, result_type)
                     else:
                         # Constructor with arguments
                         field_types = []
@@ -250,12 +276,13 @@ class TypeInferrer:
                             field_types.append(field_type)
 
                         # Create function type: field1 -> field2 -> ... -> DataType
-                        result_type = DataType(type_name, [])
                         ctor_type = result_type
                         for field_type in reversed(field_types):
                             ctor_type = FunctionType(field_type, ctor_type)
 
-                        ctor_type = TypeScheme(set(), ctor_type)
+                        # Generalize over the type parameters
+                        bound_vars = set(type_params)
+                        ctor_type = TypeScheme(bound_vars, ctor_type)
 
                     constructor_types[ctor_name] = ctor_type
                     self.data_constructors[ctor_name] = (
@@ -292,8 +319,62 @@ class TypeInferrer:
                     return TypeVar(type_name)
 
         elif isinstance(node, Tree):
-            if node.data == "type_expr":
-                # This might be a function type: TYPE -> type_expr
+            if node.data == "type_constructor":
+                # New grammar: Tree('type_constructor', [Token('TYPE', 'Int')])
+                child = node.children[0]
+                if isinstance(child, Token):
+                    type_name = child.value
+                else:
+                    # If it's a Tree, get the first token
+                    type_name = child.children[0].value
+
+                if type_name == "Int":
+                    return INT_TYPE
+                elif type_name == "String":
+                    return STRING_TYPE
+                elif type_name == "Float":
+                    return FLOAT_TYPE
+                elif type_name == "Bool":
+                    return BOOL_TYPE
+                else:
+                    return DataType(type_name, [])
+
+            elif node.data == "type_var":
+                # New grammar: Tree('type_var', [Token('ID', 'a')])
+                child = node.children[0]
+                if isinstance(child, Token):
+                    var_name = child.value
+                else:
+                    var_name = child.children[0].value
+                return TypeVar(var_name)
+
+            elif node.data == "arrow_type":
+                # New grammar: param_type -> result_type
+                param_type = self.parse_type_expr(node.children[0])
+                result_type = self.parse_type_expr(node.children[1])
+                return FunctionType(param_type, result_type)
+
+            elif node.data == "type_application":
+                # New grammar: type constructor applied to arguments
+                func_type = self.parse_type_expr(node.children[0])
+                arg_type = self.parse_type_expr(node.children[1])
+
+                # Handle parameterized types like "List Int" or "Pair Int String"
+                if isinstance(func_type, DataType):
+                    # Add the argument to the type constructor's arguments
+                    return DataType(func_type.name, func_type.type_args + [arg_type])
+                else:
+                    # For now, we don't handle higher-order type constructors
+                    raise TypeInferenceError(
+                        f"Cannot apply non-constructor type: {func_type}",
+                    )
+
+            elif node.data == "grouped_type":
+                # Grouped type expression in parentheses
+                return self.parse_type_expr(node.children[0])
+
+            elif node.data == "type_expr":
+                # Legacy compatibility: old grammar structure
                 if len(node.children) == 1:
                     return self.parse_type_expr(node.children[0])
                 else:
@@ -839,7 +920,9 @@ class TypeInferrer:
                         param_type = self.parse_type_expr(type_expr)
                         func_type = FunctionType(param_type, func_type)
 
-                func_signatures[func_name] = TypeScheme(set(), func_type)
+                # Generalize the function type - all free type variables become bound
+                free_vars = func_type.free_vars()
+                func_signatures[func_name] = TypeScheme(free_vars, func_type)
 
         # Add signatures to environment
         for name, scheme in func_signatures.items():

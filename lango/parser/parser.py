@@ -98,7 +98,7 @@ builtins = {
     "concat": lambda x: lambda y: x + y,
     "toUpperCase": lambda x: x.upper(),
     "toLowerCase": lambda x: x.lower(),
-    "show": lambda x: str(x),
+    "show": lambda x: f'"{x}"' if isinstance(x, str) else str(x),
     "mod": lambda x: lambda y: x % y,
 }
 

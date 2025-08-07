@@ -9,10 +9,12 @@ postlude: (_NL | COMMENT)*
      | func_sig
 
 // --- Data Declarations ---
-data_decl: "data" TYPE "=" constructor ("|" constructor)*
+data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)*
+
+type_param: ID
 
 constructor: UIDENT record_constructor
-           | UIDENT type_expr*
+           | UIDENT type_atom*
 
 record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
@@ -83,8 +85,15 @@ constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
 field_assign: ID "=" expr
 
 // --- Types ---
-?type_expr: TYPE
-          | TYPE "->" type_expr
+?type_expr: type_app
+          | type_app "->" type_expr   -> arrow_type
+
+?type_app: type_app type_atom         -> type_application
+         | type_atom
+
+?type_atom: TYPE                      -> type_constructor
+          | ID                        -> type_var
+          | "(" type_expr ")"         -> grouped_type
 
 // --- Patterns ---
 ?pattern: constructor_pattern

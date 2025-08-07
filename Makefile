@@ -28,11 +28,13 @@ run-dev:
 	. .venv/bin/activate && \
 		lango
 
-run:
+run: install
 	. .venv/bin/activate && \
-	lango run --input_file examples/minio/example.minio
+	lango run --input_file test/files/minio/types/generic/data.minio
+	# lango run --input_file examples/minio/example.minio
 
 type: install
 	. .venv/bin/activate && \
-	lango typecheck test/files/minio/datatypes/custom/constrcutor/mixed.minio
+	lango typecheck ./test/files/minio/types/generic/data.minio
+	# lango typecheck test/files/minio/datatypes/custom/constrcutor/mixed.minio
 	# lango typecheck examples/minio/example.minio
