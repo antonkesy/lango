@@ -1,9 +1,19 @@
 from contextlib import redirect_stdout
 from io import StringIO
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from lark import ParseTree, Token, Tree
 
 from lango.minio.typecheck import type_check
+
+ASTNode = Union[Tree, Token]
+Pattern = ASTNode
+Expression = Tree
+FunctionClause = Tuple[List[Pattern], Expression]
+FunctionDefinition = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
+Environment = Dict[str, FunctionDefinition]
+Record = Dict[str, Any]  # Dictionary representing a record/object
+Value = Any  # Any runtime value
 
 
 def interpret(
@@ -34,17 +44,29 @@ def interpret(
     return output
 
 
-def build_environment(tree):
-    env = {}
+def build_environment(tree: ParseTree) -> Environment:
+    """Build environment from parse tree collecting function definitions."""
+    env: Environment = {}
 
-    def visit(node):
+    def visit(node: ASTNode) -> None:
         if isinstance(node, Tree):
             if node.data == "func_def":
-                func_name = node.children[0].value
+                func_name_token = node.children[0]
+                if isinstance(func_name_token, Token):
+                    func_name = func_name_token.value
+                else:
+                    raise TypeError(
+                        f"Expected Token for function name, got {type(func_name_token)}",
+                    )
+
                 patterns = node.children[
                     1:-1
                 ]  # all children between func_name and expr
                 expr = node.children[-1]
+                if not isinstance(expr, Tree):
+                    raise TypeError(
+                        f"Expected Tree for function expression, got {type(expr)}",
+                    )
 
                 # Support multiple function clauses for pattern matching
                 if func_name not in env:
@@ -59,17 +81,29 @@ def build_environment(tree):
     return env
 
 
-def collect_functions(tree):
-    env = {}
+def collect_functions(tree: ParseTree) -> Environment:
+    """Collect function definitions from the parse tree."""
+    env: Environment = {}
 
-    def visit(node):
+    def visit(node: ASTNode) -> None:
         if isinstance(node, Tree):
             if node.data == "func_def":
-                func_name = node.children[0].value
+                func_name_token = node.children[0]
+                if isinstance(func_name_token, Token):
+                    func_name = func_name_token.value
+                else:
+                    raise TypeError(
+                        f"Expected Token for function name, got {type(func_name_token)}",
+                    )
+
                 patterns = node.children[
                     1:-1
                 ]  # all children between func_name and expr
                 expr = node.children[-1]
+                if not isinstance(expr, Tree):
+                    raise TypeError(
+                        f"Expected Tree for function expression, got {type(expr)}",
+                    )
 
                 # Support multiple function clauses for pattern matching
                 if func_name not in env:
@@ -84,14 +118,15 @@ def collect_functions(tree):
     return env
 
 
-def flexible_putStrLn(arg):
-    """putStrLn that can handle both single argument and curried usage"""
+def flexible_putStrLn(
+    arg: Union[Value, Callable[[Value], Value]],
+) -> Optional[Callable[[Value], None]]:
+    """putStrLn that can handle both single argument and curried usage."""
     if callable(arg):
         # If given a function (like 'printPerson'), return a curried function
-        def curried_putStrLn(value):
+        def curried_putStrLn(value: Value) -> None:
             result = arg(value)  # Apply the function to the value
             print(result)
-            return None  # Ensure we return None like the original
 
         return curried_putStrLn
     else:
@@ -100,14 +135,15 @@ def flexible_putStrLn(arg):
         return None
 
 
-def flexible_putStr(arg):
-    """putStr that can handle both single argument and curried usage"""
+def flexible_putStr(
+    arg: Union[Value, Callable[[Value], Value]],
+) -> Optional[Callable[[Value], None]]:
+    """putStr that can handle both single argument and curried usage."""
     if callable(arg):
         # If given a function (like 'show'), return a curried function
-        def curried_putStr(value):
+        def curried_putStr(value: Value) -> None:
             result = arg(value)  # Apply the function to the value
             print(result, end="")
-            return None  # Ensure we return None like the original
 
         return curried_putStr
     else:
@@ -116,7 +152,7 @@ def flexible_putStr(arg):
         return None
 
 
-builtins = {
+builtins: Dict[str, Callable[..., Any]] = {
     "putStrLn": flexible_putStrLn,
     "putStr": flexible_putStr,
     "getLine": lambda: input(),
@@ -132,29 +168,50 @@ builtins = {
 
 
 class Interpreter:
-    def __init__(self, env):
-        self.env = env
-        self.variables = {}
+    """Interpreter class for evaluating parsed language expressions."""
 
-    def eval(self, node):
+    def __init__(self, env: Environment) -> None:
+        """Initialize interpreter with environment of functions."""
+        self.env = env
+        self.variables: Dict[str, Value] = {}
+
+    def eval(self, node: ASTNode) -> Value:
+        """Evaluate a parse tree node and return its value."""
         if isinstance(node, Tree):
             match node.data:
                 case "int":
-                    return int(node.children[0])
+                    return int(node.children[0])  # type: ignore
                 case "float":
-                    return float(node.children[0])
+                    return float(node.children[0])  # type: ignore
                 case "neg_int":
-                    return -int(node.children[1].value)
+                    child_token = node.children[1]
+                    if isinstance(child_token, Token):
+                        return -int(child_token.value)
+                    raise TypeError(
+                        f"Expected Token for neg_int value, got {type(child_token)}",
+                    )
                 case "neg_float":
-                    return -float(node.children[1].value)
+                    child_token = node.children[1]
+                    if isinstance(child_token, Token):
+                        return -float(child_token.value)
+                    raise TypeError(
+                        f"Expected Token for neg_float value, got {type(child_token)}",
+                    )
                 case "string":
-                    return node.children[0][1:-1]
+                    return node.children[0][1:-1]  # type: ignore
                 case "true":
                     return True
                 case "false":
                     return False
                 case "var":
-                    name = node.children[0].value
+                    name_token = node.children[0]
+                    if isinstance(name_token, Token):
+                        name = name_token.value
+                    else:
+                        raise TypeError(
+                            f"Expected Token for variable name, got {type(name_token)}",
+                        )
+
                     if name in self.variables:
                         return self.variables[name]
                     elif name in self.env:
@@ -225,7 +282,13 @@ class Interpreter:
                 case "do_block":
                     return self.eval_do_block(node.children)
                 case "let":
-                    var_name = node.children[0].value
+                    var_name_token = node.children[0]
+                    if isinstance(var_name_token, Token):
+                        var_name = var_name_token.value
+                    else:
+                        raise TypeError(
+                            f"Expected Token for variable name, got {type(var_name_token)}",
+                        )
                     value = self.eval(node.children[1])
                     self.variables[var_name] = value
                     return value
@@ -299,13 +362,28 @@ class Interpreter:
                     return self.eval(node.children[0])
                 case "constructor_expr":
                     # handle record constructor expressions like Person { id = 1, name = "Alice" }
-                    constructor_name = node.children[0].value
-                    fields = {}
+                    constructor_name_token = node.children[0]
+                    if isinstance(constructor_name_token, Token):
+                        constructor_name = constructor_name_token.value
+                    else:
+                        raise TypeError(
+                            f"Expected Token for constructor name, got {type(constructor_name_token)}",
+                        )
+                    fields: Record = {}
 
                     # Process field assignments
                     for field_assign in node.children[1:]:
-                        if field_assign.data == "field_assign":
-                            field_name = field_assign.children[0].value
+                        if (
+                            isinstance(field_assign, Tree)
+                            and field_assign.data == "field_assign"
+                        ):
+                            field_name_token = field_assign.children[0]
+                            if isinstance(field_name_token, Token):
+                                field_name = field_name_token.value
+                            else:
+                                raise TypeError(
+                                    f"Expected Token for field name, got {type(field_name_token)}",
+                                )
                             field_value = self.eval(field_assign.children[1])
                             fields[field_name] = field_value
 
@@ -321,8 +399,15 @@ class Interpreter:
                     )
 
                     # Return a curried constructor function
-                    def make_constructor(collected_args=[]):
-                        def constructor_fn(arg):
+                    def make_constructor(
+                        collected_args: Optional[List[Value]] = None,
+                    ) -> Callable[[Value], Value]:
+                        if collected_args is None:
+                            collected_args = []
+
+                        def constructor_fn(
+                            arg: Value,
+                        ) -> Union[Record, Callable[[Value], Value]]:
                             new_args = collected_args + [arg]
                             # For a 2-argument constructor like MkPoint, we need to curry properly
                             # We'll assume we need more args and return another function
@@ -332,7 +417,7 @@ class Interpreter:
                             # For now, let's assume we collect all args and create when we get 2 or more
                             if len(new_args) >= 2:
                                 # Create the record with the collected arguments
-                                fields = {}
+                                fields: Record = {}
                                 for i, value in enumerate(new_args):
                                     fields[f"field_{i}"] = value
                                 return {"_constructor": constructor_name, **fields}
@@ -350,19 +435,15 @@ class Interpreter:
         else:
             raise TypeError(f"Unknown node type: {type(node)}")
 
-    def eval_func(self, name):
+    def eval_func(self, name: str) -> Value:
+        """Evaluate a function by name from the environment."""
         env_data = self.env[name]
 
         # Handle both old format (kind, patterns, expr) and new format (kind, data)
         if len(env_data) == 3:
             # Old format: ("lambda", patterns, expr)
-            kind, patterns, expr = env_data
-            if kind != "lambda":
-                raise RuntimeError("Only lambdas supported in old format")
-            if len(patterns) == 0:
-                return self.eval(expr)
-            else:
-                return self._create_curried_function([(patterns, expr)])
+            # This case is not used in the current implementation
+            raise RuntimeError("Old format (3-tuple) no longer supported")
         elif len(env_data) == 2:
             # New format: ("pattern_match", clauses)
             kind, data = env_data
@@ -374,10 +455,13 @@ class Interpreter:
         else:
             raise RuntimeError(f"Invalid environment data format: {env_data}")
 
-    def _create_pattern_match_function(self, clauses):
-        """Create a function that handles pattern matching across multiple clauses"""
+    def _create_pattern_match_function(
+        self,
+        clauses: List[FunctionClause],
+    ) -> Callable[..., Value]:
+        """Create a function that handles pattern matching across multiple clauses."""
 
-        def pattern_match_fn(*args):
+        def pattern_match_fn(*args: Value) -> Value:
             # Try each clause in order
             for patterns, expr in clauses:
                 if self._try_match_patterns(patterns, args):
@@ -394,7 +478,12 @@ class Interpreter:
             raise RuntimeError(f"No pattern matched for arguments: {args}")
 
         # Create curried version for partial application
-        def curried_fn(collected_args=[]):
+        def curried_fn(
+            collected_args: Optional[List[Value]] = None,
+        ) -> Union[Value, Callable[[Value], Value]]:
+            if collected_args is None:
+                collected_args = []
+
             if not clauses:
                 raise RuntimeError("No clauses defined")
 
@@ -405,20 +494,27 @@ class Interpreter:
                 return pattern_match_fn(*collected_args)
             else:
                 # Return a function that collects the next argument
-                def next_fn(arg):
+                def next_fn(arg: Value) -> Union[Value, Callable[[Value], Value]]:
                     return curried_fn(collected_args + [arg])
 
                 return next_fn
 
         return curried_fn()
 
-    def _create_curried_function(self, clauses):
-        """Create a curried function that handles multiple parameters (backward compatibility)"""
+    def _create_curried_function(
+        self,
+        clauses: List[FunctionClause],
+    ) -> Callable[..., Value]:
+        """Create a curried function that handles multiple parameters (backward compatibility)."""
         # Convert old format to new format
         return self._create_pattern_match_function(clauses)
 
-    def _try_match_patterns(self, patterns, args):
-        """Check if patterns match the given arguments"""
+    def _try_match_patterns(
+        self,
+        patterns: List[Pattern],
+        args: Tuple[Value, ...],
+    ) -> bool:
+        """Check if patterns match the given arguments."""
         if len(patterns) != len(args):
             return False
 
@@ -427,8 +523,8 @@ class Interpreter:
                 return False
         return True
 
-    def _match_pattern(self, pattern, arg):
-        """Check if a single pattern matches an argument"""
+    def _match_pattern(self, pattern: Pattern, arg: Value) -> bool:
+        """Check if a single pattern matches an argument."""
         if isinstance(pattern, Token):
             # Variable pattern - always matches
             return True
@@ -464,8 +560,8 @@ class Interpreter:
             # Unknown pattern type
             return False
 
-    def _bind_patterns(self, patterns, args):
-        """Bind matched patterns to variables in the current scope"""
+    def _bind_patterns(self, patterns: List[Pattern], args: Tuple[Value, ...]) -> None:
+        """Bind matched patterns to variables in the current scope."""
         for pattern, arg in zip(patterns, args):
             if isinstance(pattern, Token):
                 # Variable pattern - bind to the argument value
@@ -476,7 +572,7 @@ class Interpreter:
 
                 # Extract field values from the record in the order they were defined
                 if isinstance(arg, dict) and "_constructor" in arg:
-                    field_values = []
+                    field_values: List[Value] = []
 
                     # Check if this is a positional constructor (field_0, field_1, etc.)
                     # or a named constructor (actual field names)
@@ -513,18 +609,24 @@ class Interpreter:
                             self.variables[var_token.value] = field_value
             # Literal patterns don't bind anything
 
-    def _get_pattern_value(self, pattern):
-        """Extract the value from a pattern Tree node"""
+    def _get_pattern_value(self, pattern: Tree) -> Value:
+        """Extract the value from a pattern Tree node."""
         if pattern.data == "int":
-            return int(pattern.children[0])
+            return int(pattern.children[0])  # type: ignore
         elif pattern.data == "float":
-            return float(pattern.children[0])
+            return float(pattern.children[0])  # type: ignore
         elif pattern.data == "neg_int":
-            return -int(pattern.children[1])
+            child_token = pattern.children[1]
+            if isinstance(child_token, Token):
+                return -int(child_token.value)
+            raise TypeError(f"Expected Token for neg_int, got {type(child_token)}")
         elif pattern.data == "neg_float":
-            return -float(pattern.children[1])
+            child_token = pattern.children[1]
+            if isinstance(child_token, Token):
+                return -float(child_token.value)
+            raise TypeError(f"Expected Token for neg_float, got {type(child_token)}")
         elif pattern.data == "string":
-            return pattern.children[0][1:-1]
+            return pattern.children[0][1:-1]  # type: ignore
         elif pattern.data == "true":
             return True
         elif pattern.data == "false":
@@ -532,8 +634,9 @@ class Interpreter:
         else:
             raise RuntimeError(f"Unknown literal pattern: {pattern.data}")
 
-    def eval_do_block(self, stmts):
-        result = None
+    def eval_do_block(self, stmts: List[ASTNode]) -> Value:
+        """Evaluate a do block with statements."""
+        result: Value = None
         for stmt in stmts:
             if isinstance(stmt, Tree) and stmt.data == "let":
                 var_name_token = stmt.children[0]

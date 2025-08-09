@@ -2,7 +2,7 @@
 Main type inference engine using the Hindley-Milner algorithm
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from lark import Token, Tree
 
@@ -21,50 +21,61 @@ from lango.minio.typechecker.types import (
     TypeVar,
     generalize,
 )
+from lango.minio.typechecker.unify import UnificationError, unify
 
-from .unify import UnificationError, unify
+ASTNode = Union[Tree, Token]
+TypeBindings = Dict[str, TypeScheme]
+InferenceResult = Tuple[Type, TypeSubstitution]
+EnvironmentBinding = Dict[str, TypeScheme]
 
 
 class TypeEnvironment:
-    """Type environment mapping identifiers to type schemes"""
+    """Type environment mapping identifiers to type schemes."""
 
-    def __init__(self, bindings: Optional[Dict[str, TypeScheme]] = None):
-        self.bindings = bindings or {}
+    def __init__(self, bindings: Optional[TypeBindings] = None) -> None:
+        """Initialize the type environment with optional bindings."""
+        self.bindings: TypeBindings = bindings or {}
 
     def lookup(self, name: str) -> Optional[TypeScheme]:
+        """Look up a name in the environment and return its type scheme."""
         return self.bindings.get(name)
 
     def extend(self, name: str, scheme: TypeScheme) -> "TypeEnvironment":
-        """Return a new environment with an additional binding"""
+        """Return a new environment with an additional binding."""
         new_bindings = self.bindings.copy()
         new_bindings[name] = scheme
         return TypeEnvironment(new_bindings)
 
     def free_vars(self) -> Set[str]:
-        """Return free variables in all type schemes in this environment"""
-        result = set()
+        """Return free variables in all type schemes in this environment."""
+        result: Set[str] = set()
         for scheme in self.bindings.values():
             result |= scheme.free_vars()
         return result
 
     def substitute(self, subst: TypeSubstitution) -> "TypeEnvironment":
-        """Apply a substitution to all type schemes in the environment"""
-        new_bindings = {}
+        """Apply a substitution to all type schemes in the environment."""
+        new_bindings: TypeBindings = {}
         for name, scheme in self.bindings.items():
             new_bindings[name] = scheme.substitute(subst)
         return TypeEnvironment(new_bindings)
 
 
 class TypeInferenceError(Exception):
-    """Raised when type inference fails"""
+    """Raised when type inference fails."""
 
-    pass
+    def __init__(self, message: str, node: Optional[ASTNode] = None) -> None:
+        """Initialize with error message and optional AST node."""
+        super().__init__(message)
+        self.message = message
+        self.node = node
 
 
 class TypeInferrer:
-    """Hindley-Milner type inference engine"""
+    """Hindley-Milner type inference engine."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the type inferrer with built-in environment and fresh variable generator."""
         self.fresh_var_gen = FreshVarGenerator()
         self.constraints: List[Tuple[Type, Type]] = []
 
@@ -180,8 +191,8 @@ class TypeInferrer:
         """Generate a fresh type variable"""
         return TypeVar(self.fresh_var_gen.fresh())
 
-    def add_constraint(self, t1: Type, t2: Type):
-        """Add a type constraint"""
+    def add_constraint(self, t1: Type, t2: Type) -> None:
+        """Add a type constraint that t1 must equal t2."""
         self.constraints.append((t1, t2))
 
     def infer_data_decl(self, node: Tree) -> TypeEnvironment:
@@ -249,7 +260,9 @@ class TypeInferrer:
                                 field_types.append(field_type)
 
                     # For record constructors, we create a function that takes all fields
-                    type_param_vars = [TypeVar(param) for param in type_params]
+                    type_param_vars: List[Type] = [
+                        TypeVar(param) for param in type_params
+                    ]
                     result_type = DataType(type_name, type_param_vars)
                     ctor_type = result_type
                     for field_type in reversed(field_types):
@@ -262,7 +275,9 @@ class TypeInferrer:
 
                 else:
                     # Positional constructor: UIDENT type_atom*
-                    type_param_vars = [TypeVar(param) for param in type_params]
+                    type_param_vars: List[Type] = [
+                        TypeVar(param) for param in type_params
+                    ]
                     result_type = DataType(type_name, type_param_vars)
 
                     if len(constructor.children) == 1:
@@ -300,8 +315,8 @@ class TypeInferrer:
 
         return env
 
-    def parse_type_expr(self, node) -> Type:
-        """Parse a type expression from the AST"""
+    def parse_type_expr(self, node: ASTNode) -> Type:
+        """Parse a type expression from the AST."""
         if isinstance(node, Token):
             type_name = node.value
             if type_name == "Int":
@@ -327,7 +342,14 @@ class TypeInferrer:
                     type_name = child.value
                 else:
                     # If it's a Tree, get the first token
-                    type_name = child.children[0].value
+                    first_token = child.children[0]
+                    if isinstance(first_token, Token):
+                        type_name = first_token.value
+                    else:
+                        raise TypeInferenceError(
+                            f"Expected token for type name, got {type(first_token)}",
+                            child,
+                        )
 
                 if type_name == "Int":
                     return INT_TYPE
@@ -346,7 +368,14 @@ class TypeInferrer:
                 if isinstance(child, Token):
                     var_name = child.value
                 else:
-                    var_name = child.children[0].value
+                    first_token = child.children[0]
+                    if isinstance(first_token, Token):
+                        var_name = first_token.value
+                    else:
+                        raise TypeInferenceError(
+                            f"Expected token for type var name, got {type(first_token)}",
+                            child,
+                        )
                 return TypeVar(var_name)
 
             elif node.data == "arrow_type":
@@ -386,8 +415,8 @@ class TypeInferrer:
 
         raise TypeInferenceError(f"Cannot parse type expression: {node}")
 
-    def infer_expr(self, expr, env: TypeEnvironment) -> Tuple[Type, TypeSubstitution]:
-        """Infer the type of an expression"""
+    def infer_expr(self, expr: ASTNode, env: TypeEnvironment) -> InferenceResult:
+        """Infer the type of an expression."""
         if isinstance(expr, Tree):
             match expr.data:
                 case "int" | "neg_int":
@@ -686,12 +715,8 @@ class TypeInferrer:
         else:
             raise TypeInferenceError(f"Unknown expression type: {type(expr)}")
 
-    def infer_stmt_list(
-        self,
-        stmt_list: Tree,
-        env: TypeEnvironment,
-    ) -> Tuple[Type, TypeSubstitution]:
-        """Infer type of a statement list (do block)"""
+    def infer_stmt_list(self, stmt_list: Tree, env: TypeEnvironment) -> InferenceResult:
+        """Infer type of a statement list (do block)."""
         current_env = env
         current_subst = TypeSubstitution()
         result_type = UNIT_TYPE
@@ -785,7 +810,7 @@ class TypeInferrer:
         func_def: Tree,
         env: TypeEnvironment,
     ) -> Tuple[str, TypeScheme]:
-        """Infer the type of a function definition"""
+        """Infer the type of a function definition."""
         func_name_token = func_def.children[0]
         func_name = (
             func_name_token.value
@@ -945,8 +970,8 @@ class TypeInferrer:
 
         return env
 
-    def check_program(self, tree: Tree) -> Dict[str, TypeScheme]:
-        """Type check a program and return the final type environment"""
+    def check_program(self, tree: Tree) -> TypeBindings:
+        """Type check a program and return the final type environment."""
         try:
             env = self.infer_program(tree)
             return env.bindings
@@ -954,7 +979,7 @@ class TypeInferrer:
             raise TypeInferenceError(f"Type checking failed: {e}")
 
 
-def type_check(tree: Tree) -> Dict[str, TypeScheme]:
-    """Main entry point for type checking"""
+def type_check(tree: Tree) -> TypeBindings:
+    """Main entry point for type checking."""
     inferrer = TypeInferrer()
     return inferrer.check_program(tree)
