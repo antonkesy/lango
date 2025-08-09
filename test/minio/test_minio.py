@@ -5,11 +5,11 @@ import pytest
 
 from lango.parser.parser import are_types_correct, example, get_type_str
 
-TEST_FILE_PATH = "./test/files/minio/"
+BASE_TEST_FILES_PATH = "./test/files/minio/"
 
 
 def get_all_test_files():
-    for root, _, files in os.walk(TEST_FILE_PATH):
+    for root, _, files in os.walk(BASE_TEST_FILES_PATH):
         for file in files:
             if file.endswith(".minio"):
                 yield os.path.join(root, file)
@@ -43,17 +43,17 @@ def test_output_matches_expected(file_name):
 
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files()))
-def test_against_haskell(file_name):
-    result = example(file_name, True)
+def test_is_haskell_compliant(file_name):
+    expected = get_test_output(file_name)
     haskell_result = run_haskell_file(file_name)
-    assert result == haskell_result, (
+    assert expected == haskell_result, (
         f"Haskell mismatch for {file_name}: "
-        f"Haskell: '{haskell_result}', lango: '{result}'"
+        f"Haskell: '{haskell_result}', expected: '{expected}'"
     )
 
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files()))
-def test_type_check(file_name):
+def test_is_type_valid(file_name):
     assert are_types_correct(file_name), (
         f"Type check failed for {file_name}, " f"types: {get_type_str(file_name)}"
     )
