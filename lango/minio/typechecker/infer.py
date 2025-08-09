@@ -175,6 +175,7 @@ class TypeInferrer:
             # IO
             "putStrLn": put_str_ln,
             "putStr": put_str,
+            "error": put_str,
             "getLine": get_line,
             "readInt": read_int,
             "readString": read_string,
@@ -478,12 +479,13 @@ class TypeInferrer:
                     func_expr = expr.children[0]
                     arg_expr = expr.children[1]
 
-                    # Special case: putStr show -> give it the curried type
+                    # Special case: putStr/putStrLn/error show -> give it the curried type
                     if (
                         isinstance(func_expr, Tree)
                         and func_expr.data == "var"
                         and isinstance(func_expr.children[0], Token)
-                        and func_expr.children[0].value == "putStr"
+                        and func_expr.children[0].value
+                        in ["putStr", "putStrLn", "error"]
                         and isinstance(arg_expr, Tree)
                         and arg_expr.data == "var"
                         and isinstance(arg_expr.children[0], Token)
@@ -491,23 +493,6 @@ class TypeInferrer:
                     ):
 
                         # putStr show has type: a -> () where a is showable
-                        a = self.fresh_type_var()
-                        result_type = FunctionType(a, UNIT_TYPE)
-                        return result_type, TypeSubstitution()
-
-                    # Special case: putStrLn show -> give it the curried type
-                    if (
-                        isinstance(func_expr, Tree)
-                        and func_expr.data == "var"
-                        and isinstance(func_expr.children[0], Token)
-                        and func_expr.children[0].value == "putStrLn"
-                        and isinstance(arg_expr, Tree)
-                        and arg_expr.data == "var"
-                        and isinstance(arg_expr.children[0], Token)
-                        and arg_expr.children[0].value == "show"
-                    ):
-
-                        # putStrLn show has type: a -> () where a is showable
                         a = self.fresh_type_var()
                         result_type = FunctionType(a, UNIT_TYPE)
                         return result_type, TypeSubstitution()
