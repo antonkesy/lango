@@ -3,7 +3,9 @@ import subprocess
 
 import pytest
 
-from lango.parser.parser import are_types_correct, example, get_type_str
+from lango.minio.interpreter import interpret
+from lango.minio.parser import parse
+from lango.minio.typecheck import type_check
 
 BASE_TEST_FILES_PATH = "./test/files/minio/"
 
@@ -38,7 +40,8 @@ def run_haskell_file(path: str) -> str:
 @pytest.mark.parametrize("file_name", list(get_all_test_files()))
 def test_output_matches_expected(file_name):
     expected = get_test_output(file_name)
-    result = example(file_name, True)
+    tree = parse(file_name)
+    result = interpret(tree, collectStdOut=True)
     assert result == expected, f"{file_name}: Expected '{expected}', got '{result}'"
 
 
@@ -54,6 +57,8 @@ def test_is_haskell_compliant(file_name):
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files()))
 def test_is_type_valid(file_name):
-    assert are_types_correct(file_name), (
-        f"Type check failed for {file_name}, " f"types: {get_type_str(file_name)}"
-    )
+    try:
+        tree = parse(file_name)
+        type_check(tree)
+    except Exception:
+        assert False

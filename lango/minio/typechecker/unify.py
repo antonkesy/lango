@@ -4,7 +4,7 @@ Unification algorithm for the Hindley-Milner type system
 
 from typing import List, Tuple
 
-from .types import (
+from lango.minio.typechecker.types import (
     DataType,
     FunctionType,
     Type,

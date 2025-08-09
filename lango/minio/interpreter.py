@@ -1,9 +1,37 @@
 from contextlib import redirect_stdout
 from io import StringIO
 
-from lark import Lark, Token, Tree
+from lark import ParseTree, Token, Tree
 
-from ..typechecker.infer import type_check
+from lango.minio.typecheck import type_check
+
+
+def interpret(
+    tree: ParseTree,
+    collectStdOut: bool = False,
+) -> str:
+    type_check(tree)
+
+    env = collect_functions(tree)
+    interp = Interpreter(env)
+
+    if "main" not in env:
+        raise RuntimeError("No main function defined")
+
+    if collectStdOut:
+        f = StringIO()
+        with redirect_stdout(f):
+            result = interp.eval_func("main")
+        output = f.getvalue()
+    else:
+        result = interp.eval_func("main")
+        output = ""
+
+    if not collectStdOut:
+        print(
+            f"{result}" if not callable(result) else "[main] is a function",
+        )
+    return output
 
 
 def build_environment(tree):
@@ -519,111 +547,3 @@ class Interpreter:
             else:
                 result = self.eval(stmt)
         return result
-
-
-def example(
-    path: str = "examples/minio/example.minio",
-    isTest: bool = False,
-    check_types: bool = False,
-) -> str:
-    parser = Lark.open(
-        "./lango/parser/minio.lark",
-        parser="lalr",
-    )
-
-    with open(path) as f:
-        tree = parser.parse(f.read())
-
-    # if not isTest:
-    # print(tree.pretty())
-
-    # Type checking
-    if check_types:
-        try:
-            type_env = type_check(tree)
-            print("Type checking passed!")
-            print("Function types:")
-            for name, scheme in type_env.items():
-                print(f"  {name} :: {scheme}")
-        except Exception as e:
-            print(f"Type checking failed: {e}")
-            return ""
-
-    env = collect_functions(tree)
-    interp = Interpreter(env)
-
-    if "main" not in env:
-        raise RuntimeError("No main function defined")
-
-    if isTest:
-        f = StringIO()
-        with redirect_stdout(f):
-            result = interp.eval_func("main")
-        output = f.getvalue()
-    else:
-        result = interp.eval_func("main")
-        output = ""
-
-    if not isTest:
-        print(
-            f"\n[main] => {result}" if not callable(result) else "[main] is a function",
-        )
-    return output
-
-
-def are_types_correct(path: str) -> bool:
-    parser = Lark.open(
-        "./lango/parser/minio.lark",
-        parser="lalr",
-    )
-
-    with open(path) as f:
-        tree = parser.parse(f.read())
-
-    try:
-        type_check(tree)
-        return True
-    except Exception:
-        return False
-
-
-def get_type_str(path: str) -> str:
-    parser = Lark.open(
-        "./lango/parser/minio.lark",
-        parser="lalr",
-    )
-
-    with open(path) as f:
-        tree = parser.parse(f.read())
-
-    res = ""
-
-    try:
-        type_env = type_check(tree)
-        res += "Inferred types:"
-        for name, scheme in type_env.items():
-            res += f"  {name} :: {scheme}"
-    except Exception as e:
-        res += f"Type checking failed: {e}"
-
-    return res
-
-
-def type_check_file(path: str) -> None:
-    """Type check a file and print results"""
-    parser = Lark.open(
-        "./lango/parser/minio.lark",
-        parser="lalr",
-    )
-
-    with open(path) as f:
-        tree = parser.parse(f.read())
-
-    try:
-        type_env = type_check(tree)
-        print("✓ Type checking passed!")
-        print("\nInferred types:")
-        for name, scheme in type_env.items():
-            print(f"  {name} :: {scheme}")
-    except Exception as e:
-        print(f"✗ Type checking failed: {e}")

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from lark import Token, Tree
 
-from .types import (
+from lango.minio.typechecker.types import (
     BOOL_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
@@ -21,6 +21,7 @@ from .types import (
     TypeVar,
     generalize,
 )
+
 from .unify import UnificationError, unify
 
 

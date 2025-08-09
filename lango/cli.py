@@ -1,7 +1,9 @@
 import typer
 from rich.console import Console
 
-from .parser.parser import example, type_check_file
+from lango.minio.interpreter import interpret
+from lango.minio.parser import parse
+from lango.minio.typecheck import get_type_str
 
 app = typer.Typer()
 console = Console()
@@ -15,21 +17,10 @@ def run(
         "-i",
         help="Path to .minio file to run",
     ),
-    test: bool = typer.Option(
-        False,
-        "--test",
-        "-t",
-        help="Run in test mode (capture output)",
-    ),
-    check_types: bool = typer.Option(
-        False,
-        "--type-check",
-        "-tc",
-        help="Run type checker before execution",
-    ),
 ):
     """Run a Minio program"""
-    example(input_file, test, check_types)
+    tree = parse(input_file)
+    interpret(tree)
 
 
 @app.command()
@@ -38,8 +29,8 @@ def typecheck(
         help="Path to .minio file to type check",
     ),
 ):
-    """Type check a Minio program"""
-    type_check_file(input_file)
+    tree = parse(input_file)
+    print(get_type_str(tree))
 
 
 def main():
