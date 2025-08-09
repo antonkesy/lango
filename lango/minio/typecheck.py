@@ -16,8 +16,10 @@ def get_type_str(tree: ParseTree) -> str:
     return res
 
 
-def type_check(tree: ParseTree) -> None:
+def type_check(tree: ParseTree) -> bool:
     try:
         type_check_infer(tree)
+        return True
     except Exception as e:
         print(f"Type checking failed: {e}")
+        return False

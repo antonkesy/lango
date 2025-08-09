@@ -20,7 +20,9 @@ def interpret(
     tree: ParseTree,
     collectStdOut: bool = False,
 ) -> str:
-    type_check(tree)
+    if not type_check(tree):
+        print("Type checking failed, cannot interpret.")
+        return ""
 
     env = collect_functions(tree)
     interp = Interpreter(env)
