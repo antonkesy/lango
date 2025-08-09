@@ -1,0 +1,7 @@
+-- "42.0"
+safeDivide x 0 = error "Division by zero!"
+safeDivide x y = x / y
+
+main = do {
+    putStr (show (if True then 42.0 else safeDivide 1 0))
+}
