@@ -21,6 +21,11 @@ dependencies = [
   "lark==1.2.2",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "coverage==7.10.2",
+]
+
 [project.urls]
 bugs = "https://github.com/antonkesy/lang-o/issues"
 homepage = "https://github.com/antonkesy/lang-o"

@@ -3,38 +3,39 @@
 	uninstall
 	install
 	install-dev
-	test
 	run
+	type
+	test
+	coverage
 
 all: run
 
 prep:
 	python3.13 -m venv .venv
 
-test: install
-	. .venv/bin/activate && \
-	pytest -vvs
-
 uninstall:
 	.venv/bin/pip uninstall lango -y
 
-install: uninstall
+install:
 	.venv/bin/pip install .
 
 install-dev:
 	.venv/bin/pip install -e .[dev]
 
-run-dev:
-	. .venv/bin/activate && \
-		lango
-
 run: install
 	. .venv/bin/activate && \
-	lango run --input_file test/files/minio/types/generic/data.minio
-	# lango run --input_file examples/minio/example.minio
+	lango run --input_file examples/minio/example.minio
 
 type: install
 	. .venv/bin/activate && \
-	lango typecheck ./test/files/minio/types/generic/data.minio
-	# lango typecheck test/files/minio/datatypes/custom/constrcutor/mixed.minio
-	# lango typecheck examples/minio/example.minio
+	lango typecheck examples/minio/example.minio
+
+test: install
+	. .venv/bin/activate && \
+	pytest -vvs
+
+coverage: install-dev
+	. .venv/bin/activate && \
+	coverage run -m pytest && \
+	coverage report -m && \
+	coverage html
