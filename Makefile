@@ -26,7 +26,11 @@ run: install
 	. .venv/bin/activate && \
 	lango run --input_file examples/minio/example.minio
 
-type: install
+types: install
+	. .venv/bin/activate && \
+	lango types examples/minio/example.minio
+
+typecheck: install
 	. .venv/bin/activate && \
 	lango typecheck examples/minio/example.minio
 
