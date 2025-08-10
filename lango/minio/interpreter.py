@@ -112,7 +112,6 @@ builtins: Dict[str, Callable[..., Any]] = {
     "toLowerCase": lambda x: x.lower(),
     "show": lambda x: f'"{x}"' if isinstance(x, str) else str(x),
     "mod": lambda x: lambda y: x % y,
-    "error": flexible_putStr,
 }
 
 
