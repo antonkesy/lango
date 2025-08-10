@@ -41,7 +41,7 @@ def interpret(
 
     if not collectStdOut:
         if result is not None and not callable(result):
-            print(f"{result}")
+            print(f"{result}\n")
         elif callable(result):
             print("[main] is a function")
     return output

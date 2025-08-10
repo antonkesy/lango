@@ -49,26 +49,42 @@ do_stmt: "let" ID "=" expr+ (";" ID "=" expr)* "in" _NL? expr
 
 stmt_list: (do_stmt (_NL | ";")*)+
 
+// Operator precedence hierarchy (from lowest to highest)
 ?expr: "do" _NL? "{" _NL? stmt_list _NL? "}"  -> do_block
      | "if" expr _NL? "then" _NL? expr _NL? "else" _NL? expr -> if_else
-     | expr "++" expr             -> concat
-     | expr "$" expr              -> dollar
-     | expr PLUS expr             -> add
-     | expr MINUS expr            -> sub
-     | expr MUL expr              -> mul
-     | expr DIV expr              -> div
-     | expr POW_INT expr          -> pow_int
-     | expr POW_FLOAT expr        -> pow_float
-     | expr EQ expr               -> eq
-     | expr NEQ expr              -> neq
-     | expr LT expr               -> lt
-     | expr LTEQ expr             -> lteq
-     | expr GT expr               -> gt
-     | expr GTEQ expr             -> gteq
-     | expr AND expr              -> and
-     | expr OR expr               -> or
-     | NOT expr                   -> not
-     | app_expr
+     | or_expr
+
+?or_expr: or_expr OR and_expr          -> or
+        | and_expr
+
+?and_expr: and_expr AND comp_expr      -> and
+         | comp_expr
+
+?comp_expr: comp_expr EQ concat_expr   -> eq
+          | comp_expr NEQ concat_expr  -> neq
+          | comp_expr LT concat_expr   -> lt
+          | comp_expr LTEQ concat_expr -> lteq
+          | comp_expr GT concat_expr   -> gt
+          | comp_expr GTEQ concat_expr -> gteq
+          | concat_expr
+
+?concat_expr: concat_expr "++" add_expr -> concat
+            | add_expr
+
+?add_expr: add_expr PLUS mul_expr      -> add
+         | add_expr MINUS mul_expr     -> sub
+         | mul_expr
+
+?mul_expr: mul_expr MUL pow_expr       -> mul
+         | mul_expr DIV pow_expr       -> div
+         | pow_expr
+
+?pow_expr: unary_expr POW_INT pow_expr    -> pow_int
+         | unary_expr POW_FLOAT pow_expr  -> pow_float
+         | unary_expr
+
+?unary_expr: NOT unary_expr            -> not
+           | app_expr
 
 ?app_expr: app_expr atom_expr      -> app
          | atom_expr
