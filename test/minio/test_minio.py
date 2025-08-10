@@ -8,6 +8,7 @@ from lango.minio.parser import parse
 from lango.minio.typecheck import type_check
 
 BASE_TEST_FILES_PATH = "./test/files/minio/"
+EXAMPLE = "./examples/minio/example.minio"
 
 
 def get_all_test_files():
@@ -55,7 +56,7 @@ def test_is_haskell_compliant(file_name):
     )
 
 
-@pytest.mark.parametrize("file_name", list(get_all_test_files()))
+@pytest.mark.parametrize("file_name", list(get_all_test_files()) + [EXAMPLE])
 def test_is_type_valid(file_name):
     try:
         tree = parse(file_name)
