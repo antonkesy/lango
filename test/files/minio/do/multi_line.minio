@@ -1,5 +1,5 @@
 -- "TA"
 main = do {
   putStr "T";
-  putStr "A";
-}
+  putStr "A"
+};

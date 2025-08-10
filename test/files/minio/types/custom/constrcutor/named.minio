@@ -1,10 +1,10 @@
 -- "ID: 1, Name: Alice"
-data Person = Person { id_ :: Int, name :: String }
+data Person = Person { id_ :: Int, name :: String };
 
-person1 = Person { id_ = 1, name = "Alice" }
+person1 = Person { id_ = 1, name = "Alice" };
 
-printPerson (Person id_ name) = "ID: " ++ show id_ ++ ", Name: " ++ name
+printPerson (Person id_ name) = "ID: " ++ show id_ ++ ", Name: " ++ name;
 
 main = do {
-  putStr (printPerson person1);
-}
+  putStr (printPerson person1)
+};

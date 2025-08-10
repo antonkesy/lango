@@ -2,5 +2,5 @@
 main = do {
   putStr (show (1 + 2));
   putStr ",";
-  putStr (show (1.0 + 2.3));
-}
+  putStr (show (1.0 + 2.3))
+};

@@ -1,17 +1,17 @@
 -- "id_: 1, Name: Alice,Point(3.5, 4.2)"
-data Person = Person { id_ :: Int, name :: String }
-data Point = MkPoint Float Float
+data Person = Person { id_ :: Int, name :: String };
+data Point = MkPoint Float Float;
 
-person1 = Person { id_ = 1, name = "Alice" }
+person1 = Person { id_ = 1, name = "Alice" };
 
-p1 = MkPoint 3.5 4.2
+p1 = MkPoint 3.5 4.2;
 
-printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name
+printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name;
 
-printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 main = do {
   putStr (printPerson person1);
   putStr ",";
-  putStr (printPoint p1);
-}
+  putStr (printPoint p1)
+};

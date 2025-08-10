@@ -1,15 +1,15 @@
 -- "678TrueFalse"
-add 1 y = 1 + y
-add 2 y = 2 + y
-add x y = x + y
+add 1 y = 1 + y;
+add 2 y = 2 + y;
+add x y = x + y;
 
-isTrue True = "True"
-isTrue False = "False"
+isTrue True = "True";
+isTrue False = "False";
 
 main = do {
   putStr (show (add 1 5));
   putStr (show (add 2 5));
   putStr (show (add 3 5));
   putStr (isTrue True);
-  putStr (isTrue False);
-}
+  putStr (isTrue False)
+};

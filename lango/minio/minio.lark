@@ -1,15 +1,14 @@
-start: (prelude stmt (sep stmt)*)? postlude
+start: prelude stmt* postlude
 
-prelude: (_NL | COMMENT)*
-sep: (_NL | COMMENT)+
-postlude: (_NL | COMMENT)*
+prelude: COMMENT*
+postlude: COMMENT*
 
 ?stmt: data_decl
      | func_def
      | func_sig
 
 // --- Data Declarations ---
-data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)*
+data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)* ";"
 
 type_param: ID
 
@@ -20,9 +19,9 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Function Signatures and Definitions ---
-func_sig: ID "::" type_expr ("->" type_expr)*
+func_sig: ID "::" type_expr ("->" type_expr)* ";"
 
-func_def: ID pattern* "=" expr
+func_def: ID pattern* "=" expr ";"
 
 // --- Expressions ---
 // Arithmetic
@@ -44,14 +43,17 @@ AND: "&&"
 OR: "||"
 NOT: "not"
 
-do_stmt: "let" ID "=" expr+ (";" ID "=" expr)* "in" _NL? expr
-    | expr
+do_stmt: let_stmt
+        | expr
 
-stmt_list: (do_stmt (_NL | ";")*)+
+let_stmt: "let" ID "=" expr ("in" expr)? ";"
+        | "let" ID "=" expr "in" expr ";"
+
+stmt_list: do_stmt (";" do_stmt)*
 
 // Operator precedence hierarchy (from lowest to highest)
-?expr: "do" _NL? "{" _NL? stmt_list _NL? "}"  -> do_block
-     | "if" expr _NL? "then" _NL? expr _NL? "else" _NL? expr -> if_else
+?expr: "do" "{" stmt_list "}"          -> do_block
+     | "if" expr "then" expr "else" expr -> if_else
      | or_expr
 
 ?or_expr: or_expr OR and_expr          -> or
@@ -138,9 +140,7 @@ FLOAT: /[0-9]+\.[0-9]+/
 COMMENT: /--.*/
 %ignore COMMENT
 %ignore /[ \t]+/
-_NL: /(\r?\n)+/
+%ignore /\n/
 
-// TODO: remove _NL -> switch from WS_INLINE to WS
-
-%import common.WS_INLINE
-%ignore WS_INLINE
+%import common.WS
+%ignore WS

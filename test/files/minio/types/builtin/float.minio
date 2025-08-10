@@ -1,9 +1,9 @@
 -- "0.0-5.0"
-s = 0.0
+s = 0.0;
 
-x = (-5.0)
+x = (-5.0);
 
 main = do {
   putStr (show s);
-  putStr (show x);
-}
+  putStr (show x)
+};

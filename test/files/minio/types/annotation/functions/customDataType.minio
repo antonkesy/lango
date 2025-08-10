@@ -1,12 +1,12 @@
 -- "Point(1.0, 2.0)"
-data Point = MkPoint Float Float
+data Point = MkPoint Float Float;
 
-printPoint :: Point -> String
-printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+printPoint :: Point -> String;
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
-p1 :: Point
-p1 = MkPoint 1.0 2.0
+p1 :: Point;
+p1 = MkPoint 1.0 2.0;
 
 main = do {
-  putStr (printPoint p1);
-}
+  putStr (printPoint p1)
+};

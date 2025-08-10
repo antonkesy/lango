@@ -1,6 +1,6 @@
 -- "1"
-add1 x = x + 1
+add1 x = x + 1;
 
 main = do {
-  putStr (show (add1 0));
-}
+  putStr (show (add1 0))
+};

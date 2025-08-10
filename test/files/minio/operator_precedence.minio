@@ -8,5 +8,5 @@ main = do {
     putStr ",";
     putStr (show (True && False || True));  -- Should be True (False || True)
     putStr ",";
-    putStr (show (True || False && False)); -- Should be True (True || False)
-}
+    putStr (show (True || False && False))  -- Should be True (True || False)
+};

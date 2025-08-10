@@ -25,7 +25,7 @@ install-dev:
 
 run: install
 	. .venv/bin/activate && \
-	lango run --input_file examples/minio/example.minio
+	lango run --input_file test/files/minio/let/multiple.minio
 
 types: install
 	. .venv/bin/activate && \

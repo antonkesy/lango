@@ -1,13 +1,13 @@
 -- "Pair(1, "hello")Pair("hello", 1)"
-data Pair a b = Pair a b
+data Pair a b = Pair a b;
 
-swap (Pair x y) = Pair y x
+swap (Pair x y) = Pair y x;
 
-showPair (Pair x y) = "Pair(" ++ show x ++ ", " ++ show y ++ ")"
+showPair (Pair x y) = "Pair(" ++ show x ++ ", " ++ show y ++ ")";
 
-p1 = Pair 1 "hello"
+p1 = Pair 1 "hello";
 
 main = do {
   putStr (showPair p1);
-  putStr (showPair (swap p1));
-}
+  putStr (showPair (swap p1))
+};

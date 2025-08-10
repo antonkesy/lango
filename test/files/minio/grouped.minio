@@ -1,4 +1,4 @@
 -- "10"
 main = do {
-  putStr (show ((1 + 2) + (3 + 4)));
-}
+  putStr (show ((1 + 2) + (3 + 4)))
+};

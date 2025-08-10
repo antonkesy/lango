@@ -1,6 +1,6 @@
 -- "1"
-get = 1
+get = 1;
 
 main = do {
-  putStr (show get);
-}
+  putStr (show get)
+};

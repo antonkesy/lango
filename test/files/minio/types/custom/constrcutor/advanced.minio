@@ -1,16 +1,16 @@
 -- "Point(1.0, 2.0),Point(3.5, 4.2),X of p1: 1.0,Y of p2: 4.2"
-data Point = MkPoint Float Float
+data Point = MkPoint Float Float;
 
-p1 = MkPoint 1.0 2.0
+p1 = MkPoint 1.0 2.0;
 
-p2 = MkPoint 3.5 4.2
+p2 = MkPoint 3.5 4.2;
 
 -- Test that pattern matching extracts values correctly
-getX (MkPoint x y) = x
+getX (MkPoint x y) = x;
 
-getY (MkPoint x y) = y
+getY (MkPoint x y) = y;
 
-printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 main = do {
   putStr (printPoint p1);
@@ -19,5 +19,5 @@ main = do {
   putStr ",";
   putStr ("X of p1: " ++ show (getX p1));
   putStr ",";
-  putStr ("Y of p2: " ++ show (getY p2));
-}
+  putStr ("Y of p2: " ++ show (getY p2))
+};

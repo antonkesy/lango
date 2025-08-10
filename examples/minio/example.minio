@@ -1,57 +1,48 @@
 -- Person
-data Person = Person { id_ :: Int, name :: String }
+data Person = Person { id_ :: Int, name :: String };
 
-person1 :: Person
-person1 = Person { id_ = 1, name = "Alice" }
+person1 :: Person;
+person1 = Person { id_ = 1, name = "Alice" };
 
-printPerson :: Person -> String
-printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name
+printPerson :: Person -> String;
+printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name;
 
 -- Point
-data Point = MkPoint Float Float
+data Point = MkPoint Float Float;
 
-printPoint :: Point -> String
-printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")"
+printPoint :: Point -> String;
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 -- Bool
-isTrue :: Bool -> String
-isTrue True = "True"
-isTrue False = "False"
+isTrue :: Bool -> String;
+isTrue True = "True";
+isTrue False = "False";
 
 -- Int
-add1 :: Int -> Int
-add1 x = x + 1
+add1 :: Int -> Int;
+add1 x = x + 1;
 
 -- do
-t :: Int -> String
+t :: Int -> String;
 t x = do {
-  let y = x + 1 in
-  "Result: " ++ show y
-}
+  let y = x + 1 in "Result: " ++ show y
+};
 
 -- no parameter
-t1 = 1
+t1 = 1;
 
 main = do {
   putStr "Testing isTrue function:\n";
   putStr ("\nisTrue True: " ++ isTrue True);
   putStr ("\nisTrue False: " ++ isTrue False);
-
   putStr "\nTesting Person data type:";
   putStr ("\nPerson 1: " ++ printPerson person1);
-
   putStr "\nTesting Point data type:";
-  let point = MkPoint 3.0 4.0 in
-  putStr ("\nPoint: " ++ printPoint point);
-
+  let point = MkPoint 3.0 4.0 in putStr ("\nPoint: " ++ printPoint point);
   putStr "\nTesting add1 function:";
-  let number = 5 in
-  putStr ("\nadd1 " ++ show number ++ ": " ++ show (add1 number));
-
+  let number = 5 in putStr ("\nadd1 " ++ show number ++ ": " ++ show (add1 number));
   putStr "\nTesting t function:";
-  let result = t 10 in
-  putStr result;
-
+  let result = t 10 in putStr result;
   putStr "\nTesting t1 function:";
-  putStr ("t1: " ++ show t1);
-}
+  putStr ("t1: " ++ show t1)
+};

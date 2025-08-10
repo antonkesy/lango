@@ -1,6 +1,6 @@
 -- "Hey"
-s = "Hey"
+s = "Hey";
 
 main = do {
-  putStr s;
-}
+  putStr s
+};

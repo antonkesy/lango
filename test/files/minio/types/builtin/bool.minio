@@ -1,6 +1,6 @@
 -- "True"
-s = True
+s = True;
 
 main = do {
-  putStr (show s);
-}
+  putStr (show s)
+};
