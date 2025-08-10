@@ -7,6 +7,7 @@
 	type
 	test
 	coverage
+	clean
 
 all: run
 
@@ -32,7 +33,7 @@ types: install
 
 typecheck: install
 	. .venv/bin/activate && \
-	lango typecheck examples/minio/example.minio
+	lango typecheck ./test/files/minio/types/custom/constrcutor/mixed.minio
 
 test: install
 	. .venv/bin/activate && \
@@ -43,3 +44,6 @@ coverage: install-dev
 	coverage run -m pytest && \
 	coverage report -m && \
 	coverage html
+
+clean: uninstall
+	rm -rf build/ dist/ *.egg-info/ .venv/ .pytest_cache/ .coverage htmlcov/
