@@ -108,8 +108,6 @@ builtins: Dict[str, Callable[..., Any]] = {
     "readString": lambda: input(),
     "readBool": lambda: input().lower() == "true",
     "concat": lambda x: lambda y: x + y,
-    "toUpperCase": lambda x: x.upper(),
-    "toLowerCase": lambda x: x.lower(),
     "show": lambda x: f'"{x}"' if isinstance(x, str) else str(x),
     "mod": lambda x: lambda y: x % y,
 }

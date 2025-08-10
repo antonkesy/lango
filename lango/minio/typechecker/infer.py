@@ -121,23 +121,12 @@ class TypeInferrer:
         # Method 1: Give putStr overloaded types
         # For now, let's assume that putStr gets specialized based on usage
         put_str_string = TypeScheme(set(), FunctionType(STRING_TYPE, UNIT_TYPE))
-        put_str_func = TypeScheme(
-            {"a"},
-            FunctionType(FunctionType(a, STRING_TYPE), FunctionType(a, UNIT_TYPE)),
-        )
-
-        put_str_ln = TypeScheme(set(), FunctionType(STRING_TYPE, UNIT_TYPE))
-        put_str = put_str_string  # Start with string version, may need to be more sophisticated
 
         get_line = TypeScheme(set(), STRING_TYPE)
         read_int = TypeScheme(set(), INT_TYPE)
         read_string = TypeScheme(set(), STRING_TYPE)
         read_bool = TypeScheme(set(), BOOL_TYPE)
         show = TypeScheme({"a"}, FunctionType(a, STRING_TYPE))
-
-        # String functions
-        to_upper_case = TypeScheme(set(), FunctionType(STRING_TYPE, STRING_TYPE))
-        to_lower_case = TypeScheme(set(), FunctionType(STRING_TYPE, STRING_TYPE))
 
         builtins = {
             # Arithmetic
@@ -170,10 +159,8 @@ class TypeInferrer:
             # String
             "++": string_concat,
             "concat": string_concat,
-            "toUpperCase": to_upper_case,
-            "toLowerCase": to_lower_case,
             # IO
-            "putStr": put_str,
+            "putStr": put_str_string,
             "getLine": get_line,
             "readInt": read_int,
             "readString": read_string,
