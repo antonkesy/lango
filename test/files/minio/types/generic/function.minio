@@ -1,5 +1,4 @@
 -- "42"Hello""
-identity :: a -> a
 identity x = x
 
 main = do {

@@ -1,5 +1,4 @@
 -- "True"
-s :: Bool
 s = True
 
 main = do {

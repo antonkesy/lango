@@ -1,0 +1,19 @@
+-- "1True2.0HelloWorld"
+get :: Int
+get = 1
+
+isTrue :: Bool -> String
+isTrue True = "True"
+
+ff :: Float -> Float
+ff x = x + 1.0
+
+s :: String
+s = "HelloWorld"
+
+main = do {
+  putStr (show get);
+  putStr (isTrue True);
+  putStr (show (ff 1.0));
+  putStr s;
+}

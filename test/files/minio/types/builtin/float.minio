@@ -1,8 +1,6 @@
 -- "0.0-5.0"
-s :: Float
 s = 0.0
 
-x :: Float
 x = (-5.0)
 
 main = do {

@@ -1,5 +1,4 @@
 -- "1"
-
 add1 x = x + 1
 
 main = do {

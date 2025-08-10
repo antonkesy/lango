@@ -1,10 +1,8 @@
 -- "678TrueFalse"
-add :: Int -> Int -> Int
 add 1 y = 1 + y
 add 2 y = 2 + y
 add x y = x + y
 
-isTrue :: Bool -> String
 isTrue True = "True"
 isTrue False = "False"
 
