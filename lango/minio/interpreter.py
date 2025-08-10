@@ -24,7 +24,7 @@ def interpret(
         print("Type checking failed, cannot interpret.")
         return ""
 
-    env = collect_functions(tree)
+    env = build_environment(tree)
     interp = Interpreter(env)
 
     if "main" not in env:
@@ -82,60 +82,6 @@ def build_environment(tree: ParseTree) -> Environment:
 
     visit(tree)
     return env
-
-
-def collect_functions(tree: ParseTree) -> Environment:
-    """Collect function definitions from the parse tree."""
-    env: Environment = {}
-
-    def visit(node: ASTNode) -> None:
-        if isinstance(node, Tree):
-            if node.data == "func_def":
-                func_name_token = node.children[0]
-                if isinstance(func_name_token, Token):
-                    func_name = func_name_token.value
-                else:
-                    raise TypeError(
-                        f"Expected Token for function name, got {type(func_name_token)}",
-                    )
-
-                patterns = node.children[
-                    1:-1
-                ]  # all children between func_name and expr
-                expr = node.children[-1]
-                if not isinstance(expr, Tree):
-                    raise TypeError(
-                        f"Expected Tree for function expression, got {type(expr)}",
-                    )
-
-                # Support multiple function clauses for pattern matching
-                if func_name not in env:
-                    env[func_name] = ("pattern_match", [])
-
-                # Add this clause to the function's clauses list
-                env[func_name][1].append((patterns, expr))
-            for child in node.children:
-                visit(child)
-
-    visit(tree)
-    return env
-
-
-def flexible_putStrLn(
-    arg: Union[Value, Callable[[Value], Value]],
-) -> Optional[Callable[[Value], None]]:
-    """putStrLn that can handle both single argument and curried usage."""
-    if callable(arg):
-        # If given a function (like 'printPerson'), return a curried function
-        def curried_putStrLn(value: Value) -> None:
-            result = arg(value)  # Apply the function to the value
-            print(result)
-
-        return curried_putStrLn
-    else:
-        # If given a direct value, print it
-        print(arg)
-        return None
 
 
 def flexible_putStr(
