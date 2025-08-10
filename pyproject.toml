@@ -32,4 +32,3 @@ homepage = "https://github.com/antonkesy/lang-o"
 
 [project.scripts]
 lango = "lango.cli:main"
-# lango = "lango.cli:app"
