@@ -1,2 +1,0 @@
--- "TA"
-main = do { putStr "T"; putStr "A"};

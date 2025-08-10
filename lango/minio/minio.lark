@@ -43,13 +43,10 @@ AND: "&&"
 OR: "||"
 NOT: "not"
 
-do_stmt: let_stmt
+do_stmt: "let" "{" (ID "=" expr ";")* ID "=" expr "}"
         | expr
 
-let_stmt: "let" ID "=" expr ("in" expr)? ";"
-        | "let" ID "=" expr "in" expr ";"
-
-stmt_list: do_stmt (";" do_stmt)*
+stmt_list: (do_stmt ";")+
 
 // Operator precedence hierarchy (from lowest to highest)
 ?expr: "do" "{" stmt_list "}"          -> do_block

@@ -5,5 +5,6 @@ printPoint :: Point -> String;
 printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 main = do {
-  let point = MkPoint 3.0 4.0 in putStr (printPoint point)
+  let { point = MkPoint 3.0 4.0 };
+  putStr (printPoint point);
 };

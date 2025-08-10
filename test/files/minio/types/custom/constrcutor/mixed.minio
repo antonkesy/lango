@@ -13,5 +13,5 @@ printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 main = do {
   putStr (printPerson person1);
   putStr ",";
-  putStr (printPoint p1)
+  putStr (printPoint p1);
 };

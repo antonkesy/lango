@@ -1,12 +1,12 @@
 -- "14,20,10,True,True"
 main = do {
-    putStr (show (2 + 3 * 4));  -- Should be 14 (2 + 12)
+    putStr (show (2 + 3 * 4));  -- Should be 14 (2 + 12);
     putStr ",";
-    putStr (show ((2 + 3) * 4));  -- Should be 20 (5 * 4)
+    putStr (show ((2 + 3) * 4));  -- Should be 20 (5 * 4);
     putStr ",";
-    putStr (show (2 * 3 + 4));  -- Should be 10 (6 + 4)
+    putStr (show (2 * 3 + 4));  -- Should be 10 (6 + 4);
     putStr ",";
     putStr (show (True && False || True));  -- Should be True (False || True)
     putStr ",";
-    putStr (show (True || False && False))  -- Should be True (True || False)
+    putStr (show (True || False && False));  -- Should be True (True || False)
 };

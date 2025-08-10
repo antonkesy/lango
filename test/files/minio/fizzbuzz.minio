@@ -8,5 +8,5 @@ main = do {
   putStr (fizzbuzz 1);
   putStr (fizzbuzz 3);
   putStr (fizzbuzz 5);
-  putStr (fizzbuzz 15)
+  putStr (fizzbuzz 15);
 };

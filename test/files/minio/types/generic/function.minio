@@ -3,5 +3,5 @@ identity x = x;
 
 main = do {
     putStr (show (identity 42));
-    putStr (show (identity "Hello"))
+    putStr (show (identity "Hello"));
 };

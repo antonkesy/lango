@@ -1,4 +1,5 @@
 -- "5"
 main = do {
-  let x = 5 in putStr (show x)
+  let { x = 5 };
+  putStr (show x);
 };

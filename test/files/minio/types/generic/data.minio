@@ -9,5 +9,5 @@ p1 = Pair 1 "hello";
 
 main = do {
   putStr (showPair p1);
-  putStr (showPair (swap p1))
+  putStr (showPair (swap p1));
 };

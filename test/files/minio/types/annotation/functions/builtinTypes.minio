@@ -15,5 +15,5 @@ main = do {
   putStr (show get);
   putStr (isTrue True);
   putStr (show (ff 1.0));
-  putStr s
+  putStr s;
 };

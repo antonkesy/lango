@@ -8,5 +8,5 @@ p1 :: Point;
 p1 = MkPoint 1.0 2.0;
 
 main = do {
-  putStr (printPoint p1)
+  putStr (printPoint p1);
 };

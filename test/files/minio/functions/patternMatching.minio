@@ -11,5 +11,5 @@ main = do {
   putStr (show (add 2 5));
   putStr (show (add 3 5));
   putStr (isTrue True);
-  putStr (isTrue False)
+  putStr (isTrue False);
 };

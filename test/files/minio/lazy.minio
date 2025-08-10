@@ -1,8 +1,9 @@
 -- "Lazy"
 lazyEval cond = do {
-    let expensive = "This will not be printed" in if cond then "Lazy" else expensive
+    let { expensive = "This will not be printed" };
+    if cond then "Lazy" else expensive;
 };
 
 main = do {
-    putStr (lazyEval True)
+    putStr (lazyEval True);
 };

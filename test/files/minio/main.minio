@@ -1,4 +1,4 @@
 -- "Main"
 main = do {
-  putStr "Main"
+  putStr "Main";
 };

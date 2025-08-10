@@ -19,5 +19,5 @@ main = do {
   putStr ",";
   putStr ("X of p1: " ++ show (getX p1));
   putStr ",";
-  putStr ("Y of p2: " ++ show (getY p2))
+  putStr ("Y of p2: " ++ show (getY p2));
 };

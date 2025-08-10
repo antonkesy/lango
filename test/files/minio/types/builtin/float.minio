@@ -5,5 +5,5 @@ x = (-5.0);
 
 main = do {
   putStr (show s);
-  putStr (show x)
+  putStr (show x);
 };

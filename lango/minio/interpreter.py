@@ -245,61 +245,30 @@ class Interpreter:
                     return result
                 case "do_stmt":
                     # handle do statements - these can be let statements or expressions
-                    # Based on grammar: "let" ID "=" expr+ (";" expr)* "in" _NL? expr | expr
-                    # Multiple assignments: let x = 5; y = 10; z = x + y in expr
-                    # Structure: var1, value1, var2, value2, ..., varN, valueN, in_expr
-                    # If >= 3 children and odd number: it's a let...in statement with multiple assignments
-                    # If 2 children: it's a simple let statement (ID, expr)
-                    # If 1 child: it's just an expression
+                    # Based on grammar: "let" "{" (ID "=" expr ";")* ID "=" expr "}"
+                    # Multiple assignments in let block: let { x = 5; y = 10; z = x + y }
+                    # Structure: var1, value1, var2, value2, ..., varN, valueN
+                    # Even number of children: it's a let block with assignments
+                    # 1 child: it's just an expression
 
-                    if len(node.children) >= 3 and len(node.children) % 2 == 1:
-                        # This is a let...in statement with multiple assignments
-                        # Store old values to restore them later (lexical scoping)
-                        old_values = {}
-                        assigned_vars = []
+                    if len(node.children) >= 2 and len(node.children) % 2 == 0:
+                        # This is a let block with multiple assignments
+                        # Variables persist in the current scope (unlike let...in)
+                        # Process all variable-value pairs
+                        for i in range(0, len(node.children), 2):
+                            var_name_token = node.children[i]
+                            var_name = (
+                                var_name_token.value
+                                if isinstance(var_name_token, Token)
+                                else str(var_name_token)
+                            )
 
-                        try:
-                            # Process all variable-value pairs (all children except the last one)
-                            for i in range(0, len(node.children) - 1, 2):
-                                var_name_token = node.children[i]
-                                var_name = (
-                                    var_name_token.value
-                                    if isinstance(var_name_token, Token)
-                                    else str(var_name_token)
-                                )
+                            # Evaluate and assign the new value
+                            value = self.eval(node.children[i + 1])
+                            self.variables[var_name] = value
 
-                                # Store old value for restoration
-                                if var_name in self.variables:
-                                    old_values[var_name] = self.variables[var_name]
-                                assigned_vars.append(var_name)
-
-                                # Evaluate and assign the new value
-                                value = self.eval(node.children[i + 1])
-                                self.variables[var_name] = value
-
-                            # Evaluate the "in" expression (last child) with all new bindings
-                            in_expr = node.children[-1]
-                            result = self.eval(in_expr)
-                            return result
-
-                        finally:
-                            # Restore old values (lexical scoping)
-                            for var_name in assigned_vars:
-                                if var_name in old_values:
-                                    self.variables[var_name] = old_values[var_name]
-                                else:
-                                    self.variables.pop(var_name, None)
-                    elif len(node.children) == 2:
-                        # This is a simple let statement: the "let" and "=" are consumed by the grammar
-                        var_name_token = node.children[0]
-                        var_name = (
-                            var_name_token.value
-                            if isinstance(var_name_token, Token)
-                            else str(var_name_token)
-                        )
-                        value = self.eval(node.children[1])
-                        self.variables[var_name] = value
-                        return value
+                        # Return None for let statements (they don't return values)
+                        return None
                     else:
                         # This is just an expression
                         return self.eval(node.children[0])

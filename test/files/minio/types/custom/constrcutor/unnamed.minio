@@ -6,5 +6,5 @@ p1 = MkPoint 1.0 2.0;
 printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 main = do {
-  putStr (printPoint p1)
+  putStr (printPoint p1);
 };

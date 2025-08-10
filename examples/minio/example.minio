@@ -25,7 +25,8 @@ add1 x = x + 1;
 -- do
 t :: Int -> String;
 t x = do {
-  let y = x + 1 in "Result: " ++ show y
+  let {y = x + 1};
+  "Result: " ++ show y;
 };
 
 -- no parameter
@@ -38,11 +39,14 @@ main = do {
   putStr "\nTesting Person data type:";
   putStr ("\nPerson 1: " ++ printPerson person1);
   putStr "\nTesting Point data type:";
-  let point = MkPoint 3.0 4.0 in putStr ("\nPoint: " ++ printPoint point);
+  let { point = MkPoint 3.0 4.0};
+  putStr ("\nPoint: " ++ printPoint point);
   putStr "\nTesting add1 function:";
-  let number = 5 in putStr ("\nadd1 " ++ show number ++ ": " ++ show (add1 number));
+  let { number = 5 };
+  putStr ("\nadd1 " ++ show number ++ ": " ++ show (add1 number));
   putStr "\nTesting t function:";
-  let result = t 10 in putStr result;
+  let { result = t 10 };
+  putStr result;
   putStr "\nTesting t1 function:";
-  putStr ("t1: " ++ show t1)
+  putStr ("t1: " ++ show t1);
 };

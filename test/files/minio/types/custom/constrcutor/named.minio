@@ -6,5 +6,5 @@ person1 = Person { id_ = 1, name = "Alice" };
 printPerson (Person id_ name) = "ID: " ++ show id_ ++ ", Name: " ++ name;
 
 main = do {
-  putStr (printPerson person1)
+  putStr (printPerson person1);
 };
