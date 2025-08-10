@@ -634,20 +634,55 @@ class TypeInferrer:
                         else str(ctor_name_token)
                     )
 
-                    # Get constructor type
+                    # Get constructor type scheme
                     scheme = env.lookup(ctor_name)
-                    if scheme is None and ctor_name in self.data_constructors:
-                        data_type_name, field_types = self.data_constructors[ctor_name]
-                        result_type = DataType(data_type_name, [])
-                        scheme = TypeScheme(set(), result_type)
-
                     if scheme is None:
                         raise TypeInferenceError(f"Unknown constructor: {ctor_name}")
 
-                    # For now, just return the data type
-                    # TODO: Check field assignments
-                    typ = scheme.instantiate(self.fresh_var_gen)
-                    return typ, TypeSubstitution()
+                    # Instantiate the constructor type
+                    ctor_type = scheme.instantiate(self.fresh_var_gen)
+
+                    # Process field assignments
+                    current_type = ctor_type
+                    current_subst = TypeSubstitution()
+
+                    # Apply constructor to each field value
+                    for field_assign in expr.children[1:]:
+                        if field_assign.data == "field_assign":
+                            # Get field value expression
+                            field_value = field_assign.children[1]
+
+                            # Infer type of field value
+                            value_type, s1 = self.infer_expr(
+                                field_value,
+                                env.substitute(current_subst),
+                            )
+
+                            # If current_type is a function type, apply it
+                            if isinstance(
+                                current_subst.apply(current_type),
+                                FunctionType,
+                            ):
+                                func_type = current_subst.apply(current_type)
+                                result_type = self.fresh_type_var()
+                                expected_func_type = FunctionType(
+                                    value_type,
+                                    result_type,
+                                )
+
+                                # Unify function type with expected type
+                                s2 = unify([(func_type, expected_func_type)])
+
+                                current_subst = s2.compose(s1).compose(current_subst)
+                                current_type = current_subst.apply(result_type)
+                            else:
+                                raise TypeInferenceError(
+                                    f"Constructor {ctor_name} applied to too many arguments",
+                                )
+
+                    # Return the final constructed type
+                    final_type = current_subst.apply(current_type)
+                    return final_type, current_subst
 
                 case "grouped":
                     # Parenthesized expression
