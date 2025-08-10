@@ -115,10 +115,10 @@ class TypeInferrer:
         )
 
         # IO operations - using ad-hoc polymorphism approach
-        # putStr and putStrLn can work with strings or functions that return strings
+        # putStr and error can work with strings or functions that return strings
         a = TypeVar("a")
 
-        # Method 1: Give putStr/putStrLn overloaded types
+        # Method 1: Give putStr/error overloaded types
         # For now, let's assume that putStr gets specialized based on usage
         put_str_string = TypeScheme(set(), FunctionType(STRING_TYPE, UNIT_TYPE))
         put_str_func = TypeScheme(
@@ -173,7 +173,6 @@ class TypeInferrer:
             "toUpperCase": to_upper_case,
             "toLowerCase": to_lower_case,
             # IO
-            "putStrLn": put_str_ln,
             "putStr": put_str,
             "error": put_str,
             "getLine": get_line,
@@ -479,13 +478,12 @@ class TypeInferrer:
                     func_expr = expr.children[0]
                     arg_expr = expr.children[1]
 
-                    # Special case: putStr/putStrLn/error show -> give it the curried type
+                    # Special case: putStr/error show -> give it the curried type
                     if (
                         isinstance(func_expr, Tree)
                         and func_expr.data == "var"
                         and isinstance(func_expr.children[0], Token)
-                        and func_expr.children[0].value
-                        in ["putStr", "putStrLn", "error"]
+                        and func_expr.children[0].value in ["putStr", "error"]
                         and isinstance(arg_expr, Tree)
                         and arg_expr.data == "var"
                         and isinstance(arg_expr.children[0], Token)

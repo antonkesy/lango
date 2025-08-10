@@ -33,25 +33,25 @@ t x = do {
 t1 = 1
 
 main = do {
-  putStrLn "Testing isTrue function:";
-  putStrLn ("isTrue True: " ++ isTrue True);
-  putStrLn ("isTrue False: " ++ isTrue False);
+  putStr "Testing isTrue function:\n";
+  putStr ("\nisTrue True: " ++ isTrue True);
+  putStr ("\nisTrue False: " ++ isTrue False);
 
-  putStrLn "Testing Person data type:";
-  putStrLn ("Person 1: " ++ printPerson person1);
+  putStr "\nTesting Person data type:";
+  putStr ("\nPerson 1: " ++ printPerson person1);
 
-  putStrLn "Testing Point data type:";
+  putStr "\nTesting Point data type:";
   let point = MkPoint 3.0 4.0 in
-  putStrLn ("Point: " ++ printPoint point);
+  putStr ("\nPoint: " ++ printPoint point);
 
-  putStrLn "Testing add1 function:";
+  putStr "\nTesting add1 function:";
   let number = 5 in
-  putStrLn ("add1 " ++ show number ++ ": " ++ show (add1 number));
+  putStr ("\nadd1 " ++ show number ++ ": " ++ show (add1 number));
 
-  putStrLn "Testing t function:";
+  putStr "\nTesting t function:";
   let result = t 10 in
-  putStrLn result;
+  putStr result;
 
-  putStrLn "Testing t1 function:";
-  putStrLn ("t1: " ++ show t1);
+  putStr "\nTesting t1 function:";
+  putStr ("t1: " ++ show t1);
 }

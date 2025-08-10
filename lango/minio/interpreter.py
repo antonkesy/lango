@@ -102,7 +102,6 @@ def flexible_putStr(
 
 
 builtins: Dict[str, Callable[..., Any]] = {
-    "putStrLn": flexible_putStrLn,
     "putStr": flexible_putStr,
     "getLine": lambda: input(),
     "readInt": lambda: int(input()),

@@ -126,7 +126,7 @@ INT_TYPE = TypeCon("Int")
 STRING_TYPE = TypeCon("String")
 FLOAT_TYPE = TypeCon("Float")
 BOOL_TYPE = TypeCon("Bool")
-UNIT_TYPE = TypeCon("()")  # For do blocks and putStrLn
+UNIT_TYPE = TypeCon("()")  # For do blocks and putStr
 
 
 class TypeSubstitution:
