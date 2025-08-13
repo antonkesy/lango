@@ -1,29 +1,23 @@
 -- Person
 data Person = Person { id_ :: Int, name :: String };
 
-person1 :: Person;
 person1 = Person { id_ = 1, name = "Alice" };
 
-printPerson :: Person -> String;
 printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name;
 
 -- Point
 data Point = MkPoint Float Float;
 
-printPoint :: Point -> String;
 printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 -- Bool
-isTrue :: Bool -> String;
 isTrue True = "True";
 isTrue False = "False";
 
 -- Int
-add1 :: Int -> Int;
 add1 x = x + 1;
 
 -- do
-t :: Int -> String;
 t x = do {
   let {y = x + 1};
   "Result: " ++ show y;
