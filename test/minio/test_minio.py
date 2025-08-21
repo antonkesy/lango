@@ -41,8 +41,7 @@ def run_haskell_file(path: str) -> str:
 @pytest.mark.parametrize("file_name", list(get_all_test_files()))
 def test_output_matches_expected(file_name):
     expected = get_test_output(file_name)
-    tree = parse(file_name)
-    result = interpret(tree, collectStdOut=True)
+    result = interpret(file_name, collectStdOut=True)
     assert result == expected, f"{file_name}: Expected '{expected}', got '{result}'"
 
 
@@ -58,8 +57,5 @@ def test_is_haskell_compliant(file_name):
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files()) + [EXAMPLE])
 def test_is_type_valid(file_name):
-    try:
-        tree = parse(file_name)
-        type_check(tree)
-    except Exception:
-        assert False
+    result = type_check(file_name)
+    assert result, f"Type checking failed for {file_name}"

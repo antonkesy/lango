@@ -1,13 +1,19 @@
-from lark import ParseTree
+"""
+Type checker that works with custom AST nodes instead of raw Lark objects.
+"""
 
-from lango.minio.typechecker.infer import type_check as type_check_infer
+from .ast_nodes import Program
+from .parser import parse
+from .typechecker.infer_ast import type_check_ast as type_check_ast_impl
 
 
-def get_type_str(tree: ParseTree) -> str:
+def get_type_str(file_path: str) -> str:
+    """Get type information for a Minio program file."""
     res = ""
 
     try:
-        type_env = type_check_infer(tree)
+        ast = parse(file_path)
+        type_env = type_check_ast_impl(ast)
         res += "Inferred types:\n"
         for name, scheme in type_env.items():
             res += f"  {name} :: {scheme}\n"
@@ -16,9 +22,21 @@ def get_type_str(tree: ParseTree) -> str:
     return res
 
 
-def type_check(tree: ParseTree) -> bool:
+def type_check(file_path: str) -> bool:
+    """Type check a Minio program file."""
     try:
-        type_check_infer(tree)
+        ast = parse(file_path)
+        type_check_ast_impl(ast)
+        return True
+    except Exception as e:
+        print(f"Type checking failed: {e}")
+        return False
+
+
+def type_check_ast(ast: Program) -> bool:
+    """Type check a Minio program AST."""
+    try:
+        type_check_ast_impl(ast)
         return True
     except Exception as e:
         print(f"Type checking failed: {e}")

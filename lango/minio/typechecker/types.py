@@ -20,6 +20,10 @@ class Type(ABC):
         """Apply a substitution to this type"""
         pass
 
+    def apply_substitution(self, subst: "TypeSubstitution") -> "Type":
+        """Apply a TypeSubstitution to this type"""
+        return self.substitute(subst.mapping)
+
     @abstractmethod
     def __str__(self) -> str:
         pass

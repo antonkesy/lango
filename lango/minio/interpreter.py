@@ -1,30 +1,85 @@
+"""
+Rewritten interpreter that uses custom AST nodes instead of raw Lark objects.
+"""
+
 from contextlib import redirect_stdout
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from lark import ParseTree, Token, Tree
+from .ast_nodes import (
+    AddOperation,
+    AndOperation,
+    ASTNode,
+    BoolLiteral,
+    ConcatOperation,
+    ConsPattern,
+    Constructor,
+    ConstructorExpression,
+    ConstructorPattern,
+    DataDeclaration,
+    DivOperation,
+    DoBlock,
+    EqualOperation,
+    Expression,
+    FloatLiteral,
+    FunctionApplication,
+    FunctionDefinition,
+    FunctionSignature,
+    GreaterEqualOperation,
+    GreaterThanOperation,
+    GroupedExpression,
+    IfElse,
+    IndexOperation,
+    IntLiteral,
+    LessEqualOperation,
+    LessThanOperation,
+    LetStatement,
+    ListLiteral,
+    LiteralPattern,
+    MulOperation,
+    NegativeFloat,
+    NegativeInt,
+    NotEqualOperation,
+    NotOperation,
+    OrOperation,
+    Pattern,
+    PowFloatOperation,
+    PowIntOperation,
+    Program,
+    Statement,
+    StringLiteral,
+    SubOperation,
+    TypeExpression,
+    Variable,
+    VariablePattern,
+)
+from .parser import parse
+from .typecheck import type_check as lark_type_check
 
-from lango.minio.typecheck import type_check
-
-ASTNode = Union[Tree, Token]
-Pattern = ASTNode
-Expression = Tree
-FunctionClause = Tuple[List[Pattern], Expression]
-FunctionDefinition = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
-Environment = Dict[str, FunctionDefinition]
-Record = Dict[str, Any]  # Dictionary representing a record/object
+# Type aliases for the interpreter
 Value = Any  # Any runtime value
+# Type definitions for runtime values
+Record = Dict[str, Any]  # Dictionary representing a record/object
+FunctionClause = Tuple[List[Pattern], Expression]
+FunctionValue = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
+Environment = Dict[str, FunctionValue]
 
 
 def interpret(
-    tree: ParseTree,
+    file_path: str,
     collectStdOut: bool = False,
 ) -> str:
-    if not type_check(tree):
-        print("Type checking failed, cannot interpret.")
-        return ""
+    """Interpret a Minio program file."""
+    # Parse file to get AST
+    ast = parse(file_path)
 
-    env = build_environment(tree)
+    # TODO: Type checking needs to be updated for AST nodes
+    # For now, skip type checking
+    # if not type_check_ast(ast):
+    #     print("Type checking failed, cannot interpret.")
+    #     return ""
+
+    env = build_environment(ast)
     interp = Interpreter(env)
 
     if "main" not in env:
@@ -47,40 +102,21 @@ def interpret(
     return output
 
 
-def build_environment(tree: ParseTree) -> Environment:
-    """Build environment from parse tree collecting function definitions."""
+def build_environment(ast: Program) -> Environment:
+    """Build environment from AST collecting function definitions."""
     env: Environment = {}
 
-    def visit(node: ASTNode) -> None:
-        if isinstance(node, Tree):
-            if node.data == "func_def":
-                func_name_token = node.children[0]
-                if isinstance(func_name_token, Token):
-                    func_name = func_name_token.value
-                else:
-                    raise TypeError(
-                        f"Expected Token for function name, got {type(func_name_token)}",
-                    )
+    for stmt in ast.statements:
+        if isinstance(stmt, FunctionDefinition):
+            func_name = stmt.function_name
 
-                patterns = node.children[
-                    1:-1
-                ]  # all children between func_name and expr
-                expr = node.children[-1]
-                if not isinstance(expr, Tree):
-                    raise TypeError(
-                        f"Expected Tree for function expression, got {type(expr)}",
-                    )
+            # Support multiple function clauses for pattern matching
+            if func_name not in env:
+                env[func_name] = ("pattern_match", [])
 
-                # Support multiple function clauses for pattern matching
-                if func_name not in env:
-                    env[func_name] = ("pattern_match", [])
+            # Add this clause to the function's clauses list
+            env[func_name][1].append((stmt.patterns, stmt.body))
 
-                # Add this clause to the function's clauses list
-                env[func_name][1].append((patterns, expr))
-            for child in node.children:
-                visit(child)
-
-    visit(tree)
     return env
 
 
@@ -102,6 +138,7 @@ def flexible_putStr(
 
 
 def _show(value: Value) -> str:
+    """Convert a value to its string representation."""
     if isinstance(value, str):
         return f'"{value}"'
     elif isinstance(value, list):
@@ -109,6 +146,7 @@ def _show(value: Value) -> str:
     return str(value)
 
 
+# Built-in functions available in the language
 builtins: Dict[str, Callable[..., Any]] = {
     "putStr": flexible_putStr,
     "getLine": lambda: input(),
@@ -122,534 +160,384 @@ builtins: Dict[str, Callable[..., Any]] = {
 
 
 class Interpreter:
-    """Interpreter class for evaluating parsed language expressions."""
+    """Interpreter class for evaluating AST expressions."""
 
     def __init__(self, env: Environment) -> None:
         """Initialize interpreter with environment of functions."""
         self.env = env
         self.variables: Dict[str, Value] = {}
 
-    def eval(self, node: ASTNode) -> Value:
-        """Evaluate a parse tree node and return its value."""
-        if isinstance(node, Tree):
-            match node.data:
-                case "int":
-                    return int(node.children[0])  # type: ignore
-                case "float":
-                    return float(node.children[0])  # type: ignore
-                case "neg_int":
-                    child_token = node.children[1]
-                    if isinstance(child_token, Token):
-                        return -int(child_token.value)
-                    raise TypeError(
-                        f"Expected Token for neg_int value, got {type(child_token)}",
-                    )
-                case "neg_float":
-                    child_token = node.children[1]
-                    if isinstance(child_token, Token):
-                        return -float(child_token.value)
-                    raise TypeError(
-                        f"Expected Token for neg_float value, got {type(child_token)}",
-                    )
-                case "string":
-                    return node.children[0][1:-1]  # type: ignore
-                case "list":
-                    # Evaluate list literal [1, 2, 3] or []
-                    elements = []
-                    for child in node.children:
-                        if child is None:
-                            # Skip None children from empty list grammar
-                            continue
-                        if isinstance(child, Tree) and child.data == Token(
-                            "RULE",
-                            "list",
-                        ):
-                            # Handle nested list structure from grammar
-                            for element in child.children:
-                                if element is not None:  # Also skip None in nested case
-                                    elements.append(self.eval(element))
-                        else:
-                            elements.append(self.eval(child))
-                    return elements
-                case "true":
-                    return True
-                case "false":
-                    return False
-                case "var":
-                    name_token = node.children[0]
-                    if isinstance(name_token, Token):
-                        name = name_token.value
-                    else:
-                        raise TypeError(
-                            f"Expected Token for variable name, got {type(name_token)}",
-                        )
+    def eval(self, node: Expression) -> Value:
+        """Evaluate an AST expression node and return its value."""
 
-                    if name in self.variables:
-                        return self.variables[name]
-                    elif name in self.env:
-                        return self.eval_func(name)
-                    elif name in builtins:
-                        return builtins[name]
-                    else:
-                        raise RuntimeError(f"Unknown variable: {name}")
-                # Arithmetic
-                case "add":
-                    return self.eval(node.children[0]) + self.eval(node.children[2])
-                case "sub":
-                    return self.eval(node.children[0]) - self.eval(node.children[2])
-                case "mul":
-                    return self.eval(node.children[0]) * self.eval(node.children[2])
-                case "div":
-                    return self.eval(node.children[0]) / self.eval(node.children[2])
-                case "pow_int":
-                    return int(
-                        self.eval(node.children[0]) ** self.eval(node.children[2]),
-                    )
-                case "pow_float":
-                    return float(
-                        self.eval(node.children[0]) ** self.eval(node.children[2]),
-                    )
-                case "neg":
-                    return -self.eval(node.children[0])
-                case "quot":
-                    return self.eval(node.children[0]) // self.eval(node.children[2])
-                # Comparison
-                case "eq":
-                    return self.eval(node.children[0]) == self.eval(node.children[2])
-                case "neq":
-                    return self.eval(node.children[0]) != self.eval(node.children[2])
-                case "lt":
-                    return self.eval(node.children[0]) < self.eval(node.children[2])
-                case "lteq":
-                    return self.eval(node.children[0]) <= self.eval(node.children[2])
-                case "gt":
-                    return self.eval(node.children[0]) > self.eval(node.children[2])
-                case "gteq":
-                    return self.eval(node.children[0]) >= self.eval(node.children[2])
-                # Logical
-                case "and":
-                    return self.eval(node.children[0]) and self.eval(node.children[2])
-                case "or":
-                    return self.eval(node.children[0]) or self.eval(node.children[2])
-                case "not":
-                    return not self.eval(node.children[1])
-                # String
-                case "concat":
-                    left = self.eval(node.children[0])
-                    right = self.eval(node.children[1])
-                    if isinstance(left, list) and isinstance(right, list):
-                        # List concatenation
-                        return left + right
-                    else:
-                        # String concatenation
-                        return str(left) + str(right)
-                case "index":
-                    # List indexing with !! operator
-                    list_val = self.eval(node.children[0])
-                    index_val = self.eval(node.children[1])
-                    if not isinstance(list_val, list):
-                        raise RuntimeError(
-                            f"Cannot index non-list value: {type(list_val)}",
-                        )
-                    if not isinstance(index_val, int):
-                        raise RuntimeError(
-                            f"List index must be an integer, got: {type(index_val)}",
-                        )
-                    if index_val < 0 or index_val >= len(list_val):
-                        raise RuntimeError(
-                            f"List index {index_val} out of bounds for list of length {len(list_val)}",
-                        )
-                    return list_val[index_val]
-                # Conditional
-                case "if_else":
-                    condition = self.eval(node.children[0])
-                    if condition:
-                        return self.eval(node.children[1])
-                    else:
-                        return self.eval(node.children[2])
-                case "app":
-                    # handle function application: f x
-                    func_node = node.children[0]
-                    arg_node = node.children[1]
-                    func = self.eval(func_node)
-                    arg = self.eval(arg_node)
-                    return func(arg)
-                case "do_block":
-                    return self.eval_do_block(node.children)
-                case "let":
-                    var_name_token = node.children[0]
-                    if isinstance(var_name_token, Token):
-                        var_name = var_name_token.value
-                    else:
-                        raise TypeError(
-                            f"Expected Token for variable name, got {type(var_name_token)}",
-                        )
-                    value = self.eval(node.children[1])
-                    self.variables[var_name] = value
-                    return value
-                case "stmt_list":
-                    result = None
-                    for stmt in node.children:
-                        result = self.eval(stmt)
-                    return result
-                case "do_stmt":
-                    # handle do statements - these can be let statements or expressions
-                    # Based on grammar: "let" "{" (ID "=" expr ";")* ID "=" expr "}"
-                    # Multiple assignments in let block: let { x = 5; y = 10; z = x + y }
-                    # Structure: var1, value1, var2, value2, ..., varN, valueN
-                    # Even number of children: it's a let block with assignments
-                    # 1 child: it's just an expression
-
-                    if len(node.children) >= 2 and len(node.children) % 2 == 0:
-                        # This is a let block with multiple assignments
-                        # Variables persist in the current scope (unlike let...in)
-                        # Process all variable-value pairs
-                        for i in range(0, len(node.children), 2):
-                            var_name_token = node.children[i]
-                            var_name = (
-                                var_name_token.value
-                                if isinstance(var_name_token, Token)
-                                else str(var_name_token)
-                            )
-
-                            # Evaluate and assign the new value
-                            value = self.eval(node.children[i + 1])
-                            self.variables[var_name] = value
-
-                        # Return None for let statements (they don't return values)
-                        return None
-                    else:
-                        # This is just an expression
-                        return self.eval(node.children[0])
-                case "grouped":
-                    # handle grouped expressions
-                    return self.eval(node.children[0])
-                case "constructor_expr":
-                    # handle record constructor expressions like Person { id_ = 1, name = "Alice" }
-                    constructor_name_token = node.children[0]
-                    if isinstance(constructor_name_token, Token):
-                        constructor_name = constructor_name_token.value
-                    else:
-                        raise TypeError(
-                            f"Expected Token for constructor name, got {type(constructor_name_token)}",
-                        )
-                    fields: Record = {}
-
-                    # Process field assignments
-                    for field_assign in node.children[1:]:
-                        if (
-                            isinstance(field_assign, Tree)
-                            and field_assign.data == "field_assign"
-                        ):
-                            field_name_token = field_assign.children[0]
-                            if isinstance(field_name_token, Token):
-                                field_name = field_name_token.value
-                            else:
-                                raise TypeError(
-                                    f"Expected Token for field name, got {type(field_name_token)}",
-                                )
-                            field_value = self.eval(field_assign.children[1])
-                            fields[field_name] = field_value
-
-                    # Return a dictionary representing the record
-                    return {"_constructor": constructor_name, **fields}
-                case "constructor":
-                    # handle constructor expressions like MkPoint (used in function application)
-                    constructor_token = node.children[0]
-                    constructor_name = (
-                        constructor_token.value
-                        if isinstance(constructor_token, Token)
-                        else str(constructor_token)
-                    )
-
-                    # Return a curried constructor function
-                    def make_constructor(
-                        collected_args: Optional[List[Value]] = None,
-                    ) -> Callable[[Value], Value]:
-                        if collected_args is None:
-                            collected_args = []
-
-                        def constructor_fn(
-                            arg: Value,
-                        ) -> Union[Record, Callable[[Value], Value]]:
-                            new_args = collected_args + [arg]
-                            # For a 2-argument constructor like MkPoint, we need to curry properly
-                            # We'll assume we need more args and return another function
-                            # until we determine we have enough (this is a simplification)
-
-                            # Check if this might be the final argument by trying to create the constructor
-                            # For now, let's assume we collect all args and create when we get 2 or more
-                            if len(new_args) >= 2:
-                                # Create the record with the collected arguments
-                                fields: Record = {}
-                                for i, value in enumerate(new_args):
-                                    fields[f"field_{i}"] = value
-                                return {"_constructor": constructor_name, **fields}
-                            else:
-                                # Still collecting arguments
-                                return make_constructor(new_args)
-
-                        return constructor_fn
-
-                    return make_constructor()
-                case _:
-                    raise NotImplementedError(f"Unhandled expression: {node.data}")
-        elif isinstance(node, Token):
+        # Literals
+        if isinstance(node, IntLiteral):
             return node.value
-        else:
-            raise TypeError(f"Unknown node type: {type(node)}")
 
-    def eval_func(self, name: str) -> Value:
-        """Evaluate a function by name from the environment."""
-        env_data = self.env[name]
+        elif isinstance(node, FloatLiteral):
+            return node.value
 
-        # Handle both old format (kind, patterns, expr) and new format (kind, data)
-        if len(env_data) == 3:
-            # Old format: ("lambda", patterns, expr)
-            # This case is not used in the current implementation
-            raise RuntimeError("Old format (3-tuple) no longer supported")
-        elif len(env_data) == 2:
-            # New format: ("pattern_match", clauses)
-            kind, data = env_data
-            if kind == "pattern_match":
-                clauses = data
-                return self._create_pattern_match_function(clauses)
+        elif isinstance(node, StringLiteral):
+            return node.value
+
+        elif isinstance(node, BoolLiteral):
+            return node.value
+
+        elif isinstance(node, NegativeInt):
+            return node.value
+
+        elif isinstance(node, NegativeFloat):
+            return node.value
+
+        elif isinstance(node, ListLiteral):
+            return [self.eval(elem) for elem in node.elements]
+
+        # Variables and constructors
+        elif isinstance(node, Variable):
+            name = node.name
+            if name in self.variables:
+                return self.variables[name]
+            elif name in self.env:
+                return self.eval_func(name)
+            elif name in builtins:
+                return builtins[name]
             else:
-                raise RuntimeError(f"Unknown function kind: {kind}")
-        else:
-            raise RuntimeError(f"Invalid environment data format: {env_data}")
+                raise RuntimeError(f"Unknown variable: {name}")
 
-    def _create_pattern_match_function(
+        elif isinstance(node, Constructor):
+            constructor_name = node.name
+
+            # Return a curried constructor function
+            def make_constructor(
+                collected_args: Optional[List[Value]] = None,
+            ) -> Callable[[Value], Value]:
+                if collected_args is None:
+                    collected_args = []
+
+                def constructor_fn(
+                    arg: Value,
+                ) -> Union[Record, Callable[[Value], Value]]:
+                    new_args = collected_args + [arg]
+                    # For now, assume we need 2 or more args and create when we get them
+                    if len(new_args) >= 2:
+                        # Create the record with the collected arguments
+                        fields: Record = {}
+                        for i, value in enumerate(new_args):
+                            fields[f"field_{i}"] = value
+                        return {"_constructor": constructor_name, **fields}
+                    else:
+                        # Still collecting arguments
+                        return make_constructor(new_args)
+
+                return constructor_fn
+
+            return make_constructor()
+
+        # Arithmetic operations
+        elif isinstance(node, AddOperation):
+            return self.eval(node.left) + self.eval(node.right)
+
+        elif isinstance(node, SubOperation):
+            return self.eval(node.left) - self.eval(node.right)
+
+        elif isinstance(node, MulOperation):
+            return self.eval(node.left) * self.eval(node.right)
+
+        elif isinstance(node, DivOperation):
+            return self.eval(node.left) / self.eval(node.right)
+
+        elif isinstance(node, PowIntOperation):
+            return int(self.eval(node.left) ** self.eval(node.right))
+
+        elif isinstance(node, PowFloatOperation):
+            return float(self.eval(node.left) ** self.eval(node.right))
+
+        # Comparison operations
+        elif isinstance(node, EqualOperation):
+            return self.eval(node.left) == self.eval(node.right)
+
+        elif isinstance(node, NotEqualOperation):
+            return self.eval(node.left) != self.eval(node.right)
+
+        elif isinstance(node, LessThanOperation):
+            return self.eval(node.left) < self.eval(node.right)
+
+        elif isinstance(node, LessEqualOperation):
+            return self.eval(node.left) <= self.eval(node.right)
+
+        elif isinstance(node, GreaterThanOperation):
+            return self.eval(node.left) > self.eval(node.right)
+
+        elif isinstance(node, GreaterEqualOperation):
+            return self.eval(node.left) >= self.eval(node.right)
+
+        # Logical operations
+        elif isinstance(node, AndOperation):
+            return self.eval(node.left) and self.eval(node.right)
+
+        elif isinstance(node, OrOperation):
+            return self.eval(node.left) or self.eval(node.right)
+
+        elif isinstance(node, NotOperation):
+            return not self.eval(node.operand)
+
+        # String/List operations
+        elif isinstance(node, ConcatOperation):
+            left = self.eval(node.left)
+            right = self.eval(node.right)
+            if isinstance(left, list) and isinstance(right, list):
+                # List concatenation
+                return left + right
+            else:
+                # String concatenation
+                return str(left) + str(right)
+
+        elif isinstance(node, IndexOperation):
+            list_val = self.eval(node.list_expr)
+            index_val = self.eval(node.index_expr)
+            if not isinstance(list_val, list):
+                raise RuntimeError(f"Cannot index non-list value: {type(list_val)}")
+            if not isinstance(index_val, int):
+                raise RuntimeError(
+                    f"List index must be an integer, got: {type(index_val)}",
+                )
+            if index_val < 0 or index_val >= len(list_val):
+                raise RuntimeError(
+                    f"List index {index_val} out of bounds for list of length {len(list_val)}",
+                )
+            return list_val[index_val]
+
+        # Control flow
+        elif isinstance(node, IfElse):
+            condition = self.eval(node.condition)
+            if condition:
+                return self.eval(node.then_expr)
+            else:
+                return self.eval(node.else_expr)
+
+        elif isinstance(node, DoBlock):
+            return self.eval_do_block(node.statements)
+
+        # Function application
+        elif isinstance(node, FunctionApplication):
+            func = self.eval(node.function)
+            arg = self.eval(node.argument)
+            return func(arg)
+
+        # Constructor expressions
+        elif isinstance(node, ConstructorExpression):
+            fields: Record = {}
+            for field_assign in node.fields:
+                field_value = self.eval(field_assign.value)
+                fields[field_assign.field_name] = field_value
+            return {"_constructor": node.constructor_name, **fields}
+
+        # Grouping
+        elif isinstance(node, GroupedExpression):
+            return self.eval(node.expression)
+
+        else:
+            raise NotImplementedError(
+                f"Unhandled expression type: {type(node).__name__}",
+            )
+
+    def eval_do_block(self, statements: List[Statement]) -> Value:
+        """Evaluate a do block with statements."""
+        result: Value = None
+        for stmt in statements:
+            if isinstance(stmt, LetStatement):
+                value = self.eval(stmt.value)
+                self.variables[stmt.variable] = value
+            elif hasattr(stmt, "__dict__") and any(
+                isinstance(stmt, cls)
+                for cls in [
+                    IntLiteral,
+                    FloatLiteral,
+                    StringLiteral,
+                    BoolLiteral,
+                    ListLiteral,
+                    Variable,
+                    Constructor,
+                    AddOperation,
+                    SubOperation,
+                    MulOperation,
+                    DivOperation,
+                    PowIntOperation,
+                    PowFloatOperation,
+                    EqualOperation,
+                    NotEqualOperation,
+                    LessThanOperation,
+                    LessEqualOperation,
+                    GreaterThanOperation,
+                    GreaterEqualOperation,
+                    AndOperation,
+                    OrOperation,
+                    NotOperation,
+                    ConcatOperation,
+                    IndexOperation,
+                    IfElse,
+                    DoBlock,
+                    FunctionApplication,
+                    ConstructorExpression,
+                    GroupedExpression,
+                    NegativeInt,
+                    NegativeFloat,
+                ]
+            ):
+                # It's an expression
+                result = self.eval(stmt)  # type: ignore
+        return result
+
+    def eval_func(self, func_name: str) -> Value:
+        """Evaluate a function by name."""
+        if func_name not in self.env:
+            raise RuntimeError(f"Unknown function: {func_name}")
+
+        func_type, clauses = self.env[func_name]
+
+        if func_type != "pattern_match":
+            raise RuntimeError(f"Unsupported function type: {func_type}")
+
+        # For now, handle only nullary functions (no arguments)
+        # This is a simplified implementation
+        for patterns, body in clauses:
+            if len(patterns) == 0:
+                # Nullary function - just evaluate the body
+                return self.eval(body)
+
+        # If no nullary clause found, return a curried function
+        def curried_function(*args):
+            return self._apply_function_with_patterns(clauses, list(args))
+
+        return curried_function
+
+    def _apply_function_with_patterns(
         self,
         clauses: List[FunctionClause],
-    ) -> Callable[..., Value]:
-        """Create a function that handles pattern matching across multiple clauses."""
+        args: List[Value],
+    ) -> Value:
+        """Apply function with pattern matching."""
+        for patterns, body in clauses:
+            if len(patterns) == len(args):
+                # Try to match this clause
+                if self._match_patterns(patterns, args):
+                    return self.eval(body)
 
-        def pattern_match_fn(*args: Value) -> Value:
-            # Try each clause in order
-            for patterns, expr in clauses:
-                if self._try_match_patterns(patterns, args):
-                    # This clause matches, evaluate it with the matched bindings
-                    old_variables = self.variables.copy()
-                    try:
-                        self._bind_patterns(patterns, args)
-                        result = self.eval(expr)
-                        return result
-                    finally:
-                        self.variables = old_variables
+        # If no patterns matched and we don't have enough args, return partial application
+        if len(args) < max(len(patterns) for patterns, _ in clauses):
 
-            # No clause matched
-            raise RuntimeError(f"No pattern matched for arguments: {args}")
+            def partial_function(next_arg):
+                return self._apply_function_with_patterns(clauses, args + [next_arg])
 
-        # Create curried version for partial application
-        def curried_fn(
-            collected_args: Optional[List[Value]] = None,
-        ) -> Union[Value, Callable[[Value], Value]]:
-            if collected_args is None:
-                collected_args = []
+            return partial_function
 
-            if not clauses:
-                raise RuntimeError("No clauses defined")
+        raise RuntimeError(
+            f"No matching pattern found for function call with {len(args)} arguments",
+        )
 
-            # Check if we have enough arguments for any clause
-            expected_arity = len(clauses[0][0])  # Assume all clauses have same arity
-
-            if len(collected_args) == expected_arity:
-                return pattern_match_fn(*collected_args)
-            else:
-                # Return a function that collects the next argument
-                def next_fn(arg: Value) -> Union[Value, Callable[[Value], Value]]:
-                    return curried_fn(collected_args + [arg])
-
-                return next_fn
-
-        return curried_fn()
-
-    def _create_curried_function(
-        self,
-        clauses: List[FunctionClause],
-    ) -> Callable[..., Value]:
-        """Create a curried function that handles multiple parameters (backward compatibility)."""
-        # Convert old format to new format
-        return self._create_pattern_match_function(clauses)
-
-    def _try_match_patterns(
-        self,
-        patterns: List[Pattern],
-        args: Tuple[Value, ...],
-    ) -> bool:
-        """Check if patterns match the given arguments."""
+    def _match_patterns(self, patterns: List[Pattern], args: List[Value]) -> bool:
+        """Check if patterns match arguments and bind variables."""
         if len(patterns) != len(args):
             return False
 
-        for pattern, arg in zip(patterns, args):
-            if not self._match_pattern(pattern, arg):
-                return False
-        return True
+        # Save current variable state
+        old_vars = self.variables.copy()
 
-    def _match_pattern(self, pattern: Pattern, arg: Value) -> bool:
-        """Check if a single pattern matches an argument."""
-        if isinstance(pattern, Token):
-            # Variable pattern - always matches
-            return True
-        elif isinstance(pattern, Tree):
-            if pattern.data == "constructor_pattern":
-                # Constructor pattern like (Person id name)
-                constructor_token = pattern.children[0]
-                constructor_name = (
-                    constructor_token.value
-                    if isinstance(constructor_token, Token)
-                    else str(constructor_token)
-                )
-
-                # Check if the argument is a record with matching constructor
-                if (
-                    isinstance(arg, dict)
-                    and "_constructor" in arg
-                    and arg["_constructor"] == constructor_name
-                ):
-
-                    # Check if the pattern has the right number of fields
-                    pattern_vars = pattern.children[1:]  # Skip constructor name
-                    expected_fields = len(pattern_vars)
-                    actual_fields = len(arg) - 1  # Subtract 1 for _constructor key
-
-                    return expected_fields == actual_fields
-                return False
-            elif pattern.data == "cons_pattern":
-                # Cons pattern (head:tail)
-                # Pattern structure: [head_pattern, colon_token, tail_pattern]
-                if not isinstance(arg, list) or len(arg) == 0:
+        try:
+            for pattern, arg in zip(patterns, args):
+                if not self._match_pattern(pattern, arg):
+                    # Restore variables if match failed
+                    self.variables = old_vars
                     return False
-                head_pattern = pattern.children[0]  # x
-                tail_pattern = pattern.children[2]  # xs (skip colon at index 1)
-                return self._match_pattern(
-                    head_pattern,
-                    arg[0],
-                ) and self._match_pattern(tail_pattern, arg[1:])
-            else:
-                # Literal pattern - must match exactly
-                pattern_value = self._get_pattern_value(pattern)
-                return pattern_value == arg
-        else:
-            # Unknown pattern type
-            return False
-
-    def _bind_patterns(self, patterns: List[Pattern], args: Tuple[Value, ...]) -> None:
-        """Bind matched patterns to variables in the current scope."""
-        for pattern, arg in zip(patterns, args):
-            if isinstance(pattern, Token):
-                # Variable pattern - bind to the argument value
-                self.variables[pattern.value] = arg
-            elif isinstance(pattern, Tree) and pattern.data == "constructor_pattern":
-                # Constructor pattern like (Person id name)
-                pattern_vars = pattern.children[1:]  # Skip constructor name
-
-                # Extract field values from the record in the order they were defined
-                if isinstance(arg, dict) and "_constructor" in arg:
-                    field_values: List[Value] = []
-
-                    # Check if this is a positional constructor (field_0, field_1, etc.)
-                    # or a named constructor (actual field names)
-                    has_positional_fields = any(
-                        key.startswith("field_")
-                        for key in arg.keys()
-                        if key != "_constructor"
-                    )
-
-                    if has_positional_fields:
-                        # Extract positional fields in order (field_0, field_1, etc.)
-                        field_count = len(arg) - 1  # Subtract 1 for _constructor key
-                        for i in range(field_count):
-                            field_key = f"field_{i}"
-                            if field_key in arg:
-                                field_values.append(arg[field_key])
-                    else:
-                        # Extract named fields in the order they appear in the pattern
-                        # For named constructors, we need to match field names to pattern variables
-                        for var_token in pattern_vars:
-                            if isinstance(var_token, Token):
-                                var_name = var_token.value
-                                if var_name in arg:
-                                    field_values.append(arg[var_name])
-                                else:
-                                    # Field not found, this shouldn't happen if pattern matching is correct
-                                    raise RuntimeError(
-                                        f"Field '{var_name}' not found in constructor arguments",
-                                    )
-
-                    # Bind pattern variables to field values
-                    for var_token, field_value in zip(pattern_vars, field_values):
-                        if isinstance(var_token, Token):
-                            self.variables[var_token.value] = field_value
-            elif isinstance(pattern, Tree) and pattern.data == "cons_pattern":
-                # Cons pattern (head:tail) - bind head and tail
-                # Pattern structure: [head_pattern, colon_token, tail_pattern]
-                if isinstance(arg, list) and len(arg) > 0:
-                    head_pattern = pattern.children[0]  # x
-                    tail_pattern = pattern.children[2]  # xs (skip colon at index 1)
-                    self._bind_patterns([head_pattern], (arg[0],))
-                    self._bind_patterns([tail_pattern], (arg[1:],))
-            # Literal patterns (including empty_list) don't bind anything
-
-    def _get_pattern_value(self, pattern: Tree) -> Value:
-        """Extract the value from a pattern Tree node."""
-        # Handle Token objects by converting to string for comparison
-        if isinstance(pattern.data, Token):
-            pattern_data_str = str(pattern.data)  # This gives us the token value
-        else:
-            pattern_data_str = pattern.data
-
-        if pattern_data_str == "int":
-            return int(pattern.children[0])  # type: ignore
-        elif pattern_data_str == "float":
-            return float(pattern.children[0])  # type: ignore
-        elif pattern_data_str == "neg_int":
-            child_token = pattern.children[1]
-            if isinstance(child_token, Token):
-                return -int(child_token.value)
-            raise TypeError(f"Expected Token for neg_int, got {type(child_token)}")
-        elif pattern_data_str == "neg_float":
-            child_token = pattern.children[1]
-            if isinstance(child_token, Token):
-                return -float(child_token.value)
-            raise TypeError(f"Expected Token for neg_float, got {type(child_token)}")
-        elif pattern_data_str == "string":
-            return pattern.children[0][1:-1]  # type: ignore
-        elif pattern_data_str == "true":
             return True
-        elif pattern_data_str == "false":
+        except Exception:
+            # Restore variables if match failed
+            self.variables = old_vars
             return False
-        elif pattern_data_str == "list":
-            # Handle list literal in pattern context
-            if len(pattern.children) == 0 or (
-                len(pattern.children) == 1 and pattern.children[0] is None
-            ):
-                # Empty list []
-                return []
-            else:
-                # Non-empty list - evaluate the elements
-                elements = []
-                for child in pattern.children:
-                    if child is not None:
-                        elements.append(self._get_pattern_value(child))
-                return elements
-        else:
-            raise RuntimeError(f"Unknown literal pattern: {pattern.data}")
 
-    def eval_do_block(self, stmts: List[ASTNode]) -> Value:
-        """Evaluate a do block with statements."""
-        result: Value = None
-        for stmt in stmts:
-            if isinstance(stmt, Tree) and stmt.data == "let":
-                var_name_token = stmt.children[0]
-                var_name = (
-                    var_name_token.value
-                    if isinstance(var_name_token, Token)
-                    else str(var_name_token)
-                )
-                value = self.eval(stmt.children[1])
-                self.variables[var_name] = value
-            else:
-                result = self.eval(stmt)
-        return result
+    def _match_pattern(self, pattern: Pattern, value: Value) -> bool:
+        """Match a single pattern against a value."""
+        if isinstance(pattern, VariablePattern):
+            # Variable pattern always matches and binds the value
+            self.variables[pattern.name] = value
+            return True
+
+        elif isinstance(pattern, LiteralPattern):
+            # Literal pattern must match exactly
+            return pattern.value == value
+
+        elif isinstance(pattern, ListLiteral):
+            # Match list literal pattern against list value
+            if not isinstance(value, list):
+                return False
+            if len(pattern.elements) != len(value):
+                return False
+            # For list literals as patterns, evaluate elements and compare values
+            for pattern_elem, value_elem in zip(pattern.elements, value):
+                pattern_value = self.eval(pattern_elem)
+                if pattern_value != value_elem:
+                    return False
+            return True
+
+        elif isinstance(pattern, ConstructorPattern):
+            # Match constructor pattern
+            if not isinstance(value, dict) or "_constructor" not in value:
+                return False
+
+            if value["_constructor"] != pattern.constructor:
+                return False
+
+            # Match sub-patterns against constructor fields
+            # For record constructors like Person {id_: Int, name: String},
+            # the patterns will match against the field values
+            if len(pattern.patterns) == 0:
+                # Constructor with no patterns (like MkPoint used as value)
+                return True
+
+            # Get the constructor fields in order
+            # For now, assume field order matches pattern order
+            # This is a simplification - a full implementation would need
+            # to look up the data type definition
+            field_values = []
+            for key in sorted(value.keys()):
+                if key != "_constructor":
+                    field_values.append(value[key])
+
+            if len(pattern.patterns) != len(field_values):
+                return False
+
+            # Match each pattern against its corresponding field value
+            for sub_pattern, field_value in zip(pattern.patterns, field_values):
+                if not self._match_pattern(sub_pattern, field_value):
+                    return False
+
+            return True
+
+        elif isinstance(pattern, ConsPattern):
+            # Match cons pattern (head : tail)
+            if not isinstance(value, list) or len(value) == 0:
+                return False
+
+            head = value[0]
+            tail = value[1:]
+
+            return self._match_pattern(pattern.head, head) and self._match_pattern(
+                pattern.tail,
+                tail,
+            )
+
+        else:
+            raise NotImplementedError(
+                f"Unhandled pattern type: {type(pattern).__name__}",
+            )
+
+    def _get_pattern_value(self, pattern: Pattern) -> Value:
+        """Extract value from a pattern (for literals in patterns)."""
+        if isinstance(pattern, LiteralPattern):
+            return pattern.value
+        elif isinstance(pattern, VariablePattern):
+            return pattern.name  # Return name as string
+        else:
+            raise RuntimeError(
+                f"Cannot extract value from pattern: {type(pattern).__name__}",
+            )

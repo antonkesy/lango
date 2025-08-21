@@ -2,7 +2,6 @@ import typer
 from rich.console import Console
 
 from lango.minio.interpreter import interpret
-from lango.minio.parser import parse
 from lango.minio.typecheck import get_type_str, type_check
 
 app = typer.Typer()
@@ -22,14 +21,18 @@ def run(
         "--type_check/--no_type_check",
         help="Enable or disable type checking",
     ),
-):
+) -> int:
     """Run a Minio program"""
-    tree = parse(input_file)
     if enable_type_check:
-        if not type_check(tree):
+        # Use new AST-based type checker
+        if not type_check(input_file):
             print("Type checking failed, cannot interpret.")
-            return
-    interpret(tree)
+            return 1
+
+    # Use new AST-based interpreter
+    interpret(input_file)
+    # TODO: add return value handling
+    return 0
 
 
 @app.command()
@@ -38,8 +41,7 @@ def types(
         help="Path to .minio file to type check",
     ),
 ):
-    tree = parse(input_file)
-    print(get_type_str(tree))
+    print(get_type_str(input_file))
 
 
 @app.command()
@@ -47,15 +49,15 @@ def typecheck(
     input_file: str = typer.Argument(
         help="Path to .minio file to type check",
     ),
-):
+) -> int:
     """Type check a Minio program"""
-    tree = parse(input_file)
-    if type_check(tree):
+    if type_check(input_file):
         console.print("Type checking succeeded", style="bold green")
+        return 0
     else:
         console.print("Type checking failed", style="bold red")
+        return 1
 
 
 def main():
-    app()
-    return 0
+    return app()
