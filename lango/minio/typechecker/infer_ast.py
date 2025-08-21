@@ -2,9 +2,58 @@
 AST-based type inference engine using the Hindley-Milner algorithm.
 """
 
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple
 
-from lango.minio.ast_nodes import *
+from lango.minio.ast_nodes import (
+    AddOperation,
+    AndOperation,
+    ArrowType,
+    ASTNode,
+    BoolLiteral,
+    ConcatOperation,
+    ConsPattern,
+    Constructor,
+    ConstructorExpression,
+    ConstructorPattern,
+    DataDeclaration,
+    DivOperation,
+    DoBlock,
+    EqualOperation,
+    Expression,
+    FloatLiteral,
+    FunctionApplication,
+    FunctionDefinition,
+    GreaterEqualOperation,
+    GreaterThanOperation,
+    GroupedExpression,
+    GroupedType,
+    IfElse,
+    IndexOperation,
+    IntLiteral,
+    LessEqualOperation,
+    LessThanOperation,
+    LetStatement,
+    ListLiteral,
+    MulOperation,
+    NegativeFloat,
+    NegativeInt,
+    NotEqualOperation,
+    NotOperation,
+    OrOperation,
+    Pattern,
+    PowFloatOperation,
+    PowIntOperation,
+    Program,
+    Statement,
+    StringLiteral,
+    SubOperation,
+    TypeApplication,
+    TypeConstructor,
+    TypeExpression,
+    TypeVariable,
+    Variable,
+    VariablePattern,
+)
 from lango.minio.typechecker.types import (
     BOOL_TYPE,
     FLOAT_TYPE,
@@ -22,8 +71,7 @@ from lango.minio.typechecker.types import (
     TypeVar,
     generalize,
 )
-
-from .unify import UnificationError, unify, unify_one
+from lango.minio.typechecker.unify import UnificationError, unify_one
 
 TypeBindings = Dict[str, TypeScheme]
 InferenceResult = Tuple[Type, TypeSubstitution]

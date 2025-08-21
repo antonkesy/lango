@@ -2,8 +2,8 @@ import os
 
 from lark import Lark, ParseTree
 
-from .ast_nodes import Program
-from .ast_transformer import transform_parse_tree
+from lango.minio.ast_nodes import Program
+from lango.minio.ast_transformer import transform_parse_tree
 
 
 def _parse_lark(path: str) -> ParseTree:

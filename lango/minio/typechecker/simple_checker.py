@@ -3,9 +3,45 @@ Simplified AST-based type checker that provides basic type checking for custom A
 This is a minimal implementation to demonstrate the concept.
 """
 
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict
 
-from ..ast_nodes import *
+from lango.minio.ast_nodes import (
+    AddOperation,
+    AndOperation,
+    BoolLiteral,
+    ConcatOperation,
+    Constructor,
+    DataDeclaration,
+    DivOperation,
+    EqualOperation,
+    Expression,
+    FloatLiteral,
+    FunctionApplication,
+    FunctionDefinition,
+    GreaterEqualOperation,
+    GreaterThanOperation,
+    GroupedExpression,
+    IfElse,
+    IndexOperation,
+    IntLiteral,
+    LessEqualOperation,
+    LessThanOperation,
+    ListLiteral,
+    MulOperation,
+    NegativeFloat,
+    NegativeInt,
+    NotEqualOperation,
+    NotOperation,
+    OrOperation,
+    PowFloatOperation,
+    PowIntOperation,
+    Program,
+    Statement,
+    StringLiteral,
+    SubOperation,
+    Variable,
+    VariablePattern,
+)
 
 
 class SimpleTypeChecker:

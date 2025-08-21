@@ -9,7 +9,7 @@ from typing import Any, List, Optional, Union
 
 from lark import Token, Transformer, Tree
 
-from .ast_nodes import (
+from lango.minio.ast_nodes import (
     AddOperation,
     AndOperation,
     ArrowType,

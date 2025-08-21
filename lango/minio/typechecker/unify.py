@@ -2,8 +2,6 @@
 Unification algorithm for the Hindley-Milner type system
 """
 
-from typing import List, Tuple
-
 from lango.minio.typechecker.types import (
     DataType,
     FunctionType,
@@ -88,21 +86,3 @@ def unify_one(t1: Type, t2: Type) -> TypeSubstitution:
 
     # No other cases match
     raise UnificationError(f"Cannot unify {t1} and {t2}")
-
-
-def unify(constraints: List[Tuple[Type, Type]]) -> TypeSubstitution:
-    """Unify a list of type constraints"""
-    subst = TypeSubstitution()
-
-    for t1, t2 in constraints:
-        # Apply current substitution to both types
-        t1_subst = subst.apply(t1)
-        t2_subst = subst.apply(t2)
-
-        # Unify the substituted types
-        new_subst = unify_one(t1_subst, t2_subst)
-
-        # Compose with existing substitution
-        subst = new_subst.compose(subst)
-
-    return subst

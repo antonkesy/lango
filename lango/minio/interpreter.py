@@ -6,17 +6,15 @@ from contextlib import redirect_stdout
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from .ast_nodes import (
+from lango.minio.ast_nodes import (
     AddOperation,
     AndOperation,
-    ASTNode,
     BoolLiteral,
     ConcatOperation,
     ConsPattern,
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
-    DataDeclaration,
     DivOperation,
     DoBlock,
     EqualOperation,
@@ -24,7 +22,6 @@ from .ast_nodes import (
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
-    FunctionSignature,
     GreaterEqualOperation,
     GreaterThanOperation,
     GroupedExpression,
@@ -52,7 +49,7 @@ from .ast_nodes import (
     Variable,
     VariablePattern,
 )
-from .typecheck import type_check
+from lango.minio.typecheck import type_check
 
 # Type aliases for the interpreter
 Value = Any  # Any runtime value
