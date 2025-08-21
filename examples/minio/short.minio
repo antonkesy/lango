@@ -1,0 +1,19 @@
+-- Point
+data Point = MkPoint Float Float;
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
+
+-- Bool
+isTrue True = "True";
+isTrue False = "False";
+
+-- List
+l = [1, 2, 3];
+
+main = do {
+  putStr isTrue True;
+
+  let { point = MkPoint 3.0 4.0};
+  putStr printPoint point;
+
+  putStr (show (length l));
+};

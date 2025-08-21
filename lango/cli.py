@@ -1,6 +1,7 @@
 import typer
 from rich.console import Console
 
+from lango.minio.ast_printer import print_annotated_ast
 from lango.minio.interpreter import interpret
 from lango.minio.parser import parse
 from lango.minio.typecheck import get_type_str, type_check
@@ -44,6 +45,19 @@ def types(
     ),
 ):
     print(get_type_str(parse(input_file)))
+
+
+@app.command()
+def ast(
+    input_file: str = typer.Argument(
+        help="Path to .minio file to show annotated AST",
+    ),
+):
+    """Show AST with type annotations after type checking"""
+
+    ast = parse(input_file)
+    type_check(ast)  # This will annotate the AST
+    print_annotated_ast(ast)
 
 
 @app.command()

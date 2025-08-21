@@ -31,6 +31,10 @@ types: install
 	. .venv/bin/activate && \
 	lango types examples/minio/example.minio
 
+ast: install
+	. .venv/bin/activate && \
+	lango ast examples/minio/short.minio
+
 typecheck: install
 	. .venv/bin/activate && \
 	lango typecheck ./test/files/minio/types/custom/constrcutor/mixed.minio

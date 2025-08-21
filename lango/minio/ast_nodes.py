@@ -2,6 +2,8 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Any, List, Optional, Union
 
+from lango.minio.typechecker.mini_types import Type
+
 
 # Base AST Node
 @dataclass
@@ -13,37 +15,44 @@ class ASTNode(ABC):
 @dataclass
 class IntLiteral(ASTNode):
     value: int
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class FloatLiteral(ASTNode):
     value: float
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class StringLiteral(ASTNode):
     value: str
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class BoolLiteral(ASTNode):
     value: bool
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class ListLiteral(ASTNode):
     elements: List["Expression"]
+    ty: Optional["Type"] = None
 
 
 # Variables and Identifiers
 @dataclass
 class Variable(ASTNode):
     name: str
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class Constructor(ASTNode):
     name: str
+    ty: Optional["Type"] = None
 
 
 # Arithmetic Operations
@@ -51,36 +60,42 @@ class Constructor(ASTNode):
 class AddOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class SubOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class MulOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class DivOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class PowIntOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class PowFloatOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 # Comparison Operations
@@ -88,36 +103,42 @@ class PowFloatOperation(ASTNode):
 class EqualOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class NotEqualOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class LessThanOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class LessEqualOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class GreaterThanOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class GreaterEqualOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 # Logical Operations
@@ -125,17 +146,20 @@ class GreaterEqualOperation(ASTNode):
 class AndOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class OrOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class NotOperation(ASTNode):
     operand: "Expression"
+    ty: Optional["Type"] = None
 
 
 # String/List Operations
@@ -143,12 +167,14 @@ class NotOperation(ASTNode):
 class ConcatOperation(ASTNode):
     left: "Expression"
     right: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class IndexOperation(ASTNode):
     list_expr: "Expression"
     index_expr: "Expression"
+    ty: Optional["Type"] = None
 
 
 # Control Flow
@@ -157,17 +183,20 @@ class IfElse(ASTNode):
     condition: "Expression"
     then_expr: "Expression"
     else_expr: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class DoBlock(ASTNode):
     statements: List["Statement"]
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class LetStatement(ASTNode):
     variable: str
     value: "Expression"
+    ty: Optional["Type"] = None
 
 
 # Function Application
@@ -175,6 +204,7 @@ class LetStatement(ASTNode):
 class FunctionApplication(ASTNode):
     function: "Expression"
     argument: "Expression"
+    ty: Optional["Type"] = None
 
 
 # Constructor Expressions
@@ -182,57 +212,67 @@ class FunctionApplication(ASTNode):
 class FieldAssignment(ASTNode):
     field_name: str
     value: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class ConstructorExpression(ASTNode):
     constructor_name: str
     fields: List[FieldAssignment]
+    ty: Optional["Type"] = None
 
 
 # Grouping
 @dataclass
 class GroupedExpression(ASTNode):
     expression: "Expression"
+    ty: Optional["Type"] = None
 
 
 # Negative numbers
 @dataclass
 class NegativeInt(ASTNode):
     value: int
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class NegativeFloat(ASTNode):
     value: float
+    ty: Optional["Type"] = None
 
 
 # Type System
 @dataclass
 class TypeConstructor(ASTNode):
     name: str
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class TypeVariable(ASTNode):
     name: str
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class ArrowType(ASTNode):
     from_type: "TypeExpression"
     to_type: "TypeExpression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class TypeApplication(ASTNode):
     constructor: "TypeExpression"
     argument: "TypeExpression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class GroupedType(ASTNode):
     type_expr: "TypeExpression"
+    ty: Optional["Type"] = None
 
 
 # Patterns
@@ -240,32 +280,38 @@ class GroupedType(ASTNode):
 class ConstructorPattern(ASTNode):
     constructor: str
     patterns: List["Pattern"]
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class ConsPattern(ASTNode):
     head: "Pattern"
     tail: "Pattern"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class VariablePattern(ASTNode):
     name: str
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class LiteralPattern(ASTNode):
     value: Any
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class NegativeIntPattern(ASTNode):
     value: int
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class NegativeFloatPattern(ASTNode):
     value: float
+    ty: Optional["Type"] = None
 
 
 # Top-level Declarations
@@ -274,17 +320,20 @@ class TypeParameter(ASTNode):
     """Type parameter in data declaration."""
 
     name: str
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class Field(ASTNode):
     name: str
     field_type: "TypeExpression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class RecordConstructor(ASTNode):
     fields: List[Field]
+    ty: Optional["Type"] = None
 
 
 @dataclass
@@ -293,6 +342,7 @@ class DataConstructor(ASTNode):
     # Either record_constructor or list of type atoms
     record_constructor: Optional[RecordConstructor] = None
     type_atoms: Optional[List["TypeExpression"]] = None
+    ty: Optional["Type"] = None
 
 
 @dataclass
@@ -300,12 +350,14 @@ class DataDeclaration(ASTNode):
     type_name: str
     type_params: List[TypeParameter]
     constructors: List[DataConstructor]
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class FunctionSignature(ASTNode):
     function_name: str
     type_signature: "TypeExpression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
@@ -313,11 +365,13 @@ class FunctionDefinition(ASTNode):
     function_name: str
     patterns: List["Pattern"]
     body: "Expression"
+    ty: Optional["Type"] = None
 
 
 @dataclass
 class Program(ASTNode):
     statements: List["Statement"]
+    ty: Optional["Type"] = None
 
 
 # Union types for different categories

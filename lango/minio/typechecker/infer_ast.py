@@ -273,22 +273,28 @@ class TypeInferrer:
 
         # Literals
         if isinstance(expr, IntLiteral) or isinstance(expr, NegativeInt):
+            expr.ty = INT_TYPE
             return INT_TYPE, TypeSubstitution()
 
         elif isinstance(expr, FloatLiteral) or isinstance(expr, NegativeFloat):
+            expr.ty = FLOAT_TYPE
             return FLOAT_TYPE, TypeSubstitution()
 
         elif isinstance(expr, StringLiteral):
+            expr.ty = STRING_TYPE
             return STRING_TYPE, TypeSubstitution()
 
         elif isinstance(expr, BoolLiteral):
+            expr.ty = BOOL_TYPE
             return BOOL_TYPE, TypeSubstitution()
 
         elif isinstance(expr, ListLiteral):
             if not expr.elements:
                 # Empty list: infer polymorphic list type
                 element_type = self.fresh_type_var()
-                return TypeApp(TypeCon("List"), element_type), TypeSubstitution()
+                list_type = TypeApp(TypeCon("List"), element_type)
+                expr.ty = list_type
+                return list_type, TypeSubstitution()
 
             # Non-empty list: infer element type from first element
             # and unify with all other elements
@@ -318,6 +324,7 @@ class TypeInferrer:
                 TypeCon("List"),
                 first_type.apply_substitution(current_subst),
             )
+            expr.ty = list_type
             return list_type, current_subst
 
         # Variables and constructors
@@ -325,64 +332,97 @@ class TypeInferrer:
             scheme = env.lookup(expr.name)
             if scheme is None:
                 raise TypeInferenceError(f"Unknown variable: {expr.name}")
-            return scheme.instantiate(self.fresh_var_gen), TypeSubstitution()
+            inferred_type = scheme.instantiate(self.fresh_var_gen)
+            expr.ty = inferred_type
+            return inferred_type, TypeSubstitution()
 
         elif isinstance(expr, Constructor):
             scheme = env.lookup(expr.name)
             if scheme is None:
                 raise TypeInferenceError(f"Unknown constructor: {expr.name}")
-            return scheme.instantiate(self.fresh_var_gen), TypeSubstitution()
+            inferred_type = scheme.instantiate(self.fresh_var_gen)
+            expr.ty = inferred_type
+            return inferred_type, TypeSubstitution()
 
         # Arithmetic operations
         elif isinstance(expr, AddOperation):
-            return self._infer_binary_numeric_op(expr.left, expr.right, env)
+            result = self._infer_binary_numeric_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, SubOperation):
-            return self._infer_binary_numeric_op(expr.left, expr.right, env)
+            result = self._infer_binary_numeric_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, MulOperation):
-            return self._infer_binary_numeric_op(expr.left, expr.right, env)
+            result = self._infer_binary_numeric_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, DivOperation):
-            return self._infer_binary_numeric_op(expr.left, expr.right, env)
+            result = self._infer_binary_numeric_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, PowIntOperation):
-            return self._infer_binary_numeric_op(expr.left, expr.right, env)
+            result = self._infer_binary_numeric_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, PowFloatOperation):
-            return self._infer_binary_numeric_op(expr.left, expr.right, env)
+            result = self._infer_binary_numeric_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         # Comparison operations
         elif isinstance(expr, EqualOperation):
-            return self._infer_binary_comparison_op(expr.left, expr.right, env)
+            result = self._infer_binary_comparison_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, NotEqualOperation):
-            return self._infer_binary_comparison_op(expr.left, expr.right, env)
+            result = self._infer_binary_comparison_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, LessThanOperation):
-            return self._infer_binary_comparison_op(expr.left, expr.right, env)
+            result = self._infer_binary_comparison_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, LessEqualOperation):
-            return self._infer_binary_comparison_op(expr.left, expr.right, env)
+            result = self._infer_binary_comparison_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, GreaterThanOperation):
-            return self._infer_binary_comparison_op(expr.left, expr.right, env)
+            result = self._infer_binary_comparison_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, GreaterEqualOperation):
-            return self._infer_binary_comparison_op(expr.left, expr.right, env)
+            result = self._infer_binary_comparison_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         # Logical operations
         elif isinstance(expr, AndOperation):
-            return self._infer_binary_logical_op(expr.left, expr.right, env)
+            result = self._infer_binary_logical_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, OrOperation):
-            return self._infer_binary_logical_op(expr.left, expr.right, env)
+            result = self._infer_binary_logical_op(expr.left, expr.right, env)
+            expr.ty = result[0]
+            return result
 
         elif isinstance(expr, NotOperation):
             operand_type, subst = self.infer_expr(expr.operand, env)
             try:
                 bool_unify = unify_one(operand_type, BOOL_TYPE)
                 final_subst = subst.compose(bool_unify)
+                expr.ty = BOOL_TYPE
                 return BOOL_TYPE, final_subst
             except UnificationError:
                 raise TypeInferenceError(
@@ -407,6 +447,7 @@ class TypeInferrer:
                 )
                 final_subst = combined_subst.compose(unify_subst)
                 final_type = left_type.apply_substitution(final_subst)
+                expr.ty = final_type
                 return final_type, final_subst
             except UnificationError:
                 raise TypeInferenceError(f"Concatenation operands must have same type")
@@ -438,7 +479,9 @@ class TypeInferrer:
                     expected_list_type,
                 )
                 final_subst = subst_with_int.compose(list_unify)
-                return element_type.apply_substitution(final_subst), final_subst
+                result_type = element_type.apply_substitution(final_subst)
+                expr.ty = result_type
+                return result_type, final_subst
             except UnificationError:
                 raise TypeInferenceError(
                     f"Index operation requires a List, got {indexed_list_type}",
@@ -477,6 +520,7 @@ class TypeInferrer:
                 )
                 final_subst = subst_after_else.compose(branch_unify)
                 final_type = then_type.apply_substitution(final_subst)
+                expr.ty = final_type
                 return final_type, final_subst
             except UnificationError:
                 raise TypeInferenceError(
@@ -503,21 +547,29 @@ class TypeInferrer:
                     expected_func_type,
                 )
                 final_subst = combined_subst.compose(func_unify)
-                return return_type.apply_substitution(final_subst), final_subst
+                result_type = return_type.apply_substitution(final_subst)
+                expr.ty = result_type
+                return result_type, final_subst
             except UnificationError:
                 raise TypeInferenceError(f"Function application type mismatch")
 
         # Grouping
         elif isinstance(expr, GroupedExpression):
-            return self.infer_expr(expr.expression, env)
+            result = self.infer_expr(expr.expression, env)
+            expr.ty = result[0]
+            return result
 
         # Do blocks
         elif isinstance(expr, DoBlock):
-            return self.infer_do_block(expr.statements, env)
+            result = self.infer_do_block(expr.statements, env)
+            expr.ty = result[0]
+            return result
 
         # Constructor expressions
         elif isinstance(expr, ConstructorExpression):
-            return self.infer_constructor_expr(expr, env)
+            result = self.infer_constructor_expr(expr, env)
+            expr.ty = result[0]
+            return result
 
         else:
             raise TypeInferenceError(
