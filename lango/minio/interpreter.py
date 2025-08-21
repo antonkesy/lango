@@ -49,12 +49,10 @@ from .ast_nodes import (
     Statement,
     StringLiteral,
     SubOperation,
-    TypeExpression,
     Variable,
     VariablePattern,
 )
-from .parser import parse
-from .typecheck import type_check as lark_type_check
+from .typecheck import type_check
 
 # Type aliases for the interpreter
 Value = Any  # Any runtime value
@@ -66,18 +64,13 @@ Environment = Dict[str, FunctionValue]
 
 
 def interpret(
-    file_path: str,
+    ast: Program,
     collectStdOut: bool = False,
 ) -> str:
-    """Interpret a Minio program file."""
-    # Parse file to get AST
-    ast = parse(file_path)
-
-    # TODO: Type checking needs to be updated for AST nodes
-    # For now, skip type checking
-    # if not type_check_ast(ast):
-    #     print("Type checking failed, cannot interpret.")
-    #     return ""
+    # TODO: return code
+    if not type_check(ast):
+        print("Type checking failed, cannot interpret.")
+        return ""
 
     env = build_environment(ast)
     interp = Interpreter(env)
@@ -529,15 +522,4 @@ class Interpreter:
         else:
             raise NotImplementedError(
                 f"Unhandled pattern type: {type(pattern).__name__}",
-            )
-
-    def _get_pattern_value(self, pattern: Pattern) -> Value:
-        """Extract value from a pattern (for literals in patterns)."""
-        if isinstance(pattern, LiteralPattern):
-            return pattern.value
-        elif isinstance(pattern, VariablePattern):
-            return pattern.name  # Return name as string
-        else:
-            raise RuntimeError(
-                f"Cannot extract value from pattern: {type(pattern).__name__}",
             )

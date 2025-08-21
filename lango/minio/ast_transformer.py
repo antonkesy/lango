@@ -9,7 +9,62 @@ from typing import Any, List, Optional, Union
 
 from lark import Token, Transformer, Tree
 
-from .ast_nodes import *
+from .ast_nodes import (
+    AddOperation,
+    AndOperation,
+    ArrowType,
+    BoolLiteral,
+    ConcatOperation,
+    ConsPattern,
+    Constructor,
+    ConstructorExpression,
+    ConstructorPattern,
+    DataConstructor,
+    DataDeclaration,
+    DivOperation,
+    DoBlock,
+    EqualOperation,
+    Expression,
+    Field,
+    FieldAssignment,
+    FloatLiteral,
+    FunctionApplication,
+    FunctionDefinition,
+    FunctionSignature,
+    GreaterEqualOperation,
+    GreaterThanOperation,
+    GroupedExpression,
+    GroupedType,
+    IfElse,
+    IndexOperation,
+    IntLiteral,
+    LessEqualOperation,
+    LessThanOperation,
+    LetStatement,
+    ListLiteral,
+    LiteralPattern,
+    MulOperation,
+    NegativeFloat,
+    NegativeFloatPattern,
+    NegativeInt,
+    NegativeIntPattern,
+    NotEqualOperation,
+    NotOperation,
+    OrOperation,
+    PowFloatOperation,
+    PowIntOperation,
+    Program,
+    RecordConstructor,
+    Statement,
+    StringLiteral,
+    SubOperation,
+    TypeApplication,
+    TypeConstructor,
+    TypeParameter,
+    TypeVariable,
+    Variable,
+    VariablePattern,
+)
 
 
 class ASTTransformer(Transformer):
@@ -425,12 +480,6 @@ class ASTTransformer(Transformer):
 def transform_parse_tree(tree: Tree) -> Program:
     """
     Transform a Lark parse tree into a custom AST.
-
-    Args:
-        tree: The Lark parse tree to transform
-
-    Returns:
-        Program: The root AST node representing the entire program
     """
     transformer = ASTTransformer()
     return transformer.transform(tree)

@@ -4,8 +4,8 @@ AST-based type inference engine using the Hindley-Milner algorithm.
 
 from typing import Dict, List, Optional, Set, Tuple, Union
 
-from ..ast_nodes import *
-from .types import (
+from lango.minio.ast_nodes import *
+from lango.minio.typechecker.types import (
     BOOL_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
@@ -22,6 +22,7 @@ from .types import (
     TypeVar,
     generalize,
 )
+
 from .unify import UnificationError, unify, unify_one
 
 TypeBindings = Dict[str, TypeScheme]
@@ -202,7 +203,7 @@ class TypeInferrer:
 
             if isinstance(constructor_type, DataType):
                 # Apply type argument to data type
-                new_args = constructor_type.type_args + [argument_type]
+                new_args = constructor_type.args + [argument_type]
                 return DataType(constructor_type.name, new_args)
             else:
                 return TypeApp(constructor_type, argument_type)
@@ -580,7 +581,7 @@ class TypeInferrer:
             # Nullary function
             body_type, body_subst = self.infer_expr(func_def.body, env)
             scheme = generalize(
-                {var for var in env.apply_substitution(body_subst).free_type_vars()},
+                env.apply_substitution(body_subst).free_type_vars(),
                 body_type.apply_substitution(body_subst),
             )
             return scheme, env.extend(func_def.function_name, scheme)
@@ -618,7 +619,7 @@ class TypeInferrer:
 
         # Generalize
         scheme = generalize(
-            {var for var in env.apply_substitution(final_subst).free_type_vars()},
+            env.apply_substitution(final_subst).free_type_vars(),
             func_type,
         )
         return scheme, env.extend(func_def.function_name, scheme)
@@ -644,12 +645,9 @@ class TypeInferrer:
 
                 # Generalize and add to environment
                 var_scheme = generalize(
-                    {
-                        var
-                        for var in current_env.apply_substitution(
-                            current_subst,
-                        ).free_type_vars()
-                    },
+                    current_env.apply_substitution(
+                        current_subst,
+                    ).free_type_vars(),
                     value_type,
                 )
                 current_env = current_env.extend(stmt.variable, var_scheme)
@@ -707,12 +705,9 @@ class TypeInferrer:
 
             # Generalize and add to environment
             var_scheme = generalize(
-                {
-                    var
-                    for var in current_env.apply_substitution(
-                        final_subst,
-                    ).free_type_vars()
-                },
+                current_env.apply_substitution(
+                    final_subst,
+                ).free_type_vars(),
                 value_type,
             )
             current_env = current_env.extend(last_stmt.variable, var_scheme)
@@ -949,15 +944,23 @@ class TypeInferrer:
                 data_env = self.infer_data_decl(stmt)
                 env = env.extend_many(data_env.bindings)
 
-        # Second pass: collect function signatures
-        # (For now, skip explicit function signatures)
+        # Second pass: create forward declarations for all functions
+        # This allows functions to refer to each other regardless of order
+        function_names = []
+        for stmt in ast.statements:
+            if isinstance(stmt, FunctionDefinition):
+                function_names.append(stmt.function_name)
+                # Create a fresh type variable for each function
+                func_type_var = self.fresh_type_var()
+                env = env.extend(stmt.function_name, TypeScheme(set(), func_type_var))
 
-        # Third pass: infer function definitions
+        # Third pass: infer function definitions with forward declarations available
         for stmt in ast.statements:
             if isinstance(stmt, FunctionDefinition):
                 try:
-                    scheme, new_env = self.infer_function(stmt, env)
-                    env = new_env
+                    scheme, _ = self.infer_function(stmt, env)
+                    # Replace the forward declaration with the properly inferred type
+                    env = env.extend(stmt.function_name, scheme)
                 except TypeInferenceError as e:
                     # Continue with other functions even if one fails
                     raise TypeInferenceError(
