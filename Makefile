@@ -45,5 +45,9 @@ coverage: install-dev
 	coverage report -m && \
 	coverage html
 
+mypy: install-dev
+	. .venv/bin/activate && \
+	mypy lango --explicit-package-bases
+
 clean: uninstall
 	rm -rf build/ dist/ *.egg-info/ .venv/ .pytest_cache/ .coverage htmlcov/
