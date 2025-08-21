@@ -213,7 +213,6 @@ class Interpreter:
                     return -self.eval(node.children[0])
                 case "quot":
                     return self.eval(node.children[0]) // self.eval(node.children[2])
-                # TODO: rem, div?
                 # Comparison
                 case "eq":
                     return self.eval(node.children[0]) == self.eval(node.children[2])
