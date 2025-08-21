@@ -1,0 +1,5 @@
+elem x []     = False;
+elem y (x:xs) =
+    if y == x
+        then True
+        else elem y xs;

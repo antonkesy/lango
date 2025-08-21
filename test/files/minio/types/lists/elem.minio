@@ -1,0 +1,7 @@
+-- "TrueFalse"
+main = do {
+    let {xs = [1,2,3,4,5] };
+
+    putStr (show (elem 3 xs));
+    putStr (show (elem 9 xs));
+};
