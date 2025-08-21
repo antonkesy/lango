@@ -173,6 +173,20 @@ class TypeInferrer:
         for name, scheme in builtins.items():
             env = env.extend(name, scheme)
 
+        # Add built-in list constructors
+        # [] :: [a]
+        a = TypeVar("a")
+        list_type = TypeApp(TypeCon("List"), a)
+        nil_scheme = TypeScheme({"a"}, list_type)
+        env = env.extend("[]", nil_scheme)
+
+        # (:) :: a -> [a] -> [a] (cons operator)
+        cons_scheme = TypeScheme(
+            {"a"},
+            FunctionType(a, FunctionType(list_type, list_type)),
+        )
+        env = env.extend(":", cons_scheme)
+
         return env
 
     def fresh_type_var(self) -> TypeVar:
@@ -921,6 +935,39 @@ class TypeInferrer:
                     )
                     var_scheme = TypeScheme(set(), field_type)
                     extended_env = extended_env.extend(var_name, var_scheme)
+            elif isinstance(pattern, Tree) and pattern.data == "cons_pattern":
+                # Cons pattern like (x:xs)
+                head_pattern = pattern.children[0]  # x
+                tail_pattern = pattern.children[2]  # xs (skip the colon token)
+
+                # Create fresh type variables
+                elem_type = self.fresh_type_var()
+                list_type = TypeApp(TypeCon("List"), elem_type)  # List elem_type
+
+                # The parameter type is a list
+                param_types.append(list_type)
+
+                # Bind head variable to element type
+                if isinstance(head_pattern, Token):
+                    head_name = head_pattern.value
+                    head_scheme = TypeScheme(set(), elem_type)
+                    extended_env = extended_env.extend(head_name, head_scheme)
+
+                # Bind tail variable to list type
+                if isinstance(tail_pattern, Token):
+                    tail_name = tail_pattern.value
+                    tail_scheme = TypeScheme(set(), list_type)
+                    extended_env = extended_env.extend(tail_name, tail_scheme)
+            elif isinstance(pattern, Tree) and pattern.data == "list":
+                # List pattern like []
+                if pattern.children == [None]:  # Empty list
+                    elem_type = self.fresh_type_var()
+                    list_type = TypeApp(TypeCon("List"), elem_type)
+                    param_types.append(list_type)
+                else:
+                    # Non-empty list pattern - handle like other patterns for now
+                    param_type = self.fresh_type_var()
+                    param_types.append(param_type)
             else:
                 # Other patterns - create fresh type variable
                 param_type = self.fresh_type_var()
@@ -1003,10 +1050,40 @@ class TypeInferrer:
         for name, scheme in func_signatures.items():
             env = env.extend(name, scheme)
 
-        # Third pass: infer function definitions
+        # Third pass: collect all function names and create placeholder types
+        function_names = set()
+        for stmt in tree.children:
+            if isinstance(stmt, Tree) and stmt.data == "func_def":
+                func_name_token = stmt.children[0]
+                func_name = (
+                    func_name_token.value
+                    if isinstance(func_name_token, Token)
+                    else str(func_name_token)
+                )
+                function_names.add(func_name)
+
+        # Add placeholder types for all functions to the environment
+        function_placeholders = {}
+        for func_name in function_names:
+            if func_name not in func_signatures:  # Don't override explicit signatures
+                placeholder_type = self.fresh_type_var()
+                placeholder_scheme = TypeScheme(set(), placeholder_type)
+                function_placeholders[func_name] = placeholder_type
+                env = env.extend(func_name, placeholder_scheme)
+
+        # Fourth pass: infer function definitions with all functions available
+        function_types = {}
         for stmt in tree.children:
             if isinstance(stmt, Tree) and stmt.data == "func_def":
                 func_name, inferred_scheme = self.infer_function(stmt, env)
+
+                # Handle multiple clauses for the same function
+                if func_name in function_types:
+                    # TODO: Unify with existing type for multiple clauses
+                    # For now, just use the first inferred type
+                    continue
+
+                function_types[func_name] = inferred_scheme
 
                 # Check against declared signature if present
                 if func_name in func_signatures:

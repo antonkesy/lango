@@ -17,9 +17,18 @@ def run(
         "-i",
         help="Path to .minio file to run",
     ),
+    enable_type_check: bool = typer.Option(
+        True,
+        "--type_check/--no_type_check",
+        help="Enable or disable type checking",
+    ),
 ):
     """Run a Minio program"""
     tree = parse(input_file)
+    if enable_type_check:
+        if not type_check(tree):
+            print("Type checking failed, cannot interpret.")
+            return
     interpret(tree)
 
 

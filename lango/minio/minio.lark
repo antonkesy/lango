@@ -42,6 +42,8 @@ GTEQ: ">="
 AND: "&&"
 OR: "||"
 NOT: "not"
+// Pattern matching
+COLON: ":"
 
 do_stmt: "let" "{" (ID "=" expr ";")* ID "=" expr "}"
         | expr
@@ -115,12 +117,14 @@ field_assign: ID "=" expr
 
 // --- Patterns ---
 ?pattern: constructor_pattern
+        | cons_pattern
         | ID
         | literal
         | "(" MINUS INT ")"      -> neg_int
         | "(" MINUS FLOAT ")"    -> neg_float
 
 constructor_pattern: "(" UIDENT pattern+ ")"
+cons_pattern: "(" pattern COLON pattern ")"   -> cons_pattern
 
 // --- Literals ---
 ?literal: INT     -> int

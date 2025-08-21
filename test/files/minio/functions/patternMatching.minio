@@ -1,4 +1,4 @@
--- "678TrueFalse"
+-- "678TrueFalse63"
 add 1 y = 1 + y;
 add 2 y = 2 + y;
 add x y = x + y;
@@ -6,10 +6,21 @@ add x y = x + y;
 isTrue True = "True";
 isTrue False = "False";
 
+mySum [] = 0;
+mySum (x:xs) = x + mySum xs;
+
+myLength [] = 0;
+myLength (x:xs) = 1 + myLength xs;
+
 main = do {
   putStr (show (add 1 5));
   putStr (show (add 2 5));
   putStr (show (add 3 5));
+
   putStr (isTrue True);
   putStr (isTrue False);
+
+  putStr (show (mySum [1, 2, 3]));
+
+  putStr (show (myLength [1, 2, 3]));
 };

@@ -154,7 +154,7 @@ class Interpreter:
                 case "string":
                     return node.children[0][1:-1]  # type: ignore
                 case "list":
-                    # Evaluate list literal [1, 2, 3]
+                    # Evaluate list literal [1, 2, 3] or []
                     elements = []
                     for child in node.children:
                         if child is None:
@@ -517,6 +517,17 @@ class Interpreter:
 
                     return expected_fields == actual_fields
                 return False
+            elif pattern.data == "cons_pattern":
+                # Cons pattern (head:tail)
+                # Pattern structure: [head_pattern, colon_token, tail_pattern]
+                if not isinstance(arg, list) or len(arg) == 0:
+                    return False
+                head_pattern = pattern.children[0]  # x
+                tail_pattern = pattern.children[2]  # xs (skip colon at index 1)
+                return self._match_pattern(
+                    head_pattern,
+                    arg[0],
+                ) and self._match_pattern(tail_pattern, arg[1:])
             else:
                 # Literal pattern - must match exactly
                 pattern_value = self._get_pattern_value(pattern)
@@ -572,30 +583,58 @@ class Interpreter:
                     for var_token, field_value in zip(pattern_vars, field_values):
                         if isinstance(var_token, Token):
                             self.variables[var_token.value] = field_value
-            # Literal patterns don't bind anything
+            elif isinstance(pattern, Tree) and pattern.data == "cons_pattern":
+                # Cons pattern (head:tail) - bind head and tail
+                # Pattern structure: [head_pattern, colon_token, tail_pattern]
+                if isinstance(arg, list) and len(arg) > 0:
+                    head_pattern = pattern.children[0]  # x
+                    tail_pattern = pattern.children[2]  # xs (skip colon at index 1)
+                    self._bind_patterns([head_pattern], (arg[0],))
+                    self._bind_patterns([tail_pattern], (arg[1:],))
+            # Literal patterns (including empty_list) don't bind anything
 
     def _get_pattern_value(self, pattern: Tree) -> Value:
         """Extract the value from a pattern Tree node."""
-        if pattern.data == "int":
+        # Handle Token objects by converting to string for comparison
+        if isinstance(pattern.data, Token):
+            pattern_data_str = str(pattern.data)  # This gives us the token value
+        else:
+            pattern_data_str = pattern.data
+
+        if pattern_data_str == "int":
             return int(pattern.children[0])  # type: ignore
-        elif pattern.data == "float":
+        elif pattern_data_str == "float":
             return float(pattern.children[0])  # type: ignore
-        elif pattern.data == "neg_int":
+        elif pattern_data_str == "neg_int":
             child_token = pattern.children[1]
             if isinstance(child_token, Token):
                 return -int(child_token.value)
             raise TypeError(f"Expected Token for neg_int, got {type(child_token)}")
-        elif pattern.data == "neg_float":
+        elif pattern_data_str == "neg_float":
             child_token = pattern.children[1]
             if isinstance(child_token, Token):
                 return -float(child_token.value)
             raise TypeError(f"Expected Token for neg_float, got {type(child_token)}")
-        elif pattern.data == "string":
+        elif pattern_data_str == "string":
             return pattern.children[0][1:-1]  # type: ignore
-        elif pattern.data == "true":
+        elif pattern_data_str == "true":
             return True
-        elif pattern.data == "false":
+        elif pattern_data_str == "false":
             return False
+        elif pattern_data_str == "list":
+            # Handle list literal in pattern context
+            if len(pattern.children) == 0 or (
+                len(pattern.children) == 1 and pattern.children[0] is None
+            ):
+                # Empty list []
+                return []
+            else:
+                # Non-empty list - evaluate the elements
+                elements = []
+                for child in pattern.children:
+                    if child is not None:
+                        elements.append(self._get_pattern_value(child))
+                return elements
         else:
             raise RuntimeError(f"Unknown literal pattern: {pattern.data}")
 
