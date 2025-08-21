@@ -1,23 +1,21 @@
--- "[1,2,3][1.1,2.2,3.3]["hello","world","haskell"][True,False,True]"
+-- "[1,2,3][1.1,2.2,3.3]["hello","world","haskell"][True,False,True]["Person Alice 25","Person Bob 30"]"
 data Person = Person String Int;
 
--- TODO: for-each
--- showPerson (Person name age) = "Person " ++ name ++ " " ++ (show age)
+personToString (Person name age) = "Person " ++ name ++ " " ++ (show age);
 
 main = do {
     let { xsInt    = [1, 2, 3] };
-    let { xsFloat  = [1.1, 2.2, 3.3] };
-    let { xsString = ["hello", "world", "haskell"] };
-    let { xsBool   = [True, False, True] };
-    let { xsPerson = [Person "Alice" 25, Person "Bob" 30] };
-
     putStr (show xsInt);
 
+    let { xsFloat  = [1.1, 2.2, 3.3] };
     putStr (show xsFloat);
 
+    let { xsString = ["hello", "world", "haskell"] };
     putStr (show xsString);
 
+    let { xsBool   = [True, False, True] };
     putStr (show xsBool);
 
-    -- TODO: putStr (showPerson xsPerson);
+    let { xsPerson = [Person "Alice" 25, Person "Bob" 30] };
+    putStr (show (map personToString xsPerson));
 };

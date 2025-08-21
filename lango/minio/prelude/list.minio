@@ -9,3 +9,6 @@ elem y (x:xs) =
 
 tail [] = []; -- TODO: ghc throws an error for empty list
 tail (x:xs) = xs;
+
+map x [] = [];
+map f (x:xs) = [f x] ++ map f xs;
