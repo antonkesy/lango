@@ -1,0 +1,23 @@
+-- "[1,2,3][1.1,2.2,3.3]["hello","world","haskell"][True,False,True]"
+data Person = Person String Int;
+
+-- TODO: for-each
+-- showPerson (Person name age) = "Person " ++ name ++ " " ++ (show age)
+
+main = do {
+    let { xsInt    = [1, 2, 3] };
+    let { xsFloat  = [1.1, 2.2, 3.3] };
+    let { xsString = ["hello", "world", "haskell"] };
+    let { xsBool   = [True, False, True] };
+    let { xsPerson = [Person "Alice" 25, Person "Bob" 30] };
+
+    putStr (show xsInt);
+
+    putStr (show xsFloat);
+
+    putStr (show xsString);
+
+    putStr (show xsBool);
+
+    -- TODO: putStr (showPerson xsPerson);
+};

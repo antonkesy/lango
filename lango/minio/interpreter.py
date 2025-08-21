@@ -101,6 +101,14 @@ def flexible_putStr(
         return None
 
 
+def _show(value: Value) -> str:
+    if isinstance(value, str):
+        return f'"{value}"'
+    elif isinstance(value, list):
+        return "[" + ",".join(_show(i) for i in value) + "]"
+    return str(value)
+
+
 builtins: Dict[str, Callable[..., Any]] = {
     "putStr": flexible_putStr,
     "getLine": lambda: input(),
@@ -108,7 +116,7 @@ builtins: Dict[str, Callable[..., Any]] = {
     "readString": lambda: input(),
     "readBool": lambda: input().lower() == "true",
     "concat": lambda x: lambda y: x + y,
-    "show": lambda x: f'"{x}"' if isinstance(x, str) else str(x),
+    "show": lambda x: _show(x),
     "mod": lambda x: lambda y: x % y,
 }
 
@@ -145,6 +153,24 @@ class Interpreter:
                     )
                 case "string":
                     return node.children[0][1:-1]  # type: ignore
+                case "list":
+                    # Evaluate list literal [1, 2, 3]
+                    elements = []
+                    for child in node.children:
+                        if child is None:
+                            # Skip None children from empty list grammar
+                            continue
+                        if isinstance(child, Tree) and child.data == Token(
+                            "RULE",
+                            "list",
+                        ):
+                            # Handle nested list structure from grammar
+                            for element in child.children:
+                                if element is not None:  # Also skip None in nested case
+                                    elements.append(self.eval(element))
+                        else:
+                            elements.append(self.eval(child))
+                    return elements
                 case "true":
                     return True
                 case "false":
@@ -210,7 +236,31 @@ class Interpreter:
                     return not self.eval(node.children[1])
                 # String
                 case "concat":
-                    return self.eval(node.children[0]) + self.eval(node.children[1])
+                    left = self.eval(node.children[0])
+                    right = self.eval(node.children[1])
+                    if isinstance(left, list) and isinstance(right, list):
+                        # List concatenation
+                        return left + right
+                    else:
+                        # String concatenation
+                        return str(left) + str(right)
+                case "index":
+                    # List indexing with !! operator
+                    list_val = self.eval(node.children[0])
+                    index_val = self.eval(node.children[1])
+                    if not isinstance(list_val, list):
+                        raise RuntimeError(
+                            f"Cannot index non-list value: {type(list_val)}",
+                        )
+                    if not isinstance(index_val, int):
+                        raise RuntimeError(
+                            f"List index must be an integer, got: {type(index_val)}",
+                        )
+                    if index_val < 0 or index_val >= len(list_val):
+                        raise RuntimeError(
+                            f"List index {index_val} out of bounds for list of length {len(list_val)}",
+                        )
+                    return list_val[index_val]
                 # Conditional
                 case "if_else":
                     condition = self.eval(node.children[0])
@@ -276,7 +326,7 @@ class Interpreter:
                     # handle grouped expressions
                     return self.eval(node.children[0])
                 case "constructor_expr":
-                    # handle record constructor expressions like Person { id = 1, name = "Alice" }
+                    # handle record constructor expressions like Person { id_ = 1, name = "Alice" }
                     constructor_name_token = node.children[0]
                     if isinstance(constructor_name_token, Token):
                         constructor_name = constructor_name_token.value

@@ -1,0 +1,6 @@
+-- "[1,2,3,4]"
+main = do {
+    let { xs = [1, 2] };
+    let { ys = [3, 4] };
+    putStr (show (xs ++ ys));
+};

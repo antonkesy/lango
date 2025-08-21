@@ -16,6 +16,8 @@ from lango.minio.typechecker.types import (
     FreshVarGenerator,
     FunctionType,
     Type,
+    TypeApp,
+    TypeCon,
     TypeScheme,
     TypeSubstitution,
     TypeVar,
@@ -417,6 +419,39 @@ class TypeInferrer:
                 case "true" | "false":
                     return BOOL_TYPE, TypeSubstitution()
 
+                case "list":
+                    # List literal [expr1, expr2, ..., exprN]
+                    # Note: empty lists have [None] as children due to Lark's optional matching
+                    if len(expr.children) == 0 or (
+                        len(expr.children) == 1 and expr.children[0] is None
+                    ):
+                        # Empty list: infer polymorphic list type
+                        element_type = self.fresh_type_var()
+                        return (
+                            TypeApp(TypeCon("List"), element_type),
+                            TypeSubstitution(),
+                        )
+
+                    # Non-empty list: infer element type from first element
+                    # and unify with all other elements
+                    first_type, s1 = self.infer_expr(expr.children[0], env)
+                    current_subst = s1
+
+                    # Unify all elements to have the same type
+                    for element_expr in expr.children[1:]:
+                        element_type, s2 = self.infer_expr(
+                            element_expr,
+                            env.substitute(current_subst),
+                        )
+
+                        # Unify with first element type
+                        s3 = unify([(current_subst.apply(first_type), element_type)])
+                        current_subst = s3.compose(s2).compose(current_subst)
+
+                    # Return list type with unified element type
+                    element_type = current_subst.apply(first_type)
+                    return TypeApp(TypeCon("List"), element_type), current_subst
+
                 case "var":
                     var_name_token = expr.children[0]
                     var_name = (
@@ -597,19 +632,63 @@ class TypeInferrer:
                     return BOOL_TYPE, final_subst
 
                 case "concat":
-                    # String concatenation
+                    # Concatenation: can be string ++ string or list ++ list
                     left_type, s1 = self.infer_expr(expr.children[0], env)
                     right_type, s2 = self.infer_expr(
                         expr.children[1],
                         env.substitute(s1),
                     )
 
-                    s3 = unify(
-                        [(s2.apply(left_type), STRING_TYPE), (right_type, STRING_TYPE)],
-                    )
-                    final_subst = s3.compose(s2).compose(s1)
+                    # Try string concatenation first
+                    try:
+                        s3 = unify(
+                            [
+                                (s2.apply(left_type), STRING_TYPE),
+                                (right_type, STRING_TYPE),
+                            ],
+                        )
+                        final_subst = s3.compose(s2).compose(s1)
+                        return STRING_TYPE, final_subst
+                    except UnificationError:
+                        # Try list concatenation
+                        element_type = self.fresh_type_var()
+                        list_type_left = TypeApp(TypeCon("List"), element_type)
+                        list_type_right = TypeApp(TypeCon("List"), element_type)
 
-                    return STRING_TYPE, final_subst
+                        s3 = unify(
+                            [
+                                (s2.apply(left_type), list_type_left),
+                                (right_type, list_type_right),
+                            ],
+                        )
+                        final_subst = s3.compose(s2).compose(s1)
+                        result_list_type = TypeApp(
+                            TypeCon("List"),
+                            final_subst.apply(element_type),
+                        )
+                        return result_list_type, final_subst
+
+                case "index":
+                    # List indexing: list !! int -> element_type
+                    list_expr_type, s1 = self.infer_expr(expr.children[0], env)
+                    index_type, s2 = self.infer_expr(
+                        expr.children[1],
+                        env.substitute(s1),
+                    )
+
+                    # Index must be Int
+                    s3 = unify([(index_type, INT_TYPE)])
+
+                    # List expression must be List element_type
+                    element_type = self.fresh_type_var()
+                    expected_list_type = TypeApp(TypeCon("List"), element_type)
+                    s4 = unify(
+                        [(s3.compose(s2).apply(list_expr_type), expected_list_type)],
+                    )
+
+                    final_subst = s4.compose(s3).compose(s2).compose(s1)
+                    result_type = final_subst.apply(element_type)
+                    return result_type, final_subst
 
                 case "constructor_expr":
                     # Record construction: Constructor { field = value, ... }

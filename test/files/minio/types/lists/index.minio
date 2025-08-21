@@ -1,0 +1,5 @@
+-- "2"
+main = do {
+    let { xs = [1, 2, 3] };
+    putStr (show (xs !! 1));
+};

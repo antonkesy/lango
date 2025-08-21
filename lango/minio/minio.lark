@@ -83,6 +83,9 @@ stmt_list: (do_stmt ";")+
          | unary_expr
 
 ?unary_expr: NOT unary_expr            -> not
+           | index_expr
+
+?index_expr: index_expr "!!" app_expr  -> index
            | app_expr
 
 ?app_expr: app_expr atom_expr      -> app
@@ -125,6 +128,9 @@ constructor_pattern: "(" UIDENT pattern+ ")"
         | STRING  -> string
         | "True"  -> true
         | "False" -> false
+        | list
+
+list: "[" [expr ("," expr)*] "]"
 
 // --- Tokens ---
 ID: /[a-z][a-zA-Z0-9_]*/

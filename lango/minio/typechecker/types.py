@@ -127,6 +127,12 @@ STRING_TYPE = TypeCon("String")
 FLOAT_TYPE = TypeCon("Float")
 BOOL_TYPE = TypeCon("Bool")
 UNIT_TYPE = TypeCon("()")  # For do blocks and putStr
+LIST_TYPE = TypeCon("List")  # List type constructor
+
+
+def list_type(element_type: Type) -> Type:
+    """Create a list type with the given element type"""
+    return TypeApp(LIST_TYPE, element_type)
 
 
 class TypeSubstitution:
