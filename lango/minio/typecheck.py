@@ -3,7 +3,6 @@ from lango.minio.typechecker.infer_ast import type_check_ast as type_check_ast_i
 
 
 def get_type_str(ast: Program) -> str:
-    """Get type information for a Minio program file."""
     res = ""
 
     try:
@@ -16,7 +15,6 @@ def get_type_str(ast: Program) -> str:
 
 
 def type_check(ast: Program) -> bool:
-    """Type check a Minio program file."""
     try:
         type_check_ast_impl(ast)
         return True

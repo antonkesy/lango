@@ -37,13 +37,10 @@ def format_type(ty: Optional["Type"]) -> str:
 
 
 def print_annotated_ast(ast: Program, indent: int = 0) -> None:
-    """Print an AST with type annotations."""
-    print("=== ANNOTATED AST ===")
     _print_node(ast, indent)
 
 
 def _print_node(node: ASTNode, indent: int = 0) -> None:
-    """Print a single AST node with type annotation."""
     prefix = "  " * indent
     type_str = format_type(getattr(node, "ty", None))
 

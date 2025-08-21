@@ -53,10 +53,10 @@ def ast(
         help="Path to .minio file to show annotated AST",
     ),
 ):
-    """Show AST with type annotations after type checking"""
-
     ast = parse(input_file)
-    type_check(ast)  # This will annotate the AST
+    if not type_check(ast):
+        console.print("Type checking failed, cannot print AST.", style="bold red")
+        return
     print_annotated_ast(ast)
 
 

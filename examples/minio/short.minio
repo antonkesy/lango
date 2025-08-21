@@ -10,10 +10,10 @@ isTrue False = "False";
 l = [1, 2, 3];
 
 main = do {
-  putStr isTrue True;
+  putStr (isTrue True);
 
   let { point = MkPoint 3.0};
-  putStr printPoint point;
+  putStr (printPoint point);
 
   putStr (show (length l));
 };
