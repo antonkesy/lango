@@ -75,7 +75,6 @@ from lango.minio.typechecker.unify import UnificationError, unify_one
 
 TypeBindings = Dict[str, TypeScheme]
 InferenceResult = Tuple[Type, TypeSubstitution]
-EnvironmentBinding = Dict[str, TypeScheme]
 
 
 class TypeEnvironment:

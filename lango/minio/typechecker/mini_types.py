@@ -131,7 +131,6 @@ STRING_TYPE = TypeCon("String")
 FLOAT_TYPE = TypeCon("Float")
 BOOL_TYPE = TypeCon("Bool")
 UNIT_TYPE = TypeCon("()")  # For do blocks and putStr
-LIST_TYPE = TypeCon("List")  # List type constructor
 
 
 class TypeSubstitution:
