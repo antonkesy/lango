@@ -5,7 +5,7 @@ This module provides a transformer that converts raw Lark Tree and Token
 objects into our structured AST node classes defined in ast_nodes.py.
 """
 
-from typing import Any, List, Optional, Union
+from typing import Any, List, Union
 
 from lark import Token, Transformer, Tree
 
@@ -458,7 +458,6 @@ class ASTTransformer(Transformer):
     # Root
     def start(self, items: List[Any]) -> Program:
         """Transform the root program."""
-        # Filter out prelude/postlude comments and None items
         statements = []
         for item in items:
             if item is not None and not isinstance(item, list):
@@ -467,14 +466,6 @@ class ASTTransformer(Transformer):
                 statements.extend(item)
 
         return Program(statements)
-
-    def prelude(self, items: List[Any]) -> None:
-        """Transform prelude (comments) - ignore."""
-        return None
-
-    def postlude(self, items: List[Any]) -> None:
-        """Transform postlude (comments) - ignore."""
-        return None
 
 
 def transform_parse_tree(tree: Tree) -> Program:

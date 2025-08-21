@@ -2,7 +2,7 @@
 Unification algorithm for the Hindley-Milner type system
 """
 
-from lango.minio.typechecker.types import (
+from lango.minio.typechecker.mini_types import (
     DataType,
     FunctionType,
     Type,

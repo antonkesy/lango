@@ -8,7 +8,6 @@ def get_type_str(ast: Program) -> str:
 
     try:
         type_env = type_check_ast_impl(ast)
-        res += "Inferred types:\n"
         for name, scheme in type_env.items():
             res += f"  {name} :: {scheme}\n"
     except Exception as e:

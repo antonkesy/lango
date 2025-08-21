@@ -54,7 +54,7 @@ from lango.minio.ast_nodes import (
     Variable,
     VariablePattern,
 )
-from lango.minio.typechecker.types import (
+from lango.minio.typechecker.mini_types import (
     BOOL_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
