@@ -194,7 +194,7 @@ class TypeScheme:
         if not self.quantified_vars:
             return self.type
 
-        subst_mapping = {}
+        subst_mapping: Dict[str, Type] = {}
         for var in self.quantified_vars:
             fresh_var = fresh_var_gen.fresh()
             subst_mapping[var] = TypeVar(fresh_var)

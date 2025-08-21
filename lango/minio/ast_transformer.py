@@ -51,6 +51,7 @@ from lango.minio.ast_nodes import (
     NotEqualOperation,
     NotOperation,
     OrOperation,
+    Pattern,
     PowFloatOperation,
     PowIntOperation,
     Program,
@@ -337,7 +338,7 @@ class ASTTransformer(Transformer):
         raw_patterns = items[1:]
 
         # Convert tokens and expressions to patterns
-        converted_patterns = []
+        converted_patterns: List[Pattern] = []
         for pattern in raw_patterns:
             if isinstance(pattern, Token):
                 if pattern.type == "ID":
@@ -437,7 +438,7 @@ class ASTTransformer(Transformer):
         body = items[-1]
 
         # Convert tokens and expressions to patterns if needed
-        converted_patterns = []
+        converted_patterns: List[Pattern] = []
         for pattern in patterns:
             if isinstance(pattern, Token):
                 if pattern.type == "ID":

@@ -2,7 +2,7 @@
 AST-based type inference engine using the Hindley-Milner algorithm.
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
 from lango.minio.ast_nodes import (
     AddOperation,
@@ -117,7 +117,7 @@ class TypeEnvironment:
             free_vars.update(scheme.free_vars())
         return free_vars
 
-    def items(self):
+    def items(self) -> ItemsView[str, TypeScheme]:
         """Return items for iteration."""
         return self.bindings.items()
 
@@ -133,7 +133,7 @@ class TypeEnvironment:
 class TypeInferenceError(Exception):
     """Exception raised during type inference."""
 
-    def __init__(self, message: str, node: Optional[ASTNode] = None):
+    def __init__(self, message: str, node: Optional[ASTNode] = None) -> None:
         self.message = message
         self.node = node
         super().__init__(message)
@@ -142,7 +142,7 @@ class TypeInferenceError(Exception):
 class TypeInferrer:
     """AST-based Hindley-Milner type inference engine."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the type inferrer."""
         self.fresh_var_gen = FreshVarGenerator()
         self.data_types: Dict[str, List[str]] = {}  # type_name -> [constructor_names]
@@ -161,7 +161,7 @@ class TypeInferrer:
         type_params = [param.name for param in node.type_params]
 
         constructor_names = []
-        constructor_types = {}
+        constructor_types: Dict[str, TypeScheme] = {}
 
         for constructor in node.constructors:
             ctor_name = constructor.name
@@ -179,13 +179,14 @@ class TypeInferrer:
                     field_types.append(field_type)
 
                 # For record constructors, create a function that takes all fields
-                ctor_type = result_type
+                ctor_type: Type = result_type
                 for field_type in reversed(field_types):
                     ctor_type = FunctionType(field_type, ctor_type)
 
                 # Generalize over the type parameters
                 bound_vars = set(type_params)
-                constructor_types[ctor_name] = TypeScheme(bound_vars, ctor_type)
+                ctor_scheme = TypeScheme(bound_vars, ctor_type)
+                constructor_types[ctor_name] = ctor_scheme
                 self.data_constructors[ctor_name] = (type_name, field_types)
 
             else:
@@ -193,7 +194,8 @@ class TypeInferrer:
                 if not constructor.type_atoms:
                     # Nullary constructor
                     bound_vars = set(type_params)
-                    ctor_type = TypeScheme(bound_vars, result_type)
+                    ctor_scheme = TypeScheme(bound_vars, result_type)
+                    constructor_types[ctor_name] = ctor_scheme
                 else:
                     # Constructor with arguments
                     field_types = []
@@ -202,15 +204,18 @@ class TypeInferrer:
                         field_types.append(field_type)
 
                     # Create function type: field1 -> field2 -> ... -> DataType
-                    ctor_type = result_type
+                    positional_ctor_type: Type = result_type
                     for field_type in reversed(field_types):
-                        ctor_type = FunctionType(field_type, ctor_type)
+                        positional_ctor_type = FunctionType(
+                            field_type,
+                            positional_ctor_type,
+                        )
 
                     # Generalize over the type parameters
                     bound_vars = set(type_params)
-                    ctor_type = TypeScheme(bound_vars, ctor_type)
+                    ctor_scheme = TypeScheme(bound_vars, positional_ctor_type)
+                    constructor_types[ctor_name] = ctor_scheme
 
-                constructor_types[ctor_name] = ctor_type
                 self.data_constructors[ctor_name] = (type_name, [])
 
         self.data_types[type_name] = constructor_names
@@ -251,7 +256,7 @@ class TypeInferrer:
 
             if isinstance(constructor_type, DataType):
                 # Apply type argument to data type
-                new_args = constructor_type.args + [argument_type]
+                new_args = constructor_type.type_args + [argument_type]
                 return DataType(constructor_type.name, new_args)
             else:
                 return TypeApp(constructor_type, argument_type)
@@ -408,7 +413,8 @@ class TypeInferrer:
                 raise TypeInferenceError(f"Concatenation operands must have same type")
 
         elif isinstance(expr, IndexOperation):
-            list_type, list_subst = self.infer_expr(expr.list_expr, env)
+            indexed_list_type: Type
+            indexed_list_type, list_subst = self.infer_expr(expr.list_expr, env)
             index_type, index_subst = self.infer_expr(
                 expr.index_expr,
                 env.apply_substitution(list_subst),
@@ -429,14 +435,14 @@ class TypeInferrer:
 
             try:
                 list_unify = unify_one(
-                    list_type.apply_substitution(subst_with_int),
+                    indexed_list_type.apply_substitution(subst_with_int),
                     expected_list_type,
                 )
                 final_subst = subst_with_int.compose(list_unify)
                 return element_type.apply_substitution(final_subst), final_subst
             except UnificationError:
                 raise TypeInferenceError(
-                    f"Index operation requires a List, got {list_type}",
+                    f"Index operation requires a List, got {indexed_list_type}",
                 )
 
         # Control flow
@@ -836,7 +842,7 @@ class TypeInferrer:
         # Return constructor result type (simplified)
         if isinstance(constructor_type, FunctionType):
             # Walk through function type to get final return type
-            result_type = constructor_type
+            result_type: Type = constructor_type
             while isinstance(result_type, FunctionType):
                 result_type = result_type.result
             return result_type, current_subst
@@ -873,7 +879,7 @@ class TypeInferrer:
             # Unify pattern type with constructor result type
             if isinstance(constructor_type, FunctionType):
                 # Walk through function type to get result type
-                result_type = constructor_type
+                result_type: Type = constructor_type
                 param_types = []
                 while isinstance(result_type, FunctionType):
                     param_types.append(result_type.param)

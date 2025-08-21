@@ -47,7 +47,7 @@ from lango.minio.ast_nodes import (
 class SimpleTypeChecker:
     """Simplified type checker for AST nodes."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.var_types: Dict[str, str] = {}  # Simple string types for now
         self.function_types: Dict[str, str] = {}
 
