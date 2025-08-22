@@ -118,11 +118,15 @@ def flexible_putStr(
         # If given a function (like 'show'), return a curried function
         def curried_putStr(value: Value) -> None:
             result = arg(value)  # Apply the function to the value
+            if isinstance(result, str):
+                result = result.encode().decode("unicode_escape")
             print(result, end="")
 
         return curried_putStr
     else:
         # If given a direct value, print it
+        if isinstance(arg, str):
+            arg = arg.encode().decode("unicode_escape")
         print(arg, end="")
         return None
 
