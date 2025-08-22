@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Set
 
-from lango.minio.ast_nodes import *
+from lango.minio.ast.nodes import *
 
 
 class MinioCompiler:

@@ -2,7 +2,7 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Any, List, Optional, Union
 
-from lango.minio.typechecker.mini_types import Type
+from lango.minio.typechecker.minio_types import Type
 
 
 # Base AST Node

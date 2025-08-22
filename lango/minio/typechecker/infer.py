@@ -4,7 +4,7 @@ AST-based type inference engine using the Hindley-Milner algorithm.
 
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
-from lango.minio.ast_nodes import (
+from lango.minio.ast.nodes import (
     AddOperation,
     AndOperation,
     ArrowType,
@@ -54,7 +54,7 @@ from lango.minio.ast_nodes import (
     Variable,
     VariablePattern,
 )
-from lango.minio.typechecker.mini_types import (
+from lango.minio.typechecker.minio_types import (
     BOOL_TYPE,
     FLOAT_TYPE,
     INT_TYPE,

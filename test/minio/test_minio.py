@@ -4,10 +4,10 @@ import tempfile
 
 import pytest
 
-from lango.minio.compiler import compile_program
-from lango.minio.interpreter import interpret
-from lango.minio.parser import parse
-from lango.minio.typecheck import type_check
+from lango.minio.compiler.python import compile_program
+from lango.minio.interpreter.interpreter import interpret
+from lango.minio.parser.parser import parse
+from lango.minio.typechecker.typecheck import type_check
 
 BASE_TEST_FILES_PATH = "./test/files/minio/"
 EXAMPLE = "./examples/minio/example.minio"

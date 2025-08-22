@@ -4,7 +4,7 @@ AST printer for displaying type-annotated AST nodes.
 
 from typing import TYPE_CHECKING, Optional
 
-from lango.minio.ast_nodes import (
+from lango.minio.ast.nodes import (
     AddOperation,
     ASTNode,
     BoolLiteral,
@@ -26,7 +26,7 @@ from lango.minio.ast_nodes import (
 )
 
 if TYPE_CHECKING:
-    from lango.minio.typechecker.mini_types import Type
+    from lango.minio.typechecker.minio_types import Type
 
 
 def format_type(ty: Optional["Type"]) -> str:

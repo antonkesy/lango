@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from lango.minio.ast_nodes import (
+from lango.minio.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
@@ -49,7 +49,7 @@ from lango.minio.ast_nodes import (
     Variable,
     VariablePattern,
 )
-from lango.minio.typecheck import type_check
+from lango.minio.typechecker.typecheck import type_check
 
 # Type aliases for the interpreter
 Value = Any  # Any runtime value

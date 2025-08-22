@@ -5,7 +5,7 @@ This is a minimal implementation to demonstrate the concept.
 
 from typing import Dict
 
-from lango.minio.ast_nodes import (
+from lango.minio.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
@@ -44,7 +44,7 @@ from lango.minio.ast_nodes import (
 )
 
 
-class SimpleTypeChecker:
+class TypeChecker:
     """Simplified type checker for AST nodes."""
 
     def __init__(self) -> None:
@@ -281,9 +281,8 @@ class SimpleTypeChecker:
 
 def type_check_ast(ast: Program) -> Dict[str, str]:
     """Simple type check that returns a dictionary of inferred types."""
-    checker = SimpleTypeChecker()
+    checker = TypeChecker()
     if checker.check_program(ast):
-        # Return combined type information
         result = {}
         result.update(checker.var_types)
         result.update(checker.function_types)

@@ -2,13 +2,13 @@ import os
 
 from lark import Lark, ParseTree
 
-from lango.minio.ast_nodes import Program
-from lango.minio.ast_transformer import transform_parse_tree
+from lango.minio.ast.nodes import Program
+from lango.minio.ast.transformer import transform_parse_tree
 
 
 def _parse_lark(path: str) -> ParseTree:
     parser = Lark.open(
-        "./lango/minio/minio.lark",
+        "./lango/minio/parser/minio.lark",
         parser="lalr",
     )
 

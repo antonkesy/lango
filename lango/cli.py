@@ -1,11 +1,11 @@
 import typer
 from rich.console import Console
 
-from lango.minio.ast_printer import print_annotated_ast
-from lango.minio.compiler import compile_program
-from lango.minio.interpreter import interpret
-from lango.minio.parser import parse
-from lango.minio.typecheck import get_type_str, type_check
+from lango.minio.ast.printer import print_annotated_ast
+from lango.minio.compiler.python import compile_program
+from lango.minio.interpreter.interpreter import interpret
+from lango.minio.parser.parser import parse
+from lango.minio.typechecker.typecheck import get_type_str, type_check
 
 app = typer.Typer()
 console = Console()
