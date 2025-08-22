@@ -145,7 +145,6 @@ builtins: Dict[str, Callable[..., Any]] = {
     "readBool": lambda: input().lower() == "true",
     "concat": lambda x: lambda y: x + y,
     "show": lambda x: _show(x),
-    "mod": lambda x: lambda y: x % y,
 }
 
 

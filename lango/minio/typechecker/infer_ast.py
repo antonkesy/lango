@@ -1027,14 +1027,6 @@ class TypeInferrer:
         show_type = FunctionType(TypeVar("a"), TypeCon("String"))
         env = env.extend("show", TypeScheme({"a"}, show_type))
 
-        # Mathematical functions
-        # mod :: Int -> Int -> Int
-        mod_type = FunctionType(
-            TypeCon("Int"),
-            FunctionType(TypeCon("Int"), TypeCon("Int")),
-        )
-        env = env.extend("mod", TypeScheme(set(), mod_type))
-
         # Comparison operators
         # (==) :: a -> a -> Bool
         eq_type = FunctionType(

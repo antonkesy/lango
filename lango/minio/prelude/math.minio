@@ -1,0 +1,2 @@
+mod x 0 = 0; -- TODO: actually this sholuld be an error
+mod x y = if x < y then x else (mod (x - y) y);
