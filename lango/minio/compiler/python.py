@@ -463,7 +463,8 @@ class MinioCompiler:
                                 # Positional constructor - use arg_ access
                                 return f"match {value_expr}:\n        case {constructor}():\n            {var_name} = {value_expr}.arg_0\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
                         case _:
-                            pass
+                            # Handle non-variable patterns with single argument
+                            return f"match {value_expr}:\n        case {constructor}():\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
                 elif len(patterns) > 1:
                     # Multiple variables in constructor pattern
                     constructor_def = self._find_constructor_def(constructor)
