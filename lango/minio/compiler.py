@@ -65,11 +65,12 @@ class MinioCompiler:
             "        return value",
             "    elif isinstance(value, list):",
             "        elements = [minio_show(x) for x in value]",
-            "        return '[' + ', '.join(elements) + ']'",
+            "        return '[' + ','.join(elements) + ']'",
             "    else:",
             "        return str(value)",
             "",
             "def minio_put_str(s):",
+            '    if isinstance(s, str): s = s.encode().decode("unicode_escape")',
             "    print(s, end='')",
             "",
             "",
@@ -179,6 +180,23 @@ class MinioCompiler:
         # Multiple definitions or pattern matching - use *args approach
         lines = [f"def {prefixed_func_name}(*args):"]
         self.indent_level += 1
+
+        # Find maximum number of parameters needed
+        max_params = (
+            max(len(defn.patterns) for defn in definitions) if definitions else 0
+        )
+
+        # Add currying support for multi-parameter functions
+        if max_params > 1:
+            lines.append(self._indent() + f"if len(args) < {max_params}:")
+            self.indent_level += 1
+            lines.append(
+                self._indent()
+                + "return lambda *more_args: "
+                + prefixed_func_name
+                + "(*(args + more_args))",
+            )
+            self.indent_level -= 1
 
         # Collect all pattern variables from all definitions
         old_local_vars = self.local_variables.copy()
@@ -488,8 +506,24 @@ class MinioCompiler:
             return f"({self._compile_expression(expr.left)} / {self._compile_expression(expr.right)})"
         elif isinstance(expr, EqualOperation):
             return f"({self._compile_expression(expr.left)} == {self._compile_expression(expr.right)})"
+        elif isinstance(expr, NotEqualOperation):
+            return f"({self._compile_expression(expr.left)} != {self._compile_expression(expr.right)})"
+        elif isinstance(expr, LessThanOperation):
+            return f"({self._compile_expression(expr.left)} < {self._compile_expression(expr.right)})"
+        elif isinstance(expr, LessEqualOperation):
+            return f"({self._compile_expression(expr.left)} <= {self._compile_expression(expr.right)})"
+        elif isinstance(expr, GreaterThanOperation):
+            return f"({self._compile_expression(expr.left)} > {self._compile_expression(expr.right)})"
+        elif isinstance(expr, GreaterEqualOperation):
+            return f"({self._compile_expression(expr.left)} >= {self._compile_expression(expr.right)})"
         elif isinstance(expr, ConcatOperation):
             return f"({self._compile_expression(expr.left)} + {self._compile_expression(expr.right)})"
+        elif isinstance(expr, AndOperation):
+            return f"({self._compile_expression(expr.left)} and {self._compile_expression(expr.right)})"
+        elif isinstance(expr, OrOperation):
+            return f"({self._compile_expression(expr.left)} or {self._compile_expression(expr.right)})"
+        elif isinstance(expr, NotOperation):
+            return f"(not {self._compile_expression(expr.operand)})"
         elif isinstance(expr, IfElse):
             return f"({self._compile_expression(expr.then_expr)} if {self._compile_expression(expr.condition)} else {self._compile_expression(expr.else_expr)})"
         elif isinstance(expr, FunctionApplication):
