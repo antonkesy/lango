@@ -96,6 +96,117 @@ class MinioCompiler:
                 pass
         return variables
 
+    def _build_record_pattern_match(
+        self,
+        value_expr: str,
+        constructor: str,
+        field_name: str,
+        var_name: str,
+        body: Expression,
+    ) -> str:
+        """Build a readable pattern match for record constructors."""
+        lines = [
+            f"match {value_expr}:",
+            f"        case {constructor}() if hasattr({value_expr}, 'fields') and '{field_name}' in {value_expr}.fields:",
+            f"            {var_name} = {value_expr}.fields['{field_name}']",
+            f"            return {self._compile_expression(body)}",
+            "        case _:",
+            "            raise ValueError('Pattern match failed')",
+        ]
+        return "\n".join(lines)
+
+    def _build_positional_pattern_match(
+        self,
+        value_expr: str,
+        constructor: str,
+        var_name: str,
+        body: Expression,
+        arg_index: int = 0,
+    ) -> str:
+        lines = [
+            f"match {value_expr}:",
+            f"        case {constructor}():",
+            f"            {var_name} = {value_expr}.arg_{arg_index}",
+            f"            return {self._compile_expression(body)}",
+            "        case _:",
+            "            raise ValueError('Pattern match failed')",
+        ]
+        return "\n".join(lines)
+
+    def _build_multi_arg_pattern_match(
+        self,
+        value_expr: str,
+        constructor: str,
+        assignments: List[str],
+        body: Expression,
+    ) -> str:
+        lines = [f"match {value_expr}:", f"        case {constructor}():"]
+        for assignment in assignments:
+            lines.append(f"            {assignment}")
+        lines.extend(
+            [
+                f"            return {self._compile_expression(body)}",
+                "        case _:",
+                "            raise ValueError('Pattern match failed')",
+            ],
+        )
+        return "\n".join(lines)
+
+    def _build_literal_pattern_match(
+        self,
+        value_expr: str,
+        value: Any,
+        body: Expression,
+    ) -> str:
+        lines = [
+            f"if {value_expr} == {self._compile_literal_value(value)}:",
+            f"        return {self._compile_expression(body)}",
+            "    else:",
+            "        raise ValueError('Pattern match failed')",
+        ]
+        return "\n".join(lines)
+
+    def _build_cons_pattern_match(
+        self,
+        value_expr: str,
+        head_var: Optional[str],
+        tail_var: Optional[str],
+        body: Expression,
+    ) -> str:
+        """Build a readable pattern match for cons patterns (x:xs)."""
+        assignments = []
+        if head_var:
+            assignments.append(f"        {head_var} = {value_expr}[0]")
+        if tail_var:
+            assignments.append(f"        {tail_var} = {value_expr}[1:]")
+
+        lines = [f"if len({value_expr}) > 0:"]
+        lines.extend(assignments)
+        lines.extend(
+            [
+                f"        return {self._compile_expression(body)}",
+                "    else:",
+                "        raise ValueError('Pattern match failed')",
+            ],
+        )
+        return "\n".join(lines)
+
+    def _build_simple_pattern_match(
+        self,
+        value_expr: str,
+        constructor: str,
+        body: Expression,
+    ) -> str:
+        """Build a readable pattern match for constructors with no arguments."""
+        lines = [
+            f"match {value_expr}:",
+            f"        case {constructor}():",
+            f"            return {self._compile_expression(body)}",
+            "        case _:",
+            "            raise ValueError('Pattern match failed')",
+        ]
+        return "\n".join(lines)
+
     def compile(self, program: Program) -> str:
         lines = [
             "# Generated Python code from Minio",
@@ -455,7 +566,7 @@ class MinioCompiler:
                 self.local_variables.add(name)
                 return f"{name} = {value_expr}\n    return {self._compile_expression(body)}"
             case LiteralPattern(value=value):
-                return f"if {value_expr} == {self._compile_literal_value(value)}:\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
+                return self._build_literal_pattern_match(value_expr, value, body)
             case ConsPattern(head=head, tail=tail):
                 # Cons pattern (x:xs) - destructure list
                 head_var = None
@@ -473,14 +584,12 @@ class MinioCompiler:
                     case _:
                         pass
 
-                assignments = []
-                if head_var:
-                    assignments.append(f"        {head_var} = {value_expr}[0]")
-                if tail_var:
-                    assignments.append(f"        {tail_var} = {value_expr}[1:]")
-
-                assignment_lines = "\n".join(assignments)
-                return f"if len({value_expr}) > 0:\n{assignment_lines}\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
+                return self._build_cons_pattern_match(
+                    value_expr,
+                    head_var,
+                    tail_var,
+                    body,
+                )
             case ConstructorPattern(constructor=constructor, patterns=patterns):
                 # Extract variables from constructor pattern
                 for sub_pattern in patterns:
@@ -499,13 +608,29 @@ class MinioCompiler:
                                 field_name = constructor_def.record_constructor.fields[
                                     0
                                 ].name
-                                return f"match {value_expr}:\n        case {constructor}() if hasattr({value_expr}, 'fields') and '{field_name}' in {value_expr}.fields:\n            {var_name} = {value_expr}.fields['{field_name}']\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                                return self._build_record_pattern_match(
+                                    value_expr,
+                                    constructor,
+                                    field_name,
+                                    var_name,
+                                    body,
+                                )
                             else:
                                 # Positional constructor - use arg_ access
-                                return f"match {value_expr}:\n        case {constructor}():\n            {var_name} = {value_expr}.arg_0\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                                return self._build_positional_pattern_match(
+                                    value_expr,
+                                    constructor,
+                                    var_name,
+                                    body,
+                                    arg_index=0,
+                                )
                         case _:
                             # Handle non-variable patterns with single argument
-                            return f"match {value_expr}:\n        case {constructor}():\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                            return self._build_simple_pattern_match(
+                                value_expr,
+                                constructor,
+                                body,
+                            )
                 elif len(patterns) > 1:
                     # Multiple variables in constructor pattern
                     constructor_def = self._find_constructor_def(constructor)
@@ -522,7 +647,7 @@ class MinioCompiler:
                                         ].name
                                     )
                                     assignments.append(
-                                        f"            {name} = {value_expr}.fields['{field_name}']",
+                                        f"{name} = {value_expr}.fields['{field_name}']",
                                     )
                                 case _:
                                     pass
@@ -532,16 +657,24 @@ class MinioCompiler:
                             match sub_pattern:
                                 case VariablePattern(name=name):
                                     assignments.append(
-                                        f"            {name} = {value_expr}.arg_{k}",
+                                        f"{name} = {value_expr}.arg_{k}",
                                     )
                                 case _:
                                     pass
 
-                    assignment_lines = "\n".join(assignments)
-                    return f"match {value_expr}:\n        case {constructor}():\n{assignment_lines}\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                    return self._build_multi_arg_pattern_match(
+                        value_expr,
+                        constructor,
+                        assignments,
+                        body,
+                    )
                 else:
                     # Constructor with no arguments
-                    return f"match {value_expr}:\n        case {constructor}():\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                    return self._build_simple_pattern_match(
+                        value_expr,
+                        constructor,
+                        body,
+                    )
             case _:
                 return f"return {self._compile_expression(body)}"
 
