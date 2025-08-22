@@ -9,7 +9,7 @@ from lango.minio.interpreter.interpreter import interpret
 from lango.minio.parser.parser import parse
 from lango.minio.typechecker.typecheck import type_check
 
-BASE_TEST_FILES_PATH = "./test/files/minio/"
+BASE_TEST_FILES_PATH = "./test/minio/files/"
 EXAMPLE = "./examples/minio/example.minio"
 
 
