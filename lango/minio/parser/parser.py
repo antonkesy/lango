@@ -2,7 +2,7 @@ import os
 
 from lark import Lark, ParseTree
 
-from lango.minio.ast.nodes import Program
+from lango.minio.ast.nodes import FunctionDefinition, Program
 from lango.minio.ast.transformer import transform_parse_tree
 
 
@@ -32,4 +32,14 @@ def _parse_lark(path: str) -> ParseTree:
 
 
 def parse(path: str) -> Program:
-    return transform_parse_tree(_parse_lark(path))
+    program = transform_parse_tree(_parse_lark(path))
+
+    has_main = any(
+        isinstance(stmt, FunctionDefinition) and stmt.function_name == "main"
+        for stmt in program.statements
+    )
+
+    if not has_main:
+        raise RuntimeError(f"No main function defined in {path}")
+
+    return program
