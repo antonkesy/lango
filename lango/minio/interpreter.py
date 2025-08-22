@@ -139,11 +139,6 @@ def _show(value: Value) -> str:
 # Built-in functions available in the language
 builtins: Dict[str, Callable[..., Any]] = {
     "putStr": flexible_putStr,
-    "getLine": lambda: input(),
-    "readInt": lambda: int(input()),
-    "readString": lambda: input(),
-    "readBool": lambda: input().lower() == "true",
-    "concat": lambda x: lambda y: x + y,
     "show": lambda x: _show(x),
 }
 
