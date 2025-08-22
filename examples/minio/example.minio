@@ -2,6 +2,7 @@
 data Person = Person { id_ :: Int, name :: String };
 
 person1 = Person { id_ = 1, name = "Alice" };
+person2 = Person { name = "Bob", id_ = 2 };
 
 printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name;
 
@@ -39,6 +40,7 @@ main = do {
 
   putStr "\nTesting Person data type:";
   putStr ("\nPerson 1: " ++ printPerson person1);
+  putStr ("\nPerson 2: " ++ printPerson person2);
 
   putStr "\nTesting Point data type:";
   let { point = MkPoint 3.0 4.0};

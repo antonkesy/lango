@@ -2,6 +2,7 @@ import typer
 from rich.console import Console
 
 from lango.minio.ast_printer import print_annotated_ast
+from lango.minio.compiler import compile_program
 from lango.minio.interpreter import interpret
 from lango.minio.parser import parse
 from lango.minio.typecheck import get_type_str, type_check
@@ -66,12 +67,38 @@ def typecheck(
         help="Path to .minio file to type check",
     ),
 ) -> int:
-    """Type check a Minio program"""
     if type_check(parse(input_file)):
         console.print("Type checking succeeded", style="bold green")
         return 0
     else:
         console.print("Type checking failed", style="bold red")
+        return 1
+
+
+@app.command()
+def compile(
+    input_file: str = typer.Argument(
+        help="Path to .minio file to compile to Python",
+    ),
+    output_file: str = typer.Option(
+        "out.py",
+        "--output",
+        "-o",
+        help="Output Python file path",
+    ),
+) -> int:
+    try:
+        ast = parse(input_file)
+        python_code = compile_program(ast)
+
+        with open(output_file, "w") as f:
+            f.write(python_code)
+
+        console.print(f"Compiled {input_file} to {output_file}", style="bold green")
+        return 0
+
+    except Exception as e:
+        console.print(f"Compilation failed: {e}", style="bold red")
         return 1
 
 

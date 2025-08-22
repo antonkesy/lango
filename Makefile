@@ -4,6 +4,7 @@
 	install
 	install-dev
 	run
+	compile
 	type
 	test
 	coverage
@@ -26,6 +27,11 @@ install-dev:
 run: install
 	. .venv/bin/activate && \
 	lango run --input_file examples/minio/example.minio
+
+compile: install
+	. .venv/bin/activate && \
+	lango compile examples/minio/example.minio -o ./build/example.py && \
+	python3.13 ./build/example.py
 
 types: install
 	. .venv/bin/activate && \

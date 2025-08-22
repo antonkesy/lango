@@ -447,10 +447,14 @@ class ASTTransformer(Transformer):
                     converted_patterns.append(LiteralPattern(pattern.value))
             elif isinstance(
                 pattern,
-                (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
+                (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral, ListLiteral),
             ):
                 # Convert literals to literal patterns
-                converted_patterns.append(LiteralPattern(pattern.value))
+                if isinstance(pattern, ListLiteral):
+                    # For list literals in patterns, convert to LiteralPattern with the list value
+                    converted_patterns.append(LiteralPattern(pattern.elements))
+                else:
+                    converted_patterns.append(LiteralPattern(pattern.value))
             else:
                 converted_patterns.append(pattern)
 
