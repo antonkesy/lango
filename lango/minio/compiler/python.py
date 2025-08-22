@@ -4,7 +4,7 @@ from lango.minio.ast.nodes import *
 
 
 class MinioCompiler:
-    def __init__(self):
+    def __init__(self) -> None:
         self.indent_level = 0
         self.defined_functions: Set[str] = set()
         self.nullary_functions: Set[str] = set()  # Functions with no parameters
@@ -534,8 +534,8 @@ class MinioCompiler:
             return f"({self._compile_expression(expr.then_expr)} if {self._compile_expression(expr.condition)} else {self._compile_expression(expr.else_expr)})"
         elif isinstance(expr, FunctionApplication):
             # Check if this is a constructor application
-            args = []
-            current = expr
+            args: List[Expression] = []
+            current: Expression = expr
 
             # Collect all arguments for potential constructor calls
             while isinstance(current, FunctionApplication):

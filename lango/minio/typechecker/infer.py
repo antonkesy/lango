@@ -273,19 +273,15 @@ class TypeInferrer:
 
         # Literals
         if isinstance(expr, IntLiteral) or isinstance(expr, NegativeInt):
-            expr.ty = INT_TYPE
             return INT_TYPE, TypeSubstitution()
 
         elif isinstance(expr, FloatLiteral) or isinstance(expr, NegativeFloat):
-            expr.ty = FLOAT_TYPE
             return FLOAT_TYPE, TypeSubstitution()
 
         elif isinstance(expr, StringLiteral):
-            expr.ty = STRING_TYPE
             return STRING_TYPE, TypeSubstitution()
 
         elif isinstance(expr, BoolLiteral):
-            expr.ty = BOOL_TYPE
             return BOOL_TYPE, TypeSubstitution()
 
         elif isinstance(expr, ListLiteral):
