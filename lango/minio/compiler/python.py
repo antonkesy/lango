@@ -41,15 +41,18 @@ class MinioCompiler:
     def _extract_pattern_variables(self, pattern: Pattern) -> Set[str]:
         """Extract all variable names from a pattern recursively."""
         variables = set()
-        if isinstance(pattern, VariablePattern):
-            variables.add(pattern.name)
-        elif isinstance(pattern, ConstructorPattern):
-            for sub_pattern in pattern.patterns:
-                variables.update(self._extract_pattern_variables(sub_pattern))
-        elif isinstance(pattern, ConsPattern):
-            variables.update(self._extract_pattern_variables(pattern.head))
-            variables.update(self._extract_pattern_variables(pattern.tail))
-        # Other pattern types don't contain variables
+        match pattern:
+            case VariablePattern(name=name):
+                variables.add(name)
+            case ConstructorPattern(patterns=patterns):
+                for sub_pattern in patterns:
+                    variables.update(self._extract_pattern_variables(sub_pattern))
+            case ConsPattern(head=head, tail=tail):
+                variables.update(self._extract_pattern_variables(head))
+                variables.update(self._extract_pattern_variables(tail))
+            case _:
+                # Other pattern types don't contain variables
+                pass
         return variables
 
     def compile(self, program: Program) -> str:
@@ -59,18 +62,21 @@ class MinioCompiler:
             "",
             "# Runtime support functions",
             "def minio_show(value):",
-            "    if isinstance(value, bool):",
-            "        return 'True' if value else 'False'",
-            "    elif isinstance(value, str):",
-            "        return f'\"{value}\"'",
-            "    elif isinstance(value, list):",
-            "        elements = [minio_show(x) for x in value]",
-            "        return '[' + ','.join(elements) + ']'",
-            "    else:",
-            "        return str(value)",
+            "    match value:",
+            "        case bool():",
+            "            return 'True' if value else 'False'",
+            "        case str():",
+            "            return f'\"{value}\"'",
+            "        case list():",
+            "            elements = [minio_show(x) for x in value]",
+            "            return '[' + ','.join(elements) + ']'",
+            "        case _:",
+            "            return str(value)",
             "",
             "def minio_put_str(s):",
-            '    if isinstance(s, str): s = s.encode().decode("unicode_escape")',
+            "    match s:",
+            "        case str():",
+            '            s = s.encode().decode("unicode_escape")',
             "    print(s, end='')",
             "",
             "",
@@ -78,24 +84,28 @@ class MinioCompiler:
 
         # Collect data types
         for stmt in program.statements:
-            if isinstance(stmt, DataDeclaration):
-                self.data_types[stmt.type_name] = stmt
+            match stmt:
+                case DataDeclaration(type_name=type_name):
+                    self.data_types[type_name] = stmt
+                case _:
+                    pass
 
         # Group function definitions by name
         function_definitions: Dict[str, List[FunctionDefinition]] = {}
 
         for stmt in program.statements:
-            if isinstance(stmt, DataDeclaration):
-                lines.append(self._compile_data_declaration(stmt))
-            elif isinstance(stmt, FunctionDefinition):
-                if stmt.function_name not in function_definitions:
-                    function_definitions[stmt.function_name] = []
-                function_definitions[stmt.function_name].append(stmt)
-            elif isinstance(stmt, LetStatement):
-                prefixed_var = self._prefix_name(stmt.variable)
-                lines.append(
-                    f"{prefixed_var} = {self._compile_expression(stmt.value)}",
-                )
+            match stmt:
+                case DataDeclaration():
+                    lines.append(self._compile_data_declaration(stmt))
+                case FunctionDefinition(function_name=function_name):
+                    if function_name not in function_definitions:
+                        function_definitions[function_name] = []
+                    function_definitions[function_name].append(stmt)
+                case LetStatement(variable=variable, value=value):
+                    prefixed_var = self._prefix_name(variable)
+                    lines.append(
+                        f"{prefixed_var} = {self._compile_expression(value)}",
+                    )
 
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
@@ -217,49 +227,61 @@ class MinioCompiler:
                 assignments = []
 
                 for j, pattern in enumerate(func_def.patterns):
-                    if isinstance(pattern, VariablePattern):
-                        assignments.append(f"{pattern.name} = args[{j}]")
-                    elif isinstance(pattern, LiteralPattern):
-                        pattern_matches.append(
-                            f"args[{j}] == {self._compile_literal_value(pattern.value)}",
-                        )
-                    elif isinstance(pattern, ConsPattern):
-                        # Cons pattern (x:xs) - check if list is non-empty and destructure
-                        pattern_matches.append(f"len(args[{j}]) > 0")
-                        if isinstance(pattern.head, VariablePattern):
-                            assignments.append(f"{pattern.head.name} = args[{j}][0]")
-                        if isinstance(pattern.tail, VariablePattern):
-                            assignments.append(f"{pattern.tail.name} = args[{j}][1:]")
-                    elif isinstance(pattern, ConstructorPattern):
-                        # Constructor pattern - check type and destructure
-                        pattern_matches.append(
-                            f"isinstance(args[{j}], {pattern.constructor})",
-                        )
+                    match pattern:
+                        case VariablePattern(name=name):
+                            assignments.append(f"{name} = args[{j}]")
+                        case LiteralPattern(value=value):
+                            pattern_matches.append(
+                                f"args[{j}] == {self._compile_literal_value(value)}",
+                            )
+                        case ConsPattern(head=head, tail=tail):
+                            # Cons pattern (x:xs) - check if list is non-empty and destructure
+                            pattern_matches.append(f"len(args[{j}]) > 0")
+                            match head:
+                                case VariablePattern(name=name):
+                                    assignments.append(f"{name} = args[{j}][0]")
+                                case _:
+                                    pass
+                            match tail:
+                                case VariablePattern(name=name):
+                                    assignments.append(f"{name} = args[{j}][1:]")
+                                case _:
+                                    pass
+                        case ConstructorPattern(
+                            constructor=constructor,
+                            patterns=sub_patterns,
+                        ):
+                            # Constructor pattern - check type and destructure
+                            pattern_matches.append(
+                                f"type(args[{j}]).__name__ == '{constructor}'",
+                            )
 
-                        constructor_def = self._find_constructor_def(
-                            pattern.constructor,
-                        )
+                            constructor_def = self._find_constructor_def(constructor)
 
-                        if constructor_def and constructor_def.record_constructor:
-                            # Record constructor - use dictionary access by field name
-                            for k, sub_pattern in enumerate(pattern.patterns):
-                                if isinstance(sub_pattern, VariablePattern):
-                                    field_name = (
-                                        constructor_def.record_constructor.fields[
-                                            k
-                                        ].name
-                                    )
-                                    assignments.append(
-                                        f"{sub_pattern.name} = args[{j}].fields['{field_name}']",
-                                    )
-                        else:
-                            # Positional constructor - use arg_ access
-                            for k, sub_pattern in enumerate(pattern.patterns):
-                                if isinstance(sub_pattern, VariablePattern):
-                                    assignments.append(
-                                        f"{sub_pattern.name} = args[{j}].arg_{k}",
-                                    )
-                        # Could add more sub-pattern types here if needed
+                            if constructor_def and constructor_def.record_constructor:
+                                # Record constructor - use dictionary access by field name
+                                for k, sub_pattern in enumerate(sub_patterns):
+                                    match sub_pattern:
+                                        case VariablePattern(name=name):
+                                            field_name = constructor_def.record_constructor.fields[
+                                                k
+                                            ].name
+                                            assignments.append(
+                                                f"{name} = args[{j}].fields['{field_name}']",
+                                            )
+                                        case _:
+                                            pass
+                            else:
+                                # Positional constructor - use arg_ access
+                                for k, sub_pattern in enumerate(sub_patterns):
+                                    match sub_pattern:
+                                        case VariablePattern(name=name):
+                                            assignments.append(
+                                                f"{name} = args[{j}].arg_{k}",
+                                            )
+                                        case _:
+                                            pass
+                            # Could add more sub-pattern types here if needed
 
                 # Generate pattern matching condition
                 if pattern_matches:
@@ -309,34 +331,36 @@ class MinioCompiler:
 
         if len(func_def.patterns) == 0:
             # Check if the body is a do block with multiple statements
-            if isinstance(func_def.body, DoBlock) and len(func_def.body.statements) > 1:
-                lines = [f"def {func_name}():"]
-                lines.extend(self._compile_do_block_as_statements(func_def.body))
-            else:
-                lines = [
-                    f"def {func_name}():",
-                    f"    return {self._compile_expression(func_def.body)}",
-                ]
-        else:
-            pattern = func_def.patterns[0]
-            if isinstance(pattern, VariablePattern):
-                # Check if the body is a do block with multiple statements
-                if (
-                    isinstance(func_def.body, DoBlock)
-                    and len(func_def.body.statements) > 1
-                ):
-                    lines = [f"def {func_name}({pattern.name}):"]
+            match func_def.body:
+                case DoBlock(statements=statements) if len(statements) > 1:
+                    lines = [f"def {func_name}():"]
                     lines.extend(self._compile_do_block_as_statements(func_def.body))
-                else:
+                case _:
                     lines = [
-                        f"def {func_name}({pattern.name}):",
+                        f"def {func_name}():",
                         f"    return {self._compile_expression(func_def.body)}",
                     ]
-            else:
-                lines = [
-                    f"def {func_name}(arg):",
-                    f"    {self._compile_pattern_match(pattern, 'arg', func_def.body)}",
-                ]
+        else:
+            pattern = func_def.patterns[0]
+            match pattern:
+                case VariablePattern(name=name):
+                    # Check if the body is a do block with multiple statements
+                    match func_def.body:
+                        case DoBlock(statements=statements) if len(statements) > 1:
+                            lines = [f"def {func_name}({name}):"]
+                            lines.extend(
+                                self._compile_do_block_as_statements(func_def.body),
+                            )
+                        case _:
+                            lines = [
+                                f"def {func_name}({name}):",
+                                f"    return {self._compile_expression(func_def.body)}",
+                            ]
+                case _:
+                    lines = [
+                        f"def {func_name}(arg):",
+                        f"    {self._compile_pattern_match(pattern, 'arg', func_def.body)}",
+                    ]
 
         lines.append("")
 
@@ -351,27 +375,31 @@ class MinioCompiler:
 
         # Process all statements except the last one
         for stmt in do_block.statements[:-1]:
-            if isinstance(stmt, LetStatement):
-                prefixed_var = self._prefix_name(stmt.variable)
-                lines.append(
-                    f"    {prefixed_var} = {self._compile_expression(stmt.value)}",
-                )
-            elif self._is_expression(stmt):
-                # Handle expression statements (like putStr calls)
-                lines.append(f"    {self._compile_expression_safe(stmt)}")
+            match stmt:
+                case LetStatement(variable=variable, value=value):
+                    prefixed_var = self._prefix_name(variable)
+                    lines.append(
+                        f"    {prefixed_var} = {self._compile_expression(value)}",
+                    )
+                case _ if self._is_expression(stmt):
+                    # Handle expression statements (like putStr calls)
+                    lines.append(f"    {self._compile_expression_safe(stmt)}")
+                case _:
+                    pass
 
         # Handle the last statement (which becomes the return value)
         last_stmt = do_block.statements[-1]
-        if isinstance(last_stmt, LetStatement):
-            prefixed_var = self._prefix_name(last_stmt.variable)
-            lines.append(
-                f"    {prefixed_var} = {self._compile_expression(last_stmt.value)}",
-            )
-            lines.append(f"    return {prefixed_var}")
-        elif self._is_expression(last_stmt):
-            lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
-        else:
-            lines.append("    return None")
+        match last_stmt:
+            case LetStatement(variable=variable, value=value):
+                prefixed_var = self._prefix_name(variable)
+                lines.append(
+                    f"    {prefixed_var} = {self._compile_expression(value)}",
+                )
+                lines.append(f"    return {prefixed_var}")
+            case _ if self._is_expression(last_stmt):
+                lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
+            case _:
+                lines.append("    return None")
 
         return lines
 
@@ -381,250 +409,296 @@ class MinioCompiler:
         value_expr: str,
         body: Expression,
     ) -> str:
-        if isinstance(pattern, VariablePattern):
-            self.local_variables.add(pattern.name)
-            return f"{pattern.name} = {value_expr}\n    return {self._compile_expression(body)}"
-        elif isinstance(pattern, LiteralPattern):
-            return f"if {value_expr} == {self._compile_literal_value(pattern.value)}:\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
-        elif isinstance(pattern, ConsPattern):
-            # Cons pattern (x:xs) - destructure list
-            head_var = None
-            tail_var = None
-            if isinstance(pattern.head, VariablePattern):
-                head_var = pattern.head.name
-                self.local_variables.add(head_var)
-            if isinstance(pattern.tail, VariablePattern):
-                tail_var = pattern.tail.name
-                self.local_variables.add(tail_var)
-
-            assignments = []
-            if head_var:
-                assignments.append(f"        {head_var} = {value_expr}[0]")
-            if tail_var:
-                assignments.append(f"        {tail_var} = {value_expr}[1:]")
-
-            assignment_lines = "\n".join(assignments)
-            return f"if len({value_expr}) > 0:\n{assignment_lines}\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
-        elif isinstance(pattern, ConstructorPattern):
-            # Extract variables from constructor pattern
-            for sub_pattern in pattern.patterns:
-                self.local_variables.update(
-                    self._extract_pattern_variables(sub_pattern),
-                )
-
-            # Generate destructuring assignment for constructor pattern
-            if len(pattern.patterns) == 1 and isinstance(
-                pattern.patterns[0],
-                VariablePattern,
-            ):
-                var_name = pattern.patterns[0].name
-                constructor_def = self._find_constructor_def(pattern.constructor)
-
-                if constructor_def and constructor_def.record_constructor:
-                    # Record constructor - use dictionary access
-                    field_name = constructor_def.record_constructor.fields[0].name
-                    return f"if isinstance({value_expr}, {pattern.constructor}):\n        {var_name} = {value_expr}.fields['{field_name}']\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
-                else:
-                    # Positional constructor - use arg_ access
-                    return f"if isinstance({value_expr}, {pattern.constructor}):\n        {var_name} = {value_expr}.arg_0\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
-            elif len(pattern.patterns) > 1:
-                # Multiple variables in constructor pattern
-                constructor_def = self._find_constructor_def(pattern.constructor)
+        match pattern:
+            case VariablePattern(name=name):
+                self.local_variables.add(name)
+                return f"{name} = {value_expr}\n    return {self._compile_expression(body)}"
+            case LiteralPattern(value=value):
+                return f"if {value_expr} == {self._compile_literal_value(value)}:\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
+            case ConsPattern(head=head, tail=tail):
+                # Cons pattern (x:xs) - destructure list
+                head_var = None
+                tail_var = None
+                match head:
+                    case VariablePattern(name=name):
+                        head_var = name
+                        self.local_variables.add(head_var)
+                    case _:
+                        pass
+                match tail:
+                    case VariablePattern(name=name):
+                        tail_var = name
+                        self.local_variables.add(tail_var)
+                    case _:
+                        pass
 
                 assignments = []
-                if constructor_def and constructor_def.record_constructor:
-                    # Record constructor - use dictionary access
-                    for k, sub_pattern in enumerate(pattern.patterns):
-                        if isinstance(sub_pattern, VariablePattern):
-                            field_name = constructor_def.record_constructor.fields[
-                                k
-                            ].name
-                            assignments.append(
-                                f"        {sub_pattern.name} = {value_expr}.fields['{field_name}']",
-                            )
-                else:
-                    # Positional constructor - use arg_ access
-                    for k, sub_pattern in enumerate(pattern.patterns):
-                        if isinstance(sub_pattern, VariablePattern):
-                            assignments.append(
-                                f"        {sub_pattern.name} = {value_expr}.arg_{k}",
-                            )
+                if head_var:
+                    assignments.append(f"        {head_var} = {value_expr}[0]")
+                if tail_var:
+                    assignments.append(f"        {tail_var} = {value_expr}[1:]")
 
                 assignment_lines = "\n".join(assignments)
-                return f"if isinstance({value_expr}, {pattern.constructor}):\n{assignment_lines}\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
-            else:
-                # Constructor with no arguments
-                return f"if isinstance({value_expr}, {pattern.constructor}):\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
-        else:
-            return f"return {self._compile_expression(body)}"
+                return f"if len({value_expr}) > 0:\n{assignment_lines}\n        return {self._compile_expression(body)}\n    else:\n        raise ValueError('Pattern match failed')"
+            case ConstructorPattern(constructor=constructor, patterns=patterns):
+                # Extract variables from constructor pattern
+                for sub_pattern in patterns:
+                    self.local_variables.update(
+                        self._extract_pattern_variables(sub_pattern),
+                    )
+
+                # Generate destructuring assignment for constructor pattern
+                if len(patterns) == 1:
+                    match patterns[0]:
+                        case VariablePattern(name=var_name):
+                            constructor_def = self._find_constructor_def(constructor)
+
+                            if constructor_def and constructor_def.record_constructor:
+                                # Record constructor - use dictionary access
+                                field_name = constructor_def.record_constructor.fields[
+                                    0
+                                ].name
+                                return f"match {value_expr}:\n        case {constructor}() if hasattr({value_expr}, 'fields') and '{field_name}' in {value_expr}.fields:\n            {var_name} = {value_expr}.fields['{field_name}']\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                            else:
+                                # Positional constructor - use arg_ access
+                                return f"match {value_expr}:\n        case {constructor}():\n            {var_name} = {value_expr}.arg_0\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                        case _:
+                            pass
+                elif len(patterns) > 1:
+                    # Multiple variables in constructor pattern
+                    constructor_def = self._find_constructor_def(constructor)
+
+                    assignments = []
+                    if constructor_def and constructor_def.record_constructor:
+                        # Record constructor - use dictionary access
+                        for k, sub_pattern in enumerate(patterns):
+                            match sub_pattern:
+                                case VariablePattern(name=name):
+                                    field_name = (
+                                        constructor_def.record_constructor.fields[
+                                            k
+                                        ].name
+                                    )
+                                    assignments.append(
+                                        f"            {name} = {value_expr}.fields['{field_name}']",
+                                    )
+                                case _:
+                                    pass
+                    else:
+                        # Positional constructor - use arg_ access
+                        for k, sub_pattern in enumerate(patterns):
+                            match sub_pattern:
+                                case VariablePattern(name=name):
+                                    assignments.append(
+                                        f"            {name} = {value_expr}.arg_{k}",
+                                    )
+                                case _:
+                                    pass
+
+                    assignment_lines = "\n".join(assignments)
+                    return f"match {value_expr}:\n        case {constructor}():\n{assignment_lines}\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+                else:
+                    # Constructor with no arguments
+                    return f"match {value_expr}:\n        case {constructor}():\n            return {self._compile_expression(body)}\n        case _:\n            raise ValueError('Pattern match failed')"
+            case _:
+                return f"return {self._compile_expression(body)}"
 
     def _compile_literal_value(self, value: Any) -> str:
-        if isinstance(value, str):
-            return f'"{value}"'
-        elif isinstance(value, bool):
-            return str(value)
-        elif isinstance(value, list):
-            return "[]"  # Handle empty list explicitly
-        else:
-            return str(value)
+        match value:
+            case str():
+                return f'"{value}"'
+            case bool():
+                return str(value)
+            case list():
+                return "[]"  # Handle empty list explicitly
+            case _:
+                return str(value)
 
     def _compile_expression(self, expr: Expression) -> str:
-        if isinstance(expr, IntLiteral):
-            return str(expr.value)
-        elif isinstance(expr, FloatLiteral):
-            return str(expr.value)
-        elif isinstance(expr, NegativeInt):
-            return str(expr.value)
-        elif isinstance(expr, NegativeFloat):
-            return str(expr.value)
-        elif isinstance(expr, StringLiteral):
-            return f'"{expr.value}"'
-        elif isinstance(expr, BoolLiteral):
-            return str(expr.value)
-        elif isinstance(expr, ListLiteral):
-            elements = [self._compile_expression(elem) for elem in expr.elements]
-            return f"[{', '.join(elements)}]"
-        elif isinstance(expr, Variable):
-            # Handle built-in functions - these take precedence
-            if expr.name == "show":
+        match expr:
+            # Literals
+            case IntLiteral(value=value):
+                return str(value)
+            case FloatLiteral(value=value):
+                return str(value)
+            case NegativeInt(value=value):
+                return str(value)
+            case NegativeFloat(value=value):
+                return str(value)
+            case StringLiteral(value=value):
+                return f'"{value}"'
+            case BoolLiteral(value=value):
+                return str(value)
+            case ListLiteral(elements=elements):
+                compiled_elements = [
+                    self._compile_expression(elem) for elem in elements
+                ]
+                return f"[{', '.join(compiled_elements)}]"
+
+            # Variables and constructors
+            case Variable(name="show"):
                 return "minio_show"
-            elif expr.name == "putStr":
+            case Variable(name="putStr"):
                 return "minio_put_str"
-            else:
-                # User-defined variables and functions get minio_ prefix
-                prefixed_name = self._prefix_name(expr.name)
-                # Check if this is a nullary function (needs to be called)
-                if expr.name in self.nullary_functions:
+            case Variable(name=name):
+                prefixed_name = self._prefix_name(name)
+                if name in self.nullary_functions:
                     return f"{prefixed_name}()"
                 else:
                     return prefixed_name
-        elif isinstance(expr, Constructor):
-            return expr.name
-        elif isinstance(expr, AddOperation):
-            return f"({self._compile_expression(expr.left)} + {self._compile_expression(expr.right)})"
-        elif isinstance(expr, SubOperation):
-            return f"({self._compile_expression(expr.left)} - {self._compile_expression(expr.right)})"
-        elif isinstance(expr, MulOperation):
-            return f"({self._compile_expression(expr.left)} * {self._compile_expression(expr.right)})"
-        elif isinstance(expr, DivOperation):
-            return f"({self._compile_expression(expr.left)} / {self._compile_expression(expr.right)})"
-        elif isinstance(expr, EqualOperation):
-            return f"({self._compile_expression(expr.left)} == {self._compile_expression(expr.right)})"
-        elif isinstance(expr, NotEqualOperation):
-            return f"({self._compile_expression(expr.left)} != {self._compile_expression(expr.right)})"
-        elif isinstance(expr, LessThanOperation):
-            return f"({self._compile_expression(expr.left)} < {self._compile_expression(expr.right)})"
-        elif isinstance(expr, LessEqualOperation):
-            return f"({self._compile_expression(expr.left)} <= {self._compile_expression(expr.right)})"
-        elif isinstance(expr, GreaterThanOperation):
-            return f"({self._compile_expression(expr.left)} > {self._compile_expression(expr.right)})"
-        elif isinstance(expr, GreaterEqualOperation):
-            return f"({self._compile_expression(expr.left)} >= {self._compile_expression(expr.right)})"
-        elif isinstance(expr, ConcatOperation):
-            return f"({self._compile_expression(expr.left)} + {self._compile_expression(expr.right)})"
-        elif isinstance(expr, AndOperation):
-            return f"({self._compile_expression(expr.left)} and {self._compile_expression(expr.right)})"
-        elif isinstance(expr, OrOperation):
-            return f"({self._compile_expression(expr.left)} or {self._compile_expression(expr.right)})"
-        elif isinstance(expr, NotOperation):
-            return f"(not {self._compile_expression(expr.operand)})"
-        elif isinstance(expr, IndexOperation):
-            return f"({self._compile_expression(expr.list_expr)}[{self._compile_expression(expr.index_expr)}])"
-        elif isinstance(expr, IfElse):
-            return f"({self._compile_expression(expr.then_expr)} if {self._compile_expression(expr.condition)} else {self._compile_expression(expr.else_expr)})"
-        elif isinstance(expr, FunctionApplication):
-            # Check if this is a constructor application
-            args: List[Expression] = []
-            current: Expression = expr
+            case Constructor(name=name):
+                return name
 
-            # Collect all arguments for potential constructor calls
-            while isinstance(current, FunctionApplication):
-                args.insert(0, current.argument)
-                current = current.function
+            # Binary operations
+            case AddOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} + {self._compile_expression(right)})"
+            case SubOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} - {self._compile_expression(right)})"
+            case MulOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} * {self._compile_expression(right)})"
+            case DivOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} / {self._compile_expression(right)})"
+            case EqualOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} == {self._compile_expression(right)})"
+            case NotEqualOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} != {self._compile_expression(right)})"
+            case LessThanOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} < {self._compile_expression(right)})"
+            case LessEqualOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} <= {self._compile_expression(right)})"
+            case GreaterThanOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} > {self._compile_expression(right)})"
+            case GreaterEqualOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} >= {self._compile_expression(right)})"
+            case ConcatOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} + {self._compile_expression(right)})"
+            case AndOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} and {self._compile_expression(right)})"
+            case OrOperation(left=left, right=right):
+                return f"({self._compile_expression(left)} or {self._compile_expression(right)})"
 
-            # If the base function is a constructor, generate single call with all args
-            if isinstance(current, Constructor):
-                arg_exprs = [self._compile_expression(arg) for arg in args]
-                return f"{current.name}({', '.join(arg_exprs)})"
-            else:
-                # Regular curried function application
-                func_expr = self._compile_expression(expr.function)
-                arg_expr = self._compile_expression(expr.argument)
-                return f"{func_expr}({arg_expr})"
-        elif isinstance(expr, ConstructorExpression):
-            constructor_name = expr.constructor_name
-            if expr.fields:
-                constructor_def = self._find_constructor_def(constructor_name)
+            # Unary operations
+            case NotOperation(operand=operand):
+                return f"(not {self._compile_expression(operand)})"
 
-                if constructor_def and constructor_def.record_constructor:
-                    # Reorder fields according to declaration order
-                    declared_fields = {
-                        field.name: field
-                        for field in constructor_def.record_constructor.fields
-                    }
-                    provided_fields = {field.field_name: field for field in expr.fields}
+            # Other operations
+            case IndexOperation(list_expr=list_expr, index_expr=index_expr):
+                return f"({self._compile_expression(list_expr)}[{self._compile_expression(index_expr)}])"
+            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
+                return f"({self._compile_expression(then_expr)} if {self._compile_expression(condition)} else {self._compile_expression(else_expr)})"
 
-                    # Create ordered field arguments
-                    field_args = []
-                    for declared_field in constructor_def.record_constructor.fields:
-                        if declared_field.name in provided_fields:
-                            field_args.append(
-                                self._compile_expression(
-                                    provided_fields[declared_field.name].value,
-                                ),
-                            )
-                        else:
-                            # Field not provided - this should be an error, but for now use None
-                            field_args.append("None")
+            # Function application
+            case FunctionApplication():
+                # Check if this is a constructor application
+                args: List[Expression] = []
+                current: Expression = expr
 
-                    return f"{constructor_name}({', '.join(field_args)})"
+                # Collect all arguments for potential constructor calls
+                while True:
+                    match current:
+                        case FunctionApplication(argument=argument, function=function):
+                            args.insert(0, argument)
+                            current = function
+                        case _:
+                            break
+
+                # If the base function is a constructor, generate single call with all args
+                match current:
+                    case Constructor(name=name):
+                        arg_exprs = [self._compile_expression(arg) for arg in args]
+                        return f"{name}({', '.join(arg_exprs)})"
+                    case _:
+                        # Regular curried function application
+                        func_expr = self._compile_expression(expr.function)
+                        arg_expr = self._compile_expression(expr.argument)
+                        return f"{func_expr}({arg_expr})"
+
+            # Constructor expressions
+            case ConstructorExpression(
+                constructor_name=constructor_name,
+                fields=fields,
+            ):
+                if fields:
+                    constructor_def = self._find_constructor_def(constructor_name)
+
+                    if constructor_def and constructor_def.record_constructor:
+                        # Reorder fields according to declaration order
+                        declared_fields = {
+                            field.name: field
+                            for field in constructor_def.record_constructor.fields
+                        }
+                        provided_fields = {field.field_name: field for field in fields}
+
+                        # Create ordered field arguments
+                        field_args = []
+                        for declared_field in constructor_def.record_constructor.fields:
+                            if declared_field.name in provided_fields:
+                                field_args.append(
+                                    self._compile_expression(
+                                        provided_fields[declared_field.name].value,
+                                    ),
+                                )
+                            else:
+                                # Field not provided - this should be an error, but for now use None
+                                field_args.append("None")
+
+                        return f"{constructor_name}({', '.join(field_args)})"
+                    else:
+                        # Fallback: use fields in provided order (for non-record constructors)
+                        field_args = [
+                            self._compile_expression(field.value) for field in fields
+                        ]
+                        return f"{constructor_name}({', '.join(field_args)})"
                 else:
-                    # Fallback: use fields in provided order (for non-record constructors)
-                    field_args = [
-                        self._compile_expression(field.value) for field in expr.fields
-                    ]
-                    return f"{constructor_name}({', '.join(field_args)})"
-            else:
-                return f"{constructor_name}()"
-        elif isinstance(expr, DoBlock):
-            return self._compile_do_block(expr)
-        elif isinstance(expr, GroupedExpression):
-            return f"({self._compile_expression(expr.expression)})"
-        else:
-            return f"None  # Unsupported: {type(expr)}"
+                    return f"{constructor_name}()"
+
+            # Other expressions
+            case DoBlock():
+                return self._compile_do_block(expr)
+            case GroupedExpression(expression=expression):
+                return f"({self._compile_expression(expression)})"
+
+            # Default case
+            case _:
+                return f"None  # Unsupported: {type(expr)}"
 
     def _compile_do_block(self, do_block: DoBlock) -> str:
         # For single statements, we can still inline them
         if len(do_block.statements) == 1:
             stmt = do_block.statements[0]
-            if isinstance(stmt, LetStatement):
-                return f"(lambda: {self._compile_expression(stmt.value)})()"
-            elif self._is_expression(stmt):
-                return self._compile_expression_safe(stmt)
-            else:
-                return "None"
+            match stmt:
+                case LetStatement(value=value):
+                    return f"(lambda: {self._compile_expression(value)})()"
+                case _ if self._is_expression(stmt):
+                    return self._compile_expression_safe(stmt)
+                case _:
+                    return "None"
 
         # For multiple statements in expression context, fall back to sequential execution
         # This is a bit hacky but works for simple cases
         parts = []
         for stmt in do_block.statements[:-1]:
-            if isinstance(stmt, LetStatement):
-                prefixed_var = self._prefix_name(stmt.variable)
-                parts.append(
-                    f"globals().update({{'{prefixed_var}': {self._compile_expression(stmt.value)}}})",
-                )
-            elif self._is_expression(stmt):
-                parts.append(self._compile_expression_safe(stmt))
+            match stmt:
+                case LetStatement(variable=variable, value=value):
+                    prefixed_var = self._prefix_name(variable)
+                    parts.append(
+                        f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
+                    )
+                case _ if self._is_expression(stmt):
+                    parts.append(self._compile_expression_safe(stmt))
+                case _:
+                    pass
 
         # Handle the last statement (which becomes the return value)
         last_stmt = do_block.statements[-1]
-        if isinstance(last_stmt, LetStatement):
-            prefixed_var = self._prefix_name(last_stmt.variable)
-            final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(last_stmt.value)}}})"
-        elif self._is_expression(last_stmt):
-            final_expr = self._compile_expression_safe(last_stmt)
-        else:
-            final_expr = "None"
+        match last_stmt:
+            case LetStatement(variable=variable, value=value):
+                prefixed_var = self._prefix_name(variable)
+                final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
+            case _ if self._is_expression(last_stmt):
+                final_expr = self._compile_expression_safe(last_stmt)
+            case _:
+                final_expr = "None"
 
         if parts:
             return f"({' or '.join(parts)} or {final_expr})"
@@ -633,36 +707,38 @@ class MinioCompiler:
 
     def _is_expression(self, stmt: Any) -> bool:
         """Check if a statement is an expression."""
-        return isinstance(
-            stmt,
-            (
-                IntLiteral,
-                FloatLiteral,
-                StringLiteral,
-                BoolLiteral,
-                ListLiteral,
-                Variable,
-                Constructor,
-                AddOperation,
-                SubOperation,
-                MulOperation,
-                DivOperation,
-                EqualOperation,
-                ConcatOperation,
-                IfElse,
-                FunctionApplication,
-                ConstructorExpression,
-                DoBlock,
-                GroupedExpression,
-            ),
-        )
+        match stmt:
+            case (
+                IntLiteral()
+                | FloatLiteral()
+                | StringLiteral()
+                | BoolLiteral()
+                | ListLiteral()
+                | Variable()
+                | Constructor()
+                | AddOperation()
+                | SubOperation()
+                | MulOperation()
+                | DivOperation()
+                | EqualOperation()
+                | ConcatOperation()
+                | IfElse()
+                | FunctionApplication()
+                | ConstructorExpression()
+                | DoBlock()
+                | GroupedExpression()
+            ):
+                return True
+            case _:
+                return False
 
     def _compile_expression_safe(self, stmt: Any) -> str:
         """Safely compile a statement as an expression."""
-        if self._is_expression(stmt):
-            return self._compile_expression(stmt)  # type: ignore
-        else:
-            return "None"
+        match stmt:
+            case _ if self._is_expression(stmt):
+                return self._compile_expression(stmt)  # type: ignore
+            case _:
+                return "None"
 
 
 def compile_program(program: Program) -> str:

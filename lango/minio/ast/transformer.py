@@ -2,7 +2,7 @@
 AST Transformer for converting Lark parse trees to custom AST nodes.
 
 This module provides a transformer that converts raw Lark Tree and Token
-objects into our structured AST node classes defined in ast_nodes.py.
+objects into structured AST node classes defined in ast_nodes.py.
 """
 
 from typing import Any, List, Union
@@ -94,47 +94,52 @@ class ASTTransformer(Transformer):
     def int(self, items: List[Any]) -> IntLiteral:
         """Transform integer literal."""
         value = items[0]
-        if isinstance(value, Token):
-            return IntLiteral(int(value.value))
-        else:
-            return IntLiteral(int(value))
+        match value:
+            case Token():
+                return IntLiteral(int(value.value))
+            case _:
+                return IntLiteral(int(value))
 
     def float(self, items: List[Any]) -> FloatLiteral:
         """Transform float literal."""
         value = items[0]
-        if isinstance(value, Token):
-            return FloatLiteral(float(value.value))
-        else:
-            return FloatLiteral(float(value))
+        match value:
+            case Token():
+                return FloatLiteral(float(value.value))
+            case _:
+                return FloatLiteral(float(value))
 
     def neg_int(self, items: List[Any]) -> NegativeInt:
         """Transform negative integer literal."""
         value = items[1]
-        if isinstance(value, Token):
-            return NegativeInt(-int(value.value))
-        else:
-            return NegativeInt(-int(value))
+        match value:
+            case Token():
+                return NegativeInt(-int(value.value))
+            case _:
+                return NegativeInt(-int(value))
 
     def neg_float(self, items: List[Any]) -> NegativeFloat:
         """Transform negative float literal."""
         value = items[1]
-        if isinstance(value, Token):
-            return NegativeFloat(-float(value.value))
-        else:
-            return NegativeFloat(-float(value))
+        match value:
+            case Token():
+                return NegativeFloat(-float(value.value))
+            case _:
+                return NegativeFloat(-float(value))
 
     def string(self, items: List[Any]) -> StringLiteral:
         """Transform string literal."""
         value = items[0]
-        if isinstance(value, Token):
-            # Remove quotes
-            return StringLiteral(value.value[1:-1])
-        else:
-            # Already processed, remove quotes if still present
-            text = str(value)
-            if text.startswith('"') and text.endswith('"'):
-                return StringLiteral(text[1:-1])
-            return StringLiteral(text)
+        match value:
+            case Token():
+                # Remove quotes
+                return StringLiteral(value.value[1:-1])
+            case _:
+                # Already processed, remove quotes if still present
+                text = str(value)
+                if text.startswith('"') and text.endswith('"'):
+                    return StringLiteral(text[1:-1])
+                return StringLiteral(text)
 
     def true(self, items: List[Any]) -> BoolLiteral:
         """Transform True literal."""
@@ -153,29 +158,42 @@ class ASTTransformer(Transformer):
     # Variables and Identifiers
     def var(self, items: List[Any]) -> Variable:
         """Transform variable reference."""
-        return Variable(
-            items[0].value if isinstance(items[0], Token) else str(items[0]),
-        )
+        match items[0]:
+            case Token(value=value):
+                return Variable(value)
+            case value:
+                return Variable(str(value))
 
     def constructor(self, items: List[Any]) -> Union[Constructor, DataConstructor]:
         """Transform constructor - either reference or definition based on context."""
         # For constructor references (UIDENT -> constructor), we get just a token
         # For constructor definitions, we get UIDENT plus optional type atoms or record
 
-        if len(items) == 1 and isinstance(items[0], Token):
-            # This is a constructor reference
-            return Constructor(items[0].value)
-        else:
-            # This is a data constructor definition
-            name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items:
+            case [Token(value=value)]:
+                # This is a constructor reference
+                return Constructor(value)
+            case [token, *rest]:
+                # This is a data constructor definition
+                match token:
+                    case Token(value=name):
+                        pass
+                    case value:
+                        name = str(value)
 
-            if len(items) > 1 and isinstance(items[1], RecordConstructor):
-                # Record constructor
-                return DataConstructor(name, record_constructor=items[1])
-            else:
-                # Positional constructor
-                type_atoms = items[1:] if len(items) > 1 else []
-                return DataConstructor(name, type_atoms=type_atoms)
+                match rest:
+                    case [RecordConstructor() as record_constructor]:
+                        # Record constructor
+                        return DataConstructor(
+                            name,
+                            record_constructor=record_constructor,
+                        )
+                    case type_atoms:
+                        # Positional constructor
+                        return DataConstructor(name, type_atoms=type_atoms)
+            case _:
+                # Default case - empty list should never happen in valid input
+                raise ValueError(f"Invalid constructor items: {items}")
 
     # Arithmetic Operations
     def add(self, items: List[Any]) -> AddOperation:
@@ -249,11 +267,12 @@ class ASTTransformer(Transformer):
         """Transform statement list, flattening any list of statements."""
         flattened = []
         for item in items:
-            if isinstance(item, list):
-                # Flatten list of statements (e.g., from multiple let bindings)
-                flattened.extend(item)
-            else:
-                flattened.append(item)
+            match item:
+                case list() as stmt_list:
+                    # Flatten list of statements (e.g., from multiple let bindings)
+                    flattened.extend(stmt_list)
+                case stmt:
+                    flattened.append(stmt)
         return flattened
 
     def do_stmt(
@@ -266,9 +285,11 @@ class ASTTransformer(Transformer):
             # Create a LetStatement for each variable=expr pair
             statements = []
             for i in range(0, len(items), 2):
-                var_name = (
-                    items[i].value if isinstance(items[i], Token) else str(items[i])
-                )
+                match items[i]:
+                    case Token(value=var_name):
+                        pass
+                    case value:
+                        var_name = str(value)
                 statements.append(LetStatement(var_name, items[i + 1]))
 
             # Return all let statements
@@ -279,7 +300,11 @@ class ASTTransformer(Transformer):
 
     def let(self, items: List[Any]) -> LetStatement:
         """Transform let statement."""
-        var_name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=var_name):
+                pass
+            case value:
+                var_name = str(value)
         return LetStatement(var_name, items[1])
 
     # Function Application
@@ -290,14 +315,20 @@ class ASTTransformer(Transformer):
     # Constructor Expressions
     def field_assign(self, items: List[Any]) -> FieldAssignment:
         """Transform field assignment."""
-        field_name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=field_name):
+                pass
+            case value:
+                field_name = str(value)
         return FieldAssignment(field_name, items[1])
 
     def constructor_expr(self, items: List[Any]) -> ConstructorExpression:
         """Transform constructor expression."""
-        constructor_name = (
-            items[0].value if isinstance(items[0], Token) else str(items[0])
-        )
+        match items[0]:
+            case Token(value=constructor_name):
+                pass
+            case value:
+                constructor_name = str(value)
         fields = items[1:]  # Remaining items are field assignments
         return ConstructorExpression(constructor_name, fields)
 
@@ -309,12 +340,20 @@ class ASTTransformer(Transformer):
     # Type System
     def type_constructor(self, items: List[Any]) -> TypeConstructor:
         """Transform type constructor."""
-        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=name):
+                pass
+            case value:
+                name = str(value)
         return TypeConstructor(name)
 
     def type_var(self, items: List[Any]) -> TypeVariable:
         """Transform type variable."""
-        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=name):
+                pass
+            case value:
+                name = str(value)
         return TypeVariable(name)
 
     def arrow_type(self, items: List[Any]) -> ArrowType:
@@ -332,27 +371,32 @@ class ASTTransformer(Transformer):
     # Patterns
     def constructor_pattern(self, items: List[Any]) -> ConstructorPattern:
         """Transform constructor pattern."""
-        constructor_name = (
-            items[0].value if isinstance(items[0], Token) else str(items[0])
-        )
+        match items[0]:
+            case Token(value=constructor_name):
+                pass
+            case value:
+                constructor_name = str(value)
         raw_patterns = items[1:]
 
         # Convert tokens and expressions to patterns
         converted_patterns: List[Pattern] = []
         for pattern in raw_patterns:
-            if isinstance(pattern, Token):
-                if pattern.type == "ID":
-                    converted_patterns.append(VariablePattern(pattern.value))
-                else:
-                    converted_patterns.append(LiteralPattern(pattern.value))
-            elif isinstance(
-                pattern,
-                (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
-            ):
-                # Convert literals to literal patterns
-                converted_patterns.append(LiteralPattern(pattern.value))
-            else:
-                converted_patterns.append(pattern)
+            match pattern:
+                case Token(type=token_type, value=token_value):
+                    if token_type == "ID":
+                        converted_patterns.append(VariablePattern(token_value))
+                    else:
+                        converted_patterns.append(LiteralPattern(token_value))
+                case (
+                    IntLiteral(value=value)
+                    | FloatLiteral(value=value)
+                    | StringLiteral(value=value)
+                    | BoolLiteral(value=value)
+                ):
+                    # Convert literals to literal patterns
+                    converted_patterns.append(LiteralPattern(value))
+                case _:
+                    converted_patterns.append(pattern)
 
         return ConstructorPattern(constructor_name, converted_patterns)
 
@@ -363,21 +407,33 @@ class ASTTransformer(Transformer):
         tail = items[2]  # Skip the COLON token at items[1]
 
         # Convert tokens to patterns
-        if isinstance(head, Token):
-            if head.type == "ID":
-                head = VariablePattern(head.value)
-            else:
-                head = LiteralPattern(head.value)
-        elif isinstance(head, (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral)):
-            head = LiteralPattern(head.value)
+        match head:
+            case Token(type=token_type, value=token_value):
+                if token_type == "ID":
+                    head = VariablePattern(token_value)
+                else:
+                    head = LiteralPattern(token_value)
+            case (
+                IntLiteral(value=value)
+                | FloatLiteral(value=value)
+                | StringLiteral(value=value)
+                | BoolLiteral(value=value)
+            ):
+                head = LiteralPattern(value)
 
-        if isinstance(tail, Token):
-            if tail.type == "ID":
-                tail = VariablePattern(tail.value)
-            else:
-                tail = LiteralPattern(tail.value)
-        elif isinstance(tail, (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral)):
-            tail = LiteralPattern(tail.value)
+        match tail:
+            case Token(type=token_type, value=token_value):
+                if token_type == "ID":
+                    tail = VariablePattern(token_value)
+                else:
+                    tail = LiteralPattern(token_value)
+            case (
+                IntLiteral(value=value)
+                | FloatLiteral(value=value)
+                | StringLiteral(value=value)
+                | BoolLiteral(value=value)
+            ):
+                tail = LiteralPattern(value)
 
         return ConsPattern(head, tail)
 
@@ -387,12 +443,20 @@ class ASTTransformer(Transformer):
     # Top-level Declarations
     def type_param(self, items: List[Any]) -> TypeParameter:
         """Transform type parameter."""
-        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=name):
+                pass
+            case value:
+                name = str(value)
         return TypeParameter(name)
 
     def field(self, items: List[Any]) -> Field:
         """Transform field in record constructor."""
-        field_name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=field_name):
+                pass
+            case value:
+                field_name = str(value)
         return Field(field_name, items[1])
 
     def record_constructor(self, items: List[Any]) -> RecordConstructor:
@@ -402,23 +466,32 @@ class ASTTransformer(Transformer):
 
     def data_decl(self, items: List[Any]) -> DataDeclaration:
         """Transform data declaration."""
-        type_name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=type_name):
+                pass
+            case value:
+                type_name = str(value)
 
         # Separate type params and constructors
         type_params = []
         constructors = []
 
         for item in items[1:]:
-            if isinstance(item, TypeParameter):
-                type_params.append(item)
-            elif isinstance(item, DataConstructor):
-                constructors.append(item)
+            match item:
+                case TypeParameter() as type_param:
+                    type_params.append(type_param)
+                case DataConstructor() as data_constructor:
+                    constructors.append(data_constructor)
 
         return DataDeclaration(type_name, type_params, constructors)
 
     def func_sig(self, items: List[Any]) -> FunctionSignature:
         """Transform function signature."""
-        func_name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=v):
+                func_name = v
+            case value:
+                func_name = str(value)
 
         # Build the type signature from the type expressions
         if len(items) == 2:
@@ -433,30 +506,34 @@ class ASTTransformer(Transformer):
 
     def func_def(self, items: List[Any]) -> FunctionDefinition:
         """Transform function definition."""
-        func_name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        match items[0]:
+            case Token(value=func_name):
+                pass
+            case value:
+                func_name = str(value)
         patterns = items[1:-1]  # Everything between name and expression
         body = items[-1]
 
         # Convert tokens and expressions to patterns if needed
         converted_patterns: List[Pattern] = []
         for pattern in patterns:
-            if isinstance(pattern, Token):
-                if pattern.type == "ID":
-                    converted_patterns.append(VariablePattern(pattern.value))
-                else:
-                    converted_patterns.append(LiteralPattern(pattern.value))
-            elif isinstance(
-                pattern,
-                (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral, ListLiteral),
-            ):
-                # Convert literals to literal patterns
-                if isinstance(pattern, ListLiteral):
-                    # For list literals in patterns, convert to LiteralPattern with the list value
-                    converted_patterns.append(LiteralPattern(pattern.elements))
-                else:
-                    converted_patterns.append(LiteralPattern(pattern.value))
-            else:
-                converted_patterns.append(pattern)
+            match pattern:
+                case Token(type=token_type, value=token_value):
+                    if token_type == "ID":
+                        converted_patterns.append(VariablePattern(token_value))
+                    else:
+                        converted_patterns.append(LiteralPattern(token_value))
+                case (
+                    IntLiteral(value=v)
+                    | FloatLiteral(value=v)
+                    | StringLiteral(value=v)
+                    | BoolLiteral(value=v)
+                ):
+                    converted_patterns.append(LiteralPattern(v))
+                case ListLiteral(elements):
+                    converted_patterns.append(LiteralPattern(elements))
+                case _:
+                    converted_patterns.append(pattern)
 
         return FunctionDefinition(func_name, converted_patterns, body)
 
@@ -465,10 +542,13 @@ class ASTTransformer(Transformer):
         """Transform the root program."""
         statements = []
         for item in items:
-            if item is not None and not isinstance(item, list):
-                statements.append(item)
-            elif isinstance(item, list):
-                statements.extend(item)
+            match item:
+                case None:
+                    continue
+                case list() as stmt_list:
+                    statements.extend(stmt_list)
+                case stmt:
+                    statements.append(stmt)
 
         return Program(statements)
 

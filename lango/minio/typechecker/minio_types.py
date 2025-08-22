@@ -96,10 +96,11 @@ class FunctionType(Type):
 
     def __str__(self) -> str:
         # Handle right associativity of function types
-        if isinstance(self.param, FunctionType):
-            return f"({self.param}) -> {self.result}"
-        else:
-            return f"{self.param} -> {self.result}"
+        match self.param:
+            case FunctionType():
+                return f"({self.param}) -> {self.result}"
+            case _:
+                return f"{self.param} -> {self.result}"
 
 
 @dataclass(frozen=True)
