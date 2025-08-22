@@ -62,7 +62,7 @@ class MinioCompiler:
             "    if isinstance(value, bool):",
             "        return 'True' if value else 'False'",
             "    elif isinstance(value, str):",
-            "        return value",
+            "        return f'\"{value}\"'",
             "    elif isinstance(value, list):",
             "        elements = [minio_show(x) for x in value]",
             "        return '[' + ','.join(elements) + ']'",
@@ -473,6 +473,10 @@ class MinioCompiler:
             return str(expr.value)
         elif isinstance(expr, FloatLiteral):
             return str(expr.value)
+        elif isinstance(expr, NegativeInt):
+            return str(expr.value)
+        elif isinstance(expr, NegativeFloat):
+            return str(expr.value)
         elif isinstance(expr, StringLiteral):
             return f'"{expr.value}"'
         elif isinstance(expr, BoolLiteral):
@@ -524,6 +528,8 @@ class MinioCompiler:
             return f"({self._compile_expression(expr.left)} or {self._compile_expression(expr.right)})"
         elif isinstance(expr, NotOperation):
             return f"(not {self._compile_expression(expr.operand)})"
+        elif isinstance(expr, IndexOperation):
+            return f"({self._compile_expression(expr.list_expr)}[{self._compile_expression(expr.index_expr)}])"
         elif isinstance(expr, IfElse):
             return f"({self._compile_expression(expr.then_expr)} if {self._compile_expression(expr.condition)} else {self._compile_expression(expr.else_expr)})"
         elif isinstance(expr, FunctionApplication):

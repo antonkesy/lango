@@ -1,8 +1,10 @@
 import os
 import subprocess
+import tempfile
 
 import pytest
 
+from lango.minio.compiler import compile_program
 from lango.minio.interpreter import interpret
 from lango.minio.parser import parse
 from lango.minio.typecheck import type_check
@@ -38,10 +40,43 @@ def run_haskell_file(path: str) -> str:
         raise RuntimeError(e.stderr.decode("utf-8").strip())
 
 
+def run_compiled_python(python_code: str) -> str:
+    temp_file = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            temp_file = f.name
+            f.write(python_code)
+            f.flush()
+
+            result = subprocess.run(
+                ["python3", temp_file],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            return result.stdout.decode("utf-8").strip()
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"Python execution failed: {e.stderr.decode('utf-8').strip()}",
+        )
+    finally:
+        if temp_file:
+            os.unlink(temp_file)
+
+
 @pytest.mark.parametrize("file_name", list(get_all_test_files()))
-def test_output_matches_expected(file_name):
+def test_interpreter(file_name):
     expected = get_test_output(file_name)
     result = interpret(parse(file_name), collectStdOut=True)
+    assert result == expected, f"{file_name}: Expected '{expected}', got '{result}'"
+
+
+@pytest.mark.parametrize("file_name", list(get_all_test_files()))
+def test_compiler(file_name):
+    expected = get_test_output(file_name)
+    ast = parse(file_name)
+    python_code = compile_program(ast)
+    result = run_compiled_python(python_code)
     assert result == expected, f"{file_name}: Expected '{expected}', got '{result}'"
 
 
