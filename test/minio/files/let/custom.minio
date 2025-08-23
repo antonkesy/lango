@@ -1,7 +1,6 @@
 -- "Point(3.0, 4.0)"
 data Point = MkPoint Float Float;
 
-printPoint :: Point -> String;
 printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
 
 main = do {

@@ -350,13 +350,6 @@ class DataDeclaration(ASTNode):
 
 
 @dataclass
-class FunctionSignature(ASTNode):
-    function_name: str
-    type_signature: "TypeExpression"
-    ty: Optional[Type] = None
-
-
-@dataclass
 class FunctionDefinition(ASTNode):
     function_name: str
     patterns: List["Pattern"]
@@ -423,7 +416,6 @@ type Pattern = Union[
 
 type Statement = Union[
     DataDeclaration,
-    FunctionSignature,
     FunctionDefinition,
     LetStatement,
     Expression,

@@ -30,7 +30,6 @@ from lango.minio.ast.nodes import (
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
-    FunctionSignature,
     GreaterEqualOperation,
     GreaterThanOperation,
     GroupedExpression,
@@ -484,25 +483,6 @@ class ASTTransformer(Transformer):
                     constructors.append(data_constructor)
 
         return DataDeclaration(type_name, type_params, constructors)
-
-    def func_sig(self, items: List[Any]) -> FunctionSignature:
-        """Transform function signature."""
-        match items[0]:
-            case Token(value=v):
-                func_name = v
-            case value:
-                func_name = str(value)
-
-        # Build the type signature from the type expressions
-        if len(items) == 2:
-            type_sig = items[1]
-        else:
-            # Multiple types connected with arrows
-            type_sig = items[1]
-            for i in range(2, len(items)):
-                type_sig = ArrowType(type_sig, items[i])
-
-        return FunctionSignature(func_name, type_sig)
 
     def func_def(self, items: List[Any]) -> FunctionDefinition:
         """Transform function definition."""
