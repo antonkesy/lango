@@ -9,10 +9,19 @@ class TestOutput:
 
 
 def _get_test_output(file_name: str) -> TestOutput:
+    """Parses the first lines of the test file to determine the expected output.
+    Format:
+        -- OK|FAIL
+        -- "expected output"
+    """
     # TODO make more robust
     with open(file_name, "r") as file:
         first_line = file.readline().strip()
-    return TestOutput(fails=False, expected_output=first_line[4:-1])
+        second_line = file.readline().strip()
+        return TestOutput(
+            fails=first_line == "-- FAIL",
+            expected_output=second_line[4:-1],
+        )
 
 
 def get_all_test_files(base_path: str):
@@ -22,7 +31,7 @@ def get_all_test_files(base_path: str):
                 yield os.path.join(root, file)
 
 
-def file_test(file_name, runFn):
+def file_test_output(file_name, runFn):
     expected = _get_test_output(file_name)
     try:
         result = runFn(file_name)
@@ -36,3 +45,18 @@ def file_test(file_name, runFn):
     assert (
         result == expected.expected_output
     ), f"{file_name}: Expected '{expected.expected_output}', got '{result}'"
+
+
+def file_test_type(file_name, runFn):
+    expected = _get_test_output(file_name)
+    try:
+        runFn(file_name)
+    except Exception as e:
+        if not expected.fails:
+            assert (
+                False
+            ), f"{file_name}: Expected type check to pass, but got exception '{e}'"
+        return
+
+    if expected.fails:
+        assert False, f"{file_name}: Expected failure, but type check passed"

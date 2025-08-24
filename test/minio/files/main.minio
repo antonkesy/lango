@@ -1,3 +1,4 @@
+-- OK
 -- "Main"
 main = do {
   putStr "Main";

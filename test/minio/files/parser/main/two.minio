@@ -1,0 +1,9 @@
+-- FAIL
+-- "main"
+main = do {
+  putStr "main";
+};
+
+main = do {
+  putStr "main";
+};

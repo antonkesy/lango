@@ -1,3 +1,4 @@
+-- OK
 -- "Lazy"
 lazyEval cond = do {
     let { expensive = "This will not be printed" };

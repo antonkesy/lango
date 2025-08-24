@@ -1,3 +1,4 @@
+-- OK
 -- "TrueFalseFalseFalse"
 main = do {
   putStr (show (True && True));

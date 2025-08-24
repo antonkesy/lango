@@ -1,3 +1,4 @@
+-- OK
 -- "1FizzBuzzFizzBuzz"
 fizzbuzz n = if mod n 15 == 0 then "FizzBuzz"
               else if mod n 3 == 0 then "Fizz"

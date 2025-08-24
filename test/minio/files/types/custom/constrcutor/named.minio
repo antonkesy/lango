@@ -1,3 +1,4 @@
+-- OK
 -- "ID: 1, Name: Alice"
 data Person = Person { id_ :: Int, name :: String };
 

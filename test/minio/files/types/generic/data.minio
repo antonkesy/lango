@@ -1,3 +1,4 @@
+-- OK
 -- "Pair(1, "hello")Pair("hello", 1)"
 data Pair a b = Pair a b;
 

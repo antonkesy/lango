@@ -1,3 +1,4 @@
+-- OK
 -- "-1"
 main = do {
   putStr (show (1 - 2));

@@ -1,3 +1,4 @@
+-- OK
 -- "[2,3]"
 main = do {
     putStr (show(tail [1,2,3]));

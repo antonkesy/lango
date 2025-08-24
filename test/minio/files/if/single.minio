@@ -1,3 +1,4 @@
+-- OK
 -- "True"
 main = do {
   putStr (if True then "True" else "False");

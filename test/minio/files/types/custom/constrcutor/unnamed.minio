@@ -1,3 +1,4 @@
+-- OK
 -- "Point(1.0, 2.0)"
 data Point = MkPoint Float Float;
 
