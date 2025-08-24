@@ -1,4 +1,5 @@
--- OK
+-- RUN: OK
+-- TYPECHECK: OK
 -- "FalseTrue"
 main = do {
   putStr (show (not True));

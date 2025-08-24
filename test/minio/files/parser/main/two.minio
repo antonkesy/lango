@@ -1,4 +1,5 @@
--- FAIL
+-- RUN: FAIL
+-- TYPECHECK: FAIL
 -- "main"
 main = do {
   putStr "main";

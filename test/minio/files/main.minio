@@ -1,4 +1,5 @@
--- OK
+-- RUN: OK
+-- TYPECHECK: OK
 -- "Main"
 main = do {
   putStr "Main";

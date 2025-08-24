@@ -1,4 +1,5 @@
--- OK
+-- RUN: OK
+-- TYPECHECK: OK
 -- "Point(3.0, 4.0)"
 data Point = MkPoint Float Float;
 

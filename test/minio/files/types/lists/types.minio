@@ -1,4 +1,5 @@
--- OK
+-- RUN: OK
+-- TYPECHECK: OK
 -- "[1,2,3][1.1,2.2,3.3]["hello","world","haskell"][True,False,True]["Person Alice 25","Person Bob 30"]"
 data Person = Person String Int;
 

@@ -1,4 +1,5 @@
--- OK
+-- RUN: OK
+-- TYPECHECK: OK
 -- "id_: 1, Name: Alice,Point(3.5, 4.2)"
 data Person = Person { id_ :: Int, name :: String };
 data Point = MkPoint Float Float;

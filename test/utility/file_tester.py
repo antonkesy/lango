@@ -5,23 +5,26 @@ from typing import Any, Callable, Generator
 
 @dataclass
 class TestOutput:
-    fails: bool
+    runtimeFails: bool
+    typecheckFails: bool
     expected_output: str
 
 
 def _get_test_output(file_name: str) -> TestOutput:
     """Parses the first lines of the test file to determine the expected output.
     Format:
-        -- OK|FAIL
+        -- RUN: OK|FAIL
+        -- TYPECHECK: OK|FAIL
         -- "expected output"
     """
-    # TODO make more robust
     with open(file_name, "r") as file:
         first_line = file.readline().strip()
         second_line = file.readline().strip()
+        third_line = file.readline().strip()
         return TestOutput(
-            fails=first_line == "-- FAIL",
-            expected_output=second_line[4:-1],
+            runtimeFails=first_line == "-- RUN: FAIL",
+            typecheckFails=second_line == "-- TYPECHECK: FAIL",
+            expected_output=third_line[4:-1],  # remove -- " and "
         )
 
 
@@ -37,11 +40,11 @@ def file_test_output(file_name: str, runFn: Callable[[str], Any]) -> None:
     try:
         result = runFn(file_name)
     except Exception as e:
-        if not expected.fails:
+        if not expected.runtimeFails:
             assert False, f"{file_name}: Expected '{expected}', but got exception '{e}'"
         return  # if expected.fails, we can return here
 
-    if expected.fails:
+    if expected.runtimeFails:
         assert False, f"{file_name}: Expected failure, but got '{result}'"
     assert (
         result == expected.expected_output
@@ -53,11 +56,11 @@ def file_test_type(file_name: str, runFn: Callable[[str], Any]) -> None:
     try:
         runFn(file_name)
     except Exception as e:
-        if not expected.fails:
+        if not expected.typecheckFails:
             assert (
                 False
             ), f"{file_name}: Expected type check to pass, but got exception '{e}'"
         return
 
-    if expected.fails:
+    if expected.typecheckFails:
         assert False, f"{file_name}: Expected failure, but type check passed"
