@@ -1103,6 +1103,10 @@ class TypeInferrer:
         show_type = FunctionType(TypeVar("a"), TypeCon("String"))
         env = env.extend("show", TypeScheme({"a"}, show_type))
 
+        # error :: String -> a
+        error_type = FunctionType(STRING_TYPE, TypeVar("a"))
+        env = env.extend("error", TypeScheme({"a"}, error_type))
+
         # Comparison operators
         # (==) :: a -> a -> Bool
         eq_type = FunctionType(

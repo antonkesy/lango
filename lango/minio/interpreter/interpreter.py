@@ -138,6 +138,11 @@ def flexible_putStr(
         return None
 
 
+def _error(message: str) -> Any:
+    """Runtime error function that throws an exception."""
+    raise RuntimeError(f"Runtime error: {message}")
+
+
 def _show(value: Value) -> str:
     """Convert a value to its string representation."""
     match value:
@@ -153,6 +158,7 @@ def _show(value: Value) -> str:
 builtins: Dict[str, Callable[..., Any]] = {
     "putStr": flexible_putStr,
     "show": lambda x: _show(x),
+    "error": lambda x: _error(x),
 }
 
 
@@ -230,6 +236,8 @@ class Interpreter:
             case MulOperation(left=left, right=right):
                 return self.eval(left) * self.eval(right)
             case DivOperation(left=left, right=right):
+                if self.eval(right) == 0:
+                    raise RuntimeError("Division by zero")
                 return self.eval(left) / self.eval(right)
             case PowIntOperation(left=left, right=right):
                 return int(self.eval(left) ** self.eval(right))

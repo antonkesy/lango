@@ -231,6 +231,9 @@ class MinioCompiler:
             '            s = s.encode().decode("unicode_escape")',
             "    print(s, end='')",
             "",
+            "def minio_error(message):",
+            "    raise RuntimeError(f'Runtime error: {message}')",
+            "",
             "",
         ]
 
@@ -262,7 +265,7 @@ class MinioCompiler:
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
             # Skip built-in functions to avoid conflicts
-            if func_name not in ["show", "putStr"]:
+            if func_name not in ["show", "putStr", "error"]:
                 lines.append(self._compile_function_group(func_name, definitions))
 
         # Add main execution
@@ -715,6 +718,8 @@ class MinioCompiler:
                 return "minio_show"
             case Variable(name="putStr"):
                 return "minio_put_str"
+            case Variable(name="error"):
+                return "minio_error"
             case Variable(name=name):
                 prefixed_name = self._prefix_name(name)
                 if name in self.nullary_functions:
