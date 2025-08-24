@@ -396,7 +396,7 @@ class Interpreter:
                 return self.eval(body)
 
         # If no nullary clause found, return a curried function
-        def curried_function(*args):
+        def curried_function(*args: Any) -> Value:
             return self._apply_function_with_patterns(clauses, list(args))
 
         return curried_function
@@ -416,7 +416,7 @@ class Interpreter:
         # If no patterns matched and we don't have enough args, return partial application
         if len(args) < max(len(patterns) for patterns, _ in clauses):
 
-            def partial_function(next_arg):
+            def partial_function(next_arg: Value) -> Value:
                 return self._apply_function_with_patterns(clauses, args + [next_arg])
 
             return partial_function

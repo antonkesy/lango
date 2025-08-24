@@ -189,7 +189,7 @@ class TypeScheme:
 
         return TypeScheme(self.quantified_vars, filtered_subst.apply(self.type))
 
-    def instantiate(self, fresh_var_gen) -> Type:
+    def instantiate(self, fresh_var_gen: "FreshVarGenerator") -> Type:
         """Create a fresh instance of this type scheme by replacing quantified variables"""
         if not self.quantified_vars:
             return self.type
@@ -212,7 +212,7 @@ class TypeScheme:
 class FreshVarGenerator:
     """Generates fresh type variables"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.counter = 0
 
     def fresh(self) -> str:

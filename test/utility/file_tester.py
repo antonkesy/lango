@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from typing import Any, Callable, Generator
 
 
 @dataclass
@@ -24,14 +25,14 @@ def _get_test_output(file_name: str) -> TestOutput:
         )
 
 
-def get_all_test_files(base_path: str):
+def get_all_test_files(base_path: str) -> Generator[str, None, None]:
     for root, _, files in os.walk(base_path):
         for file in files:
             if file.endswith(".minio"):
                 yield os.path.join(root, file)
 
 
-def file_test_output(file_name, runFn):
+def file_test_output(file_name: str, runFn: Callable[[str], Any]) -> None:
     expected = _get_test_output(file_name)
     try:
         result = runFn(file_name)
@@ -47,7 +48,7 @@ def file_test_output(file_name, runFn):
     ), f"{file_name}: Expected '{expected.expected_output}', got '{result}'"
 
 
-def file_test_type(file_name, runFn):
+def file_test_type(file_name: str, runFn: Callable[[str], Any]) -> None:
     expected = _get_test_output(file_name)
     try:
         runFn(file_name)

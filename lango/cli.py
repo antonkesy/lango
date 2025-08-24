@@ -1,3 +1,5 @@
+from typing import Any
+
 import typer
 from rich.console import Console
 
@@ -44,7 +46,7 @@ def types(
     input_file: str = typer.Argument(
         help="Path to .minio file to type check",
     ),
-):
+) -> None:
     print(get_type_str(parse(input_file)))
 
 
@@ -53,7 +55,7 @@ def ast(
     input_file: str = typer.Argument(
         help="Path to .minio file to show annotated AST",
     ),
-):
+) -> None:
     ast = parse(input_file)
     if not type_check(ast):
         console.print("Type checking failed, cannot print AST.", style="bold red")
@@ -102,5 +104,5 @@ def compile(
         return 1
 
 
-def main():
+def main() -> Any:
     return app()

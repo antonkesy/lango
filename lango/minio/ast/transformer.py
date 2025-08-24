@@ -70,7 +70,7 @@ from lango.minio.ast.nodes import (
 class ASTTransformer(Transformer):
     """Transformer that converts Lark parse trees to custom AST nodes."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # Add methods for keywords that can't be used as method names
         setattr(self, "and", self._and)

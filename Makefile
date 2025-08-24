@@ -57,7 +57,8 @@ coverage: install-dev
 
 mypy: install-dev
 	. .venv/bin/activate && \
-	mypy lango --explicit-package-bases
+	mypy lango
+	mypy test
 
 clean: uninstall
 	rm -rf build/ dist/ *.egg-info/ .venv/ .pytest_cache/ .coverage htmlcov/
