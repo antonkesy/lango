@@ -150,6 +150,12 @@ def _show(value: Value) -> str:
             return f'"{value}"'
         case list():
             return "[" + ",".join(_show(i) for i in value) + "]"
+        case float():
+            if value == float("inf"):
+                return "Infinity"
+            if value == float("-inf"):
+                return "-Infinity"
+            return str(value)
         case _:
             return str(value)
 
@@ -237,7 +243,7 @@ class Interpreter:
                 return self.eval(left) * self.eval(right)
             case DivOperation(left=left, right=right):
                 if self.eval(right) == 0:
-                    raise RuntimeError("Division by zero")
+                    return float("inf")  # special case because haskell does this
                 return self.eval(left) / self.eval(right)
             case PowIntOperation(left=left, right=right):
                 return int(self.eval(left) ** self.eval(right))

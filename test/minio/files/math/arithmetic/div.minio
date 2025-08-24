@@ -1,7 +1,9 @@
 -- RUN: OK
 -- TYPECHECK: OK
--- "3.03.0"
+-- "3.03.0InfinityInfinity"
 main = do {
   putStr (show (9 / 3));
   putStr (show (9.0 / 3.0));
+  putStr (show (9 / 0));
+  putStr (show (9.0 / 0.0));
 };

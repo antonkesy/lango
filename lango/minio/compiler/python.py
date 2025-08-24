@@ -211,6 +211,7 @@ class MinioCompiler:
         lines = [
             "# Generated Python code from Minio",
             "from typing import Any, Dict, List, Union, Optional",
+            "import math",
             "",
             "# Runtime support functions",
             "def minio_show(value):",
@@ -222,6 +223,12 @@ class MinioCompiler:
             "        case list():",
             "            elements = [minio_show(x) for x in value]",
             "            return '[' + ','.join(elements) + ']'",
+            "        case float():",
+            "            if value == float('inf'):",
+            "                return 'Infinity'",
+            "            if value == float('-inf'):",
+            "                return '-Infinity'",
+            "            return str(value)",
             "        case _:",
             "            return str(value)",
             "",
@@ -737,7 +744,7 @@ class MinioCompiler:
             case MulOperation(left=left, right=right):
                 return f"({self._compile_expression(left)} * {self._compile_expression(right)})"
             case DivOperation(left=left, right=right):
-                return f"({self._compile_expression(left)} / {self._compile_expression(right)})"
+                return f"({self._compile_expression(left)} / {self._compile_expression(right)}) if {self._compile_expression(right)} != 0 else math.inf"
             case EqualOperation(left=left, right=right):
                 return f"({self._compile_expression(left)} == {self._compile_expression(right)})"
             case NotEqualOperation(left=left, right=right):
