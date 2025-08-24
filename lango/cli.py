@@ -91,6 +91,7 @@ def compile(
 ) -> int:
     try:
         ast = parse(input_file)
+        type_check(ast)
         python_code = compile_program(ast)
 
         with open(output_file, "w") as f:

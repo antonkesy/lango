@@ -747,10 +747,13 @@ class TypeInferrer:
         if len(func_def.patterns) == 0:
             # Nullary function
             body_type, body_subst = self.infer_expr(func_def.body, env)
+            final_type = body_type.apply_substitution(body_subst)
             scheme = generalize(
                 env.apply_substitution(body_subst).free_type_vars(),
-                body_type.apply_substitution(body_subst),
+                final_type,
             )
+            # Set the AST node's type
+            func_def.ty = final_type
             return scheme, env.extend(func_def.function_name, scheme)
 
         # Function with parameters - create function type
@@ -789,6 +792,8 @@ class TypeInferrer:
             env.apply_substitution(final_subst).free_type_vars(),
             func_type,
         )
+        # Set the AST node's type
+        func_def.ty = func_type
         return scheme, env.extend(func_def.function_name, scheme)
 
     def infer_do_block(

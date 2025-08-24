@@ -42,6 +42,19 @@ from lango.minio.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.minio.typechecker.minio_types import (
+    BOOL_TYPE,
+    FLOAT_TYPE,
+    INT_TYPE,
+    STRING_TYPE,
+    UNIT_TYPE,
+    DataType,
+    FunctionType,
+    Type,
+    TypeApp,
+    TypeCon,
+    TypeVar,
+)
 
 
 class MinioCompiler:
@@ -78,6 +91,54 @@ class MinioCompiler:
                 if constructor.name == constructor_name:
                     return constructor
         return None
+
+    def _minio_type_to_python_hint(self, minio_type: Optional[Type]) -> str:
+        """Convert a Minio type to a Python type hint string."""
+        if minio_type is None:
+            return "Any"
+
+        match minio_type:
+            case TypeCon(name="Int"):
+                return "int"
+            case TypeCon(name="String"):
+                return "str"
+            case TypeCon(name="Float"):
+                return "float"
+            case TypeCon(name="Bool"):
+                return "bool"
+            case TypeCon(name="()"):
+                return "None"
+            case TypeApp(constructor=TypeCon(name="List"), argument=arg_type):
+                inner_type = self._minio_type_to_python_hint(arg_type)
+                return f"List[{inner_type}]"
+            case TypeApp(constructor=TypeCon(name="IO"), argument=arg_type):
+                # IO types typically don't have meaningful return types in our compiled Python
+                return "None"
+            case FunctionType(param=param_type, result=result_type):
+                # For function types, we'll use Callable
+                param_hint = self._minio_type_to_python_hint(param_type)
+                result_hint = self._minio_type_to_python_hint(result_type)
+                return f"Callable[[{param_hint}], {result_hint}]"
+            case DataType(name=name, type_args=type_args):
+                # Custom data types - use Union of all constructors for the type
+                if name in self.data_types:
+                    constructors = [
+                        ctor.name for ctor in self.data_types[name].constructors
+                    ]
+                    if len(constructors) == 1:
+                        # Single constructor, use it directly
+                        return constructors[0]
+                    else:
+                        # Multiple constructors, use Union
+                        return f"Union[{', '.join(constructors)}]"
+                else:
+                    # Unknown data type, use Any
+                    return "Any"
+            case TypeVar(name=name):
+                # Type variables become Any for now
+                return "Any"
+            case _:
+                return "Any"
 
     def _extract_pattern_variables(self, pattern: Pattern) -> Set[str]:
         """Extract all variable names from a pattern recursively."""
@@ -210,11 +271,11 @@ class MinioCompiler:
     def compile(self, program: Program) -> str:
         lines = [
             "# Generated Python code from Minio",
-            "from typing import Any, Dict, List, Union, Optional",
+            "from typing import Any, Dict, List, Union, Optional, Callable",
             "import math",
             "",
             "# Runtime support functions",
-            "def minio_show(value):",
+            "def minio_show(value: Any) -> str:",
             "    match value:",
             "        case bool():",
             "            return 'True' if value else 'False'",
@@ -232,13 +293,13 @@ class MinioCompiler:
             "        case _:",
             "            return str(value)",
             "",
-            "def minio_put_str(s):",
+            "def minio_put_str(s: Any) -> None:",
             "    match s:",
             "        case str():",
             '            s = s.encode().decode("unicode_escape")',
             "    print(s, end='')",
             "",
-            "def minio_error(message):",
+            "def minio_error(message: str) -> None:",
             "    raise RuntimeError(f'Runtime error: {message}')",
             "",
             "",
@@ -294,12 +355,24 @@ class MinioCompiler:
                 field_names = [
                     field.name for field in constructor.record_constructor.fields
                 ]
-                args = [f"arg_{i}" for i in range(len(field_names))]
+                field_types = [
+                    field.field_type for field in constructor.record_constructor.fields
+                ]
+
+                # Create typed arguments
+                typed_args = []
+                for i, (field_name, field_type_expr) in enumerate(
+                    zip(field_names, field_types),
+                ):
+                    # Convert field type expression to Python type hint
+                    # For now, use Any as we don't have the full type context
+                    type_hint = "Any"
+                    typed_args.append(f"arg_{i}: {type_hint}")
 
                 lines.extend(
                     [
                         f"class {class_name}:",
-                        f"    def __init__(self, {', '.join(args)}):",
+                        f"    def __init__(self, {', '.join(typed_args)}) -> None:",
                     ],
                 )
                 # Store fields in a dictionary by name
@@ -310,22 +383,29 @@ class MinioCompiler:
             elif constructor.type_atoms:
                 # Positional fields like MkPoint Float Float
                 arg_count = len(constructor.type_atoms)
-                args = [f"arg_{i}" for i in range(arg_count)]
+
+                # Create typed arguments
+                typed_args = []
+                for i, type_atom in enumerate(constructor.type_atoms):
+                    # Convert type atom to Python type hint
+                    # For now, use Any as we don't have the full type context
+                    type_hint = "Any"
+                    typed_args.append(f"arg_{i}: {type_hint}")
 
                 lines.extend(
                     [
                         f"class {class_name}:",
-                        f"    def __init__(self, {', '.join(args)}):",
+                        f"    def __init__(self, {', '.join(typed_args)}) -> None:",
                     ],
                 )
-                for i, arg in enumerate(args):
-                    lines.append(f"        self.arg_{i} = {arg}")
+                for i, arg in enumerate(range(arg_count)):
+                    lines.append(f"        self.arg_{i} = arg_{i}")
             else:
                 # No arguments
                 lines.extend(
                     [
                         f"class {class_name}:",
-                        "    def __init__(self):",
+                        "    def __init__(self) -> None:",
                         "        pass",
                     ],
                 )
@@ -349,8 +429,17 @@ class MinioCompiler:
         if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
             return self._compile_simple_function(definitions[0], prefixed_func_name)
 
+        # Get return type hint from the first function definition
+        return_type_hint = "Any"
+        if definitions and definitions[0].ty:
+            # For function types, extract the final return type
+            current_type = definitions[0].ty
+            while isinstance(current_type, FunctionType):
+                current_type = current_type.result
+            return_type_hint = self._minio_type_to_python_hint(current_type)
+
         # Multiple definitions or pattern matching - use *args approach
-        lines = [f"def {prefixed_func_name}(*args):"]
+        lines = [f"def {prefixed_func_name}(*args: Any) -> {return_type_hint}:"]
         self.indent_level += 1
 
         # Find maximum number of parameters needed
@@ -491,15 +580,28 @@ class MinioCompiler:
         for pattern in func_def.patterns:
             self.local_variables.update(self._extract_pattern_variables(pattern))
 
+        # Get type hints from the function's type annotation
+        return_type_hint = "Any"
+        param_type_hint = "Any"
+
+        if func_def.ty:
+            match func_def.ty:
+                case FunctionType(param=param_type, result=result_type):
+                    param_type_hint = self._minio_type_to_python_hint(param_type)
+                    return_type_hint = self._minio_type_to_python_hint(result_type)
+                case _:
+                    # Not a function type, use it as return type
+                    return_type_hint = self._minio_type_to_python_hint(func_def.ty)
+
         if len(func_def.patterns) == 0:
             # Check if the body is a do block with multiple statements
             match func_def.body:
                 case DoBlock(statements=statements) if len(statements) > 1:
-                    lines = [f"def {func_name}():"]
+                    lines = [f"def {func_name}() -> {return_type_hint}:"]
                     lines.extend(self._compile_do_block_as_statements(func_def.body))
                 case _:
                     lines = [
-                        f"def {func_name}():",
+                        f"def {func_name}() -> {return_type_hint}:",
                         f"    return {self._compile_expression(func_def.body)}",
                     ]
         else:
@@ -509,18 +611,20 @@ class MinioCompiler:
                     # Check if the body is a do block with multiple statements
                     match func_def.body:
                         case DoBlock(statements=statements) if len(statements) > 1:
-                            lines = [f"def {func_name}({name}):"]
+                            lines = [
+                                f"def {func_name}({name}: {param_type_hint}) -> {return_type_hint}:",
+                            ]
                             lines.extend(
                                 self._compile_do_block_as_statements(func_def.body),
                             )
                         case _:
                             lines = [
-                                f"def {func_name}({name}):",
+                                f"def {func_name}({name}: {param_type_hint}) -> {return_type_hint}:",
                                 f"    return {self._compile_expression(func_def.body)}",
                             ]
                 case _:
                     lines = [
-                        f"def {func_name}(arg):",
+                        f"def {func_name}(arg: {param_type_hint}) -> {return_type_hint}:",
                         f"    {self._compile_pattern_match(pattern, 'arg', func_def.body)}",
                     ]
 
