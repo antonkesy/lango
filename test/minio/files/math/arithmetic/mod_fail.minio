@@ -1,0 +1,6 @@
+-- RUN: FAIL
+-- TYPECHECK: OK
+-- ""
+main = do {
+  putStr (show (mod 15 0));
+};
