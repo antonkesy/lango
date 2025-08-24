@@ -16,7 +16,7 @@ def run_haskell_file(path: str) -> str:
         raise RuntimeError(e.stderr.decode("utf-8").strip())
 
 
-def run_compiled_python(python_code: str) -> str:
+def run_python_code(python_code: str) -> str:
     temp_file = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:

@@ -8,7 +8,7 @@ from lango.minio.parser.parser import parse
 from lango.minio.typechecker.typecheck import type_check
 
 from ..utility.file_tester import file_test_output, file_test_type, get_all_test_files
-from ..utility.runners.external import run_compiled_python, run_haskell_file
+from ..utility.runners.external import run_haskell_file, run_python_code
 
 BASE_TEST_FILES_PATH = "./test/minio/files/"
 EXAMPLE = "./examples/minio/example.minio"
@@ -25,7 +25,7 @@ def test_interpreter(file_name: str) -> None:
 @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
 def test_compiler(file_name: str) -> None:
     def run_compiler_and_output(f: str) -> str:
-        return run_compiled_python(compile_program(parse(f)))
+        return run_python_code(compile_program(parse(f)))
 
     file_test_output(file_name, run_compiler_and_output)
 
