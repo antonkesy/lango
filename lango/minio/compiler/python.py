@@ -62,6 +62,7 @@ class MinioCompiler:
         self.indent_level = 0
         self.defined_functions: Set[str] = set()
         self.nullary_functions: Set[str] = set()  # Functions with no parameters
+        self.function_types: Dict[str, Type] = {}  # Track function types
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
         self.do_block_counter = 0  # Counter for unique do block function names
@@ -90,6 +91,25 @@ class MinioCompiler:
             for constructor in data_decl.constructors:
                 if constructor.name == constructor_name:
                     return constructor
+        return None
+
+    def _get_function_final_return_type(self, func_name: str) -> str:
+        """Get the final return type of a function, unwrapping curried functions."""
+        if func_name not in self.function_types:
+            return "Any"
+
+        func_type = self.function_types[func_name]
+        # Unwrap function types to get the final return type
+        while isinstance(func_type, FunctionType):
+            func_type = func_type.result
+
+        return self._minio_type_to_python_hint(func_type)
+
+    def _convert_type_expression_to_type(self, type_expr) -> Optional[Type]:
+        """Convert a TypeExpression to a Type, using the ty field if available."""
+        if hasattr(type_expr, "ty") and type_expr.ty is not None:
+            return type_expr.ty
+        # If no type information is available, return None
         return None
 
     def _minio_type_to_python_hint(self, minio_type: Optional[Type]) -> str:
@@ -271,10 +291,21 @@ class MinioCompiler:
     def compile(self, program: Program) -> str:
         lines = [
             "# Generated Python code from Minio",
-            "from typing import Any, Dict, List, Union, Optional, Callable",
+            "from typing import Any, Dict, List, Union, Optional, Callable, cast, TypeVar",
+            "from functools import wraps",
             "import math",
             "",
             "# Runtime support functions",
+            "F = TypeVar('F', bound=Callable[..., Any])",
+            "",
+            "def curry(func: F) -> F:",
+            "    @wraps(func)",
+            "    def curried(*args: Any) -> Any:",
+            "        if len(args) >= func.__code__.co_argcount:",
+            "            return func(*args)",
+            "        return lambda *more_args: curried(*args + more_args)",
+            "    return curried  # type: ignore",
+            "",
             "def minio_show(value: Any) -> str:",
             "    match value:",
             "        case bool():",
@@ -299,7 +330,7 @@ class MinioCompiler:
             '            s = s.encode().decode("unicode_escape")',
             "    print(s, end='')",
             "",
-            "def minio_error(message: str) -> None:",
+            "def minio_error(message: str) -> Any:",
             "    raise RuntimeError(f'Runtime error: {message}')",
             "",
             "",
@@ -365,8 +396,13 @@ class MinioCompiler:
                     zip(field_names, field_types),
                 ):
                     # Convert field type expression to Python type hint
-                    # For now, use Any as we don't have the full type context
-                    type_hint = "Any"
+                    if field_type_expr:
+                        converted_type = self._convert_type_expression_to_type(
+                            field_type_expr,
+                        )
+                        type_hint = self._minio_type_to_python_hint(converted_type)
+                    else:
+                        type_hint = "Any"
                     typed_args.append(f"arg_{i}: {type_hint}")
 
                 lines.extend(
@@ -388,8 +424,13 @@ class MinioCompiler:
                 typed_args = []
                 for i, type_atom in enumerate(constructor.type_atoms):
                     # Convert type atom to Python type hint
-                    # For now, use Any as we don't have the full type context
-                    type_hint = "Any"
+                    if type_atom:
+                        converted_type = self._convert_type_expression_to_type(
+                            type_atom,
+                        )
+                        type_hint = self._minio_type_to_python_hint(converted_type)
+                    else:
+                        type_hint = "Any"
                     typed_args.append(f"arg_{i}: {type_hint}")
 
                 lines.extend(
@@ -422,6 +463,10 @@ class MinioCompiler:
         prefixed_func_name = f"minio_{func_name}"
         self.defined_functions.add(func_name)
 
+        # Store function type information
+        if definitions and definitions[0].ty:
+            self.function_types[func_name] = definitions[0].ty
+
         # Check if any definition is nullary
         if any(len(defn.patterns) == 0 for defn in definitions):
             self.nullary_functions.add(func_name)
@@ -438,32 +483,64 @@ class MinioCompiler:
                 current_type = current_type.result
             return_type_hint = self._minio_type_to_python_hint(current_type)
 
-        # Multiple definitions or pattern matching - use *args approach
-        lines = [f"def {prefixed_func_name}(*args: Any) -> {return_type_hint}:"]
-        self.indent_level += 1
-
         # Find maximum number of parameters needed
         max_params = (
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Add currying support for multi-parameter functions
+        # Use @curry decorator for multi-parameter functions
         if max_params > 1:
-            lines.append(self._indent() + f"if len(args) < {max_params}:")
-            self.indent_level += 1
-            lines.append(
-                self._indent()
-                + "return lambda *more_args: "
-                + prefixed_func_name
-                + "(*(args + more_args))",
+            # For curried functions, get parameter types from the function type
+            param_types = []
+            if definitions and definitions[0].ty:
+                current_type = definitions[0].ty
+                while (
+                    isinstance(current_type, FunctionType)
+                    and len(param_types) < max_params
+                ):
+                    param_type_hint = self._minio_type_to_python_hint(
+                        current_type.param,
+                    )
+                    param_types.append(param_type_hint)
+                    current_type = current_type.result
+
+            # Fill remaining with Any if we don't have enough type information
+            while len(param_types) < max_params:
+                param_types.append("Any")
+
+            param_list = [f"arg_{i}: {param_types[i]}" for i in range(max_params)]
+
+            curried_return_type = (
+                f"Union[Callable[[Any], {return_type_hint}], {return_type_hint}]"
             )
-            self.indent_level -= 1
+
+            lines = [
+                "@curry",
+                f"def {prefixed_func_name}({', '.join(param_list)}) -> {curried_return_type}:",
+            ]
+        else:
+            # For single parameter functions, try to get the parameter type
+            param_type = "Any"
+            if (
+                definitions
+                and definitions[0].ty
+                and isinstance(definitions[0].ty, FunctionType)
+            ):
+                param_type = self._minio_type_to_python_hint(definitions[0].ty.param)
+            lines = [
+                f"def {prefixed_func_name}(arg_0: {param_type}) -> {return_type_hint}:",
+            ]
+
+        self.indent_level += 1
 
         # Collect all pattern variables from all definitions
         old_local_vars = self.local_variables.copy()
         for func_def in definitions:
             for pattern in func_def.patterns:
                 self.local_variables.update(self._extract_pattern_variables(pattern))
+
+        # Track if we have exhaustive patterns (ending with catch-all)
+        has_exhaustive_patterns = False
 
         for i, func_def in enumerate(definitions):
             if len(func_def.patterns) == 0:
@@ -472,30 +549,32 @@ class MinioCompiler:
                     self._indent()
                     + f"return {self._compile_expression(func_def.body)}",
                 )
+                has_exhaustive_patterns = True  # Nullary is always exhaustive
             else:
                 # Pattern matching - check each pattern
                 pattern_matches = []
                 assignments = []
 
                 for j, pattern in enumerate(func_def.patterns):
+                    arg_name = f"arg_{j}"
                     match pattern:
                         case VariablePattern(name=name):
-                            assignments.append(f"{name} = args[{j}]")
+                            assignments.append(f"{name} = {arg_name}")
                         case LiteralPattern(value=value):
                             pattern_matches.append(
-                                f"args[{j}] == {self._compile_literal_value(value)}",
+                                f"{arg_name} == {self._compile_literal_value(value)}",
                             )
                         case ConsPattern(head=head, tail=tail):
                             # Cons pattern (x:xs) - check if list is non-empty and destructure
-                            pattern_matches.append(f"len(args[{j}]) > 0")
+                            pattern_matches.append(f"len({arg_name}) > 0")
                             match head:
                                 case VariablePattern(name=name):
-                                    assignments.append(f"{name} = args[{j}][0]")
+                                    assignments.append(f"{name} = {arg_name}[0]")
                                 case _:
                                     pass
                             match tail:
                                 case VariablePattern(name=name):
-                                    assignments.append(f"{name} = args[{j}][1:]")
+                                    assignments.append(f"{name} = {arg_name}[1:]")
                                 case _:
                                     pass
                         case ConstructorPattern(
@@ -504,7 +583,7 @@ class MinioCompiler:
                         ):
                             # Constructor pattern - check type and destructure
                             pattern_matches.append(
-                                f"type(args[{j}]).__name__ == '{constructor}'",
+                                f"type({arg_name}).__name__ == '{constructor}'",
                             )
 
                             constructor_def = self._find_constructor_def(constructor)
@@ -518,7 +597,7 @@ class MinioCompiler:
                                                 k
                                             ].name
                                             assignments.append(
-                                                f"{name} = args[{j}].fields['{field_name}']",
+                                                f"{name} = {arg_name}.fields['{field_name}']",
                                             )
                                         case _:
                                             pass
@@ -528,7 +607,7 @@ class MinioCompiler:
                                     match sub_pattern:
                                         case VariablePattern(name=name):
                                             assignments.append(
-                                                f"{name} = args[{j}].arg_{k}",
+                                                f"{name} = {arg_name}.arg_{k}",
                                             )
                                         case _:
                                             pass
@@ -547,18 +626,28 @@ class MinioCompiler:
                     )
                     self.indent_level -= 1
                 else:
-                    # Only variable patterns, always matches
+                    # Only variable patterns, always matches - this is a catch-all
                     for assignment in assignments:
                         lines.append(self._indent() + assignment)
                     lines.append(
                         self._indent()
                         + f"return {self._compile_expression(func_def.body)}",
                     )
+                    # If this is the last definition and only has variable patterns, it's exhaustive
+                    if i == len(definitions) - 1:
+                        has_exhaustive_patterns = True
 
-        lines.append(
-            self._indent()
-            + f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{args}}')",
-        )
+        # Only add fallback error if patterns are not exhaustive
+        if not has_exhaustive_patterns:
+            if max_params > 1:
+                # For curried functions, show the individual arguments
+                arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
+                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{{arg_names}}}')"
+            else:
+                # For single parameter functions, show arg_0
+                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{arg_0}}')"
+
+            lines.append(self._indent() + error_msg)
         self.indent_level -= 1
 
         # Restore local variables
@@ -880,11 +969,11 @@ class MinioCompiler:
 
             # Function application
             case FunctionApplication():
-                # Check if this is a constructor application
+                # Collect all arguments for function calls
                 args: List[Expression] = []
                 current: Expression = expr
 
-                # Collect all arguments for potential constructor calls
+                # Collect all arguments from nested function applications
                 while True:
                     match current:
                         case FunctionApplication(argument=argument, function=function):
@@ -898,8 +987,30 @@ class MinioCompiler:
                     case Constructor(name=name):
                         arg_exprs = [self._compile_expression(arg) for arg in args]
                         return f"{name}({', '.join(arg_exprs)})"
+                    case Variable(name=name):
+                        # Check if this is a user-defined function that might be curried
+                        prefixed_name = self._prefix_name(name)
+                        if len(args) > 1 and name in self.defined_functions:
+                            # Multi-argument call for curried functions
+                            arg_exprs = [self._compile_expression(arg) for arg in args]
+                            # Use cast with proper return type to resolve Union type issues
+                            return_type = self._get_function_final_return_type(name)
+                            return f"cast({return_type}, {prefixed_name}({', '.join(arg_exprs)}))"
+                        else:
+                            # Single argument or built-in function
+                            func_expr = self._compile_expression(current)
+                            if len(args) == 1:
+                                arg_expr = self._compile_expression(args[0])
+                                return f"{func_expr}({arg_expr})"
+                            else:
+                                # Multiple args but not a defined function, use nested calls
+                                result = func_expr
+                                for arg in args:
+                                    arg_expr = self._compile_expression(arg)
+                                    result = f"{result}({arg_expr})"
+                                return result
                     case _:
-                        # Regular curried function application
+                        # Regular curried function application - fall back to nested calls
                         func_expr = self._compile_expression(expr.function)
                         arg_expr = self._compile_expression(expr.argument)
                         return f"{func_expr}({arg_expr})"
