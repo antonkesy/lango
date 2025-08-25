@@ -74,6 +74,55 @@ class MinioGoCompiler:
     def _indent(self) -> str:
         return "\t" * self.indent_level
 
+    def _get_type_assertion_for_pattern(
+        self,
+        pattern: Pattern,
+        func_type: Optional[Type],
+    ) -> Optional[str]:
+        """Generate appropriate type assertion for a pattern in function registry."""
+        match pattern:
+            case VariablePattern():
+                # For variable patterns, we need to determine the expected type
+                if func_type and isinstance(func_type, FunctionType):
+                    param_type = func_type.param
+                    return self._get_type_assertion_for_type(param_type, "arg")
+            case ConstructorPattern(constructor=constructor):
+                # For constructor patterns, assert to the appropriate interface type
+                constructor_def = self._find_constructor_def(constructor)
+                if constructor_def:
+                    # Find which data type this constructor belongs to
+                    for data_name, data_decl in self.data_types.items():
+                        if constructor in [c.name for c in data_decl.constructors]:
+                            return f"arg.({data_name}Interface)"
+            case LiteralPattern():
+                # For literal patterns, we can infer the type from the literal
+                # This is less common in function parameters but handle basic cases
+                return "arg"
+            case _:
+                return None
+        return None
+
+    def _get_type_assertion_for_type(self, minio_type: Type, var_name: str) -> str:
+        """Generate Go type assertion for a Minio type."""
+        match minio_type:
+            case TypeCon(name="Int"):
+                return f"{var_name}.(int)"
+            case TypeCon(name="Float"):
+                return f"{var_name}.(float64)"
+            case TypeCon(name="String"):
+                return f"{var_name}.(string)"
+            case TypeCon(name="Bool"):
+                return f"{var_name}.(bool)"
+            case TypeApp(constructor=TypeCon(name="List")):
+                return f"{var_name}.([]interface{{}})"
+            case DataType(name=name):
+                return f"{var_name}.({name}Interface)"
+            case TypeVar():
+                # Type variables remain as interface{}
+                return var_name
+            case _:
+                return var_name
+
     def _prefix_name(self, name: str) -> str:
         """Add Minio prefix to user-defined names, but not built-ins, constructors, or pattern variables."""
         # Don't prefix built-in functions
@@ -316,11 +365,27 @@ class MinioGoCompiler:
                     lines.append(f"\t\treturn {prefixed_name}()")
                     lines.append("\t}")
                 else:
-                    # Regular functions
+                    # Regular functions - need proper type assertion
                     lines.append(
                         f'\tminioFunctionRegistry["{func_name}"] = func(arg interface{{}}) interface{{}} {{',
                     )
-                    lines.append(f"\t\treturn {prefixed_name}(arg)")
+
+                    # Get function type information for proper type casting
+                    func_defs = function_definitions[func_name]
+                    if func_defs and len(func_defs[0].patterns) > 0:
+                        first_pattern = func_defs[0].patterns[0]
+                        type_assertion = self._get_type_assertion_for_pattern(
+                            first_pattern,
+                            func_defs[0].ty,
+                        )
+                        if type_assertion:
+                            lines.append(
+                                f"\t\treturn {prefixed_name}({type_assertion})",
+                            )
+                        else:
+                            lines.append(f"\t\treturn {prefixed_name}(arg)")
+                    else:
+                        lines.append(f"\t\treturn {prefixed_name}(arg)")
                     lines.append("\t}")
         lines.append("}")
 
