@@ -16,7 +16,7 @@ def run_haskell_file(path: str) -> str:
         raise RuntimeError(e.stderr.decode("utf-8").strip())
 
 
-def _run_x_code(code: str, executable: list[str], extension : str) -> str:
+def _run_x_code(code: str, executable: list[str], extension: str) -> str:
     temp_file = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=extension, delete=False) as f:

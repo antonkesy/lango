@@ -175,7 +175,7 @@ class MinioSystemFCompiler:
             # Multiple constructors - use sum type encoding
             type_var = self._fresh_type_var()
             lines.append(
-                f"type {data_decl.type_name}F = ∀{type_var}. {' → '.join([f'{ctor.name}Type → {type_var}' for ctor in data_decl.constructors])} → {type_var};"
+                f"type {data_decl.type_name}F = ∀{type_var}. {' → '.join([f'{ctor.name}Type → {type_var}' for ctor in data_decl.constructors])} → {type_var};",
             )
 
         lines.append("")
@@ -188,7 +188,9 @@ class MinioSystemFCompiler:
         return lines
 
     def _compile_constructor(
-        self, constructor: DataConstructor, type_name: str
+        self,
+        constructor: DataConstructor,
+        type_name: str,
     ) -> List[str]:
         """Compile a data constructor to Church encoding."""
         lines = []
@@ -202,19 +204,21 @@ class MinioSystemFCompiler:
             application = " ".join(arg_vars)
 
             lines.append(
-                f"{constructor.name} = {lambda_params} Λb. λ{continuation_var}:a→...→b. {continuation_var} {application};"
+                f"{constructor.name} = {lambda_params} Λb. λ{continuation_var}:a→...→b. {continuation_var} {application};",
             )
         else:
             # Constructor with no arguments (constant)
             continuation_var = self._fresh_lambda_var()
             lines.append(
-                f"{constructor.name} = Λb. λ{continuation_var}:b. {continuation_var};"
+                f"{constructor.name} = Λb. λ{continuation_var}:b. {continuation_var};",
             )
 
         return lines
 
     def _compile_function_group(
-        self, func_name: str, definitions: List[FunctionDefinition]
+        self,
+        func_name: str,
+        definitions: List[FunctionDefinition],
     ) -> List[str]:
         """Compile a group of function definitions."""
         self.defined_functions.add(func_name)
@@ -228,13 +232,15 @@ class MinioSystemFCompiler:
             for i, func_def in enumerate(definitions):
                 lines.append(f"-- Pattern {i + 1}")
                 lines.extend(
-                    self._compile_simple_function(func_def, f"{func_name}_{i}")
+                    self._compile_simple_function(func_def, f"{func_name}_{i}"),
                 )
 
         return lines
 
     def _compile_simple_function(
-        self, func_def: FunctionDefinition, custom_name: Optional[str] = None
+        self,
+        func_def: FunctionDefinition,
+        custom_name: Optional[str] = None,
     ) -> List[str]:
         """Compile a simple function definition."""
         name = custom_name or func_def.function_name
