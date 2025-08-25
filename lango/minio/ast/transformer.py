@@ -399,6 +399,16 @@ class ASTTransformer(Transformer):
 
         return ConstructorPattern(constructor_name, converted_patterns)
 
+    def constructor_pattern_bare(self, items: List[Any]) -> ConstructorPattern:
+        """Transform bare constructor pattern (nullary constructor used as pattern)."""
+        match items[0]:
+            case Token(value=constructor_name):
+                pass
+            case value:
+                constructor_name = str(value)
+        # Bare constructor pattern has no sub-patterns
+        return ConstructorPattern(constructor_name, [])
+
     def cons_pattern(self, items: List[Any]) -> ConsPattern:
         """Transform cons pattern."""
         # items = [head_pattern, COLON_token, tail_pattern]
@@ -481,6 +491,11 @@ class ASTTransformer(Transformer):
                     type_params.append(type_param)
                 case DataConstructor() as data_constructor:
                     constructors.append(data_constructor)
+                case Constructor() as constructor:
+                    # Convert Constructor to DataConstructor for nullary constructors
+                    constructors.append(
+                        DataConstructor(constructor.name, type_atoms=[]),
+                    )
 
         return DataDeclaration(type_name, type_params, constructors)
 

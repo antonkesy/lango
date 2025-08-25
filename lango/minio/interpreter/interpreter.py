@@ -15,6 +15,8 @@ from lango.minio.ast.nodes import (
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
+    DataConstructor,
+    DataDeclaration,
     DivOperation,
     DoBlock,
     EqualOperation,
@@ -58,6 +60,8 @@ Record = Dict[str, Any]  # Dictionary representing a record/object
 FunctionClause = Tuple[List[Pattern], Expression]
 FunctionValue = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
 Environment = Dict[str, FunctionValue]
+ConstructorInfo = Tuple[int, str]  # (arity, data_type_name)
+ConstructorEnvironment = Dict[str, ConstructorInfo]
 
 
 def interpret(
@@ -69,8 +73,8 @@ def interpret(
         print("Type checking failed, cannot interpret.")
         return ""
 
-    env = build_environment(ast)
-    interp = Interpreter(env)
+    env, constructors = build_environment(ast)
+    interp = Interpreter(env, constructors)
 
     if "main" not in env:
         raise RuntimeError("No main function defined")
@@ -92,9 +96,10 @@ def interpret(
     return output
 
 
-def build_environment(ast: Program) -> Environment:
-    """Build environment from AST collecting function definitions."""
+def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment]:
+    """Build environment from AST collecting function definitions and data type constructors."""
     env: Environment = {}
+    constructors: ConstructorEnvironment = {}
 
     for stmt in ast.statements:
         match stmt:
@@ -109,10 +114,27 @@ def build_environment(ast: Program) -> Environment:
 
                 # Add this clause to the function's clauses list
                 env[func_name][1].append((patterns, body))
+
+            case DataDeclaration(type_name=type_name, constructors=data_constructors):
+                # Process data type constructors
+                for constructor in data_constructors:
+                    ctor_name = constructor.name
+
+                    if constructor.record_constructor:
+                        # Record constructor - arity is number of fields
+                        arity = len(constructor.record_constructor.fields)
+                    elif constructor.type_atoms:
+                        # Positional constructor - arity is number of type atoms
+                        arity = len(constructor.type_atoms)
+                    else:
+                        # Nullary constructor - arity 0
+                        arity = 0
+
+                    constructors[ctor_name] = (arity, type_name)
             case _:
                 pass
 
-    return env
+    return env, constructors
 
 
 def flexible_putStr(
@@ -156,6 +178,21 @@ def _show(value: Value) -> str:
             if value == float("-inf"):
                 return "-Infinity"
             return str(value)
+        case dict() if "_constructor" in value:
+            # Handle constructor values
+            constructor = value["_constructor"]
+            # Get field values in order
+            field_values = []
+            i = 0
+            while f"field_{i}" in value:
+                field_values.append(value[f"field_{i}"])
+                i += 1
+
+            if field_values:
+                field_strs = [_show(field_val) for field_val in field_values]
+                return f"{constructor}({', '.join(field_strs)})"
+            else:
+                return constructor
         case _:
             return str(value)
 
@@ -165,15 +202,17 @@ builtins: Dict[str, Callable[..., Any]] = {
     "putStr": flexible_putStr,
     "show": lambda x: _show(x),
     "error": lambda x: _error(x),
+    "mod": lambda x: lambda y: x % y,
 }
 
 
 class Interpreter:
     """Interpreter class for evaluating AST expressions."""
 
-    def __init__(self, env: Environment) -> None:
-        """Initialize interpreter with environment of functions."""
+    def __init__(self, env: Environment, constructors: ConstructorEnvironment) -> None:
+        """Initialize interpreter with environment of functions and constructors."""
         self.env = env
+        self.constructors = constructors
         self.variables: Dict[str, Value] = {}
 
     def eval(self, node: Expression) -> Value:
@@ -208,31 +247,51 @@ class Interpreter:
                     raise RuntimeError(f"Unknown variable: {name}")
 
             case Constructor(name=constructor_name):
-                # Return a curried constructor function
-                def make_constructor(
-                    collected_args: Optional[List[Value]] = None,
-                ) -> Callable[[Value], Value]:
-                    if collected_args is None:
-                        collected_args = []
+                # Check if this is a known constructor
+                if constructor_name in self.constructors:
+                    arity, data_type = self.constructors[constructor_name]
 
-                    def constructor_fn(
-                        arg: Value,
-                    ) -> Union[Record, Callable[[Value], Value]]:
-                        new_args = collected_args + [arg]
-                        # For now, assume we need 2 or more args and create when we get them
-                        if len(new_args) >= 2:
-                            # Create the record with the collected arguments
-                            fields: Record = {}
-                            for i, value in enumerate(new_args):
-                                fields[f"field_{i}"] = value
-                            return {"_constructor": constructor_name, **fields}
-                        else:
-                            # Still collecting arguments
-                            return make_constructor(new_args)
+                    if arity == 0:
+                        # Nullary constructor - return the value directly
+                        return {"_constructor": constructor_name}
+                    else:
+                        # Return a curried constructor function
+                        def make_constructor(
+                            collected_args: Optional[List[Value]] = None,
+                        ) -> Callable[[Value], Value]:
+                            if collected_args is None:
+                                collected_args = []
 
-                    return constructor_fn
+                            def constructor_fn(
+                                arg: Value,
+                            ) -> Union[Record, Callable[[Value], Value]]:
+                                new_args = collected_args + [arg]
+                                # Create when we have enough arguments
+                                if len(new_args) >= arity:
+                                    # Create the record with the collected arguments
+                                    fields: Record = {}
+                                    for i, value in enumerate(new_args):
+                                        fields[f"field_{i}"] = value
+                                    return {"_constructor": constructor_name, **fields}
+                                else:
+                                    # Still collecting arguments
+                                    return make_constructor(new_args)
 
-                return make_constructor()
+                            return constructor_fn
+
+                        return make_constructor()
+                else:
+                    # Unknown constructor - treat as variable
+                    if constructor_name in self.variables:
+                        return self.variables[constructor_name]
+                    elif constructor_name in self.env:
+                        return self.eval_func(constructor_name)
+                    elif constructor_name in builtins:
+                        return builtins[constructor_name]
+                    else:
+                        raise RuntimeError(
+                            f"Unknown constructor or variable: {constructor_name}",
+                        )
 
             # Arithmetic operations
             case AddOperation(left=left, right=right):
@@ -424,8 +483,15 @@ class Interpreter:
         for patterns, body in clauses:
             if len(patterns) == len(args):
                 # Try to match this clause
-                if self._match_patterns(patterns, args):
-                    return self.eval(body)
+                old_vars = self.variables.copy()  # Save current variable state
+                try:
+                    if self._match_patterns(patterns, args):
+                        result = self.eval(body)
+                        self.variables = old_vars  # Restore variables after evaluation
+                        return result
+                finally:
+                    # Ensure variables are restored even if evaluation fails
+                    self.variables = old_vars
 
         # If no patterns matched and we don't have enough args, return partial application
         if len(args) < max(len(patterns) for patterns, _ in clauses):
@@ -499,30 +565,80 @@ class Interpreter:
                     return False
 
                 # Match sub-patterns against constructor fields
-                # For record constructors like Person {id_: Int, name: String},
-                # the patterns will match against the field values
                 if len(patterns) == 0:
-                    # Constructor with no patterns (like MkPoint used as value)
+                    # Constructor with no patterns (like Zero or Nil used as pattern)
                     return True
 
-                # Get the constructor fields in order
-                # For now, assume field order matches pattern order
-                # This is a simplification - a full implementation would need
-                # to look up the data type definition
-                field_values = []
-                for key in sorted(value.keys()):
-                    if key != "_constructor":
-                        field_values.append(value[key])
+                # Check if this is a record constructor or positional constructor
+                if constructor in self.constructors:
+                    arity, data_type = self.constructors[constructor]
 
-                if len(patterns) != len(field_values):
-                    return False
+                    # If the value has named fields (not field_0, field_1, etc), it's a record
+                    has_named_fields = any(
+                        key not in ["_constructor"] and not key.startswith("field_")
+                        for key in value.keys()
+                    )
 
-                # Match each pattern against its corresponding field value
-                for sub_pattern, field_value in zip(patterns, field_values):
-                    if not self._match_pattern(sub_pattern, field_value):
+                    if has_named_fields:
+                        # Record constructor pattern matching
+                        # For record patterns like (Person id_ name), we need to match against
+                        # record fields in the order they were declared
+                        # This requires looking up the field names from the data type definition
+
+                        # For now, assume the pattern variables match the field names in declaration order
+                        # This is a simplification - a full implementation would need the actual field order
+                        field_names = [
+                            key for key in value.keys() if key != "_constructor"
+                        ]
+                        field_names.sort()  # Sort to ensure consistent order
+
+                        if len(patterns) != len(field_names):
+                            return False
+
+                        # Match each pattern against its corresponding field value
+                        for sub_pattern, field_name in zip(patterns, field_names):
+                            if not self._match_pattern(sub_pattern, value[field_name]):
+                                return False
+
+                        return True
+                    else:
+                        # Positional constructor pattern matching
+                        field_values = []
+                        for i in range(len(patterns)):
+                            field_key = f"field_{i}"
+                            if field_key in value:
+                                field_values.append(value[field_key])
+                            else:
+                                return False  # Not enough fields
+
+                        if len(patterns) != len(field_values):
+                            return False
+
+                        # Match each pattern against its corresponding field value
+                        for sub_pattern, field_value in zip(patterns, field_values):
+                            if not self._match_pattern(sub_pattern, field_value):
+                                return False
+
+                        return True
+                else:
+                    # Unknown constructor, treat as positional
+                    field_values = []
+                    for i in range(len(patterns)):
+                        field_key = f"field_{i}"
+                        if field_key in value:
+                            field_values.append(value[field_key])
+                        else:
+                            return False  # Not enough fields
+
+                    if len(patterns) != len(field_values):
                         return False
 
-                return True
+                    # Match each pattern against its corresponding field value
+                    for sub_pattern, field_value in zip(patterns, field_values):
+                        if not self._match_pattern(sub_pattern, field_value):
+                            return False
+
+                    return True
 
             case ConsPattern(head=head, tail=tail):
                 # Match cons pattern (head : tail)
