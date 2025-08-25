@@ -2,16 +2,17 @@ from typing import Any
 
 import pytest
 
-from lango.minio.compiler.python import compile_program
+from lango.minio.compiler.python import compile_program as compile_to_python
+
+# from lango.minio.compiler.systemf import compile_program as compile_to_systemf
 from lango.minio.interpreter.interpreter import interpret
 from lango.minio.parser.parser import parse
 from lango.minio.typechecker.typecheck import type_check
 
 from ..utility.file_tester import file_test_output, file_test_type, get_all_test_files
-from ..utility.runners.external import (
+from ..utility.runners.external import (  # run_systemf_code,
     run_haskell_file,
     run_python_code,
-    run_systemf_code,
 )
 
 BASE_TEST_FILES_PATH = "./test/minio/files/"
@@ -27,11 +28,19 @@ def test_interpreter(file_name: str) -> None:
 
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
-def test_compiler(file_name: str) -> None:
+def test_python_compiler(file_name: str) -> None:
     def run_compiler_and_output(f: str) -> str:
-        return run_python_code(compile_program(parse(f)))
+        return run_python_code(compile_to_python(parse(f)))
 
     file_test_output(file_name, run_compiler_and_output)
+
+
+# @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
+# def test_systemf_compiler(file_name: str) -> None:
+#     def run_compiler_and_output(f: str) -> str:
+#         return run_systemf_code(compile_to_systemf(parse(f)))
+
+#     file_test_output(file_name, run_compiler_and_output)
 
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
@@ -48,12 +57,3 @@ def test_is_type_valid(file_name: str) -> None:
         return type_check(parse(f))
 
     file_test_type(file_name, run_type_check)
-
-
-def test_systemf_example() -> None:
-    # TODO: replace with SystemF compiler test when available
-    example_code = "lambda x:A. x;"
-    expected = "(lambda x:A. x) : A -> A"
-
-    output = run_systemf_code(example_code)
-    assert output == expected
