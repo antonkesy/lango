@@ -16,10 +16,10 @@ def run_haskell_file(path: str) -> str:
         raise RuntimeError(e.stderr.decode("utf-8").strip())
 
 
-def _run_x_code(code: str, executable: list[str]) -> str:
+def _run_x_code(code: str, executable: list[str], extension : str) -> str:
     temp_file = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=extension, delete=False) as f:
             temp_file = f.name
             f.write(code)
             f.flush()
@@ -41,12 +41,12 @@ def _run_x_code(code: str, executable: list[str]) -> str:
 
 
 def run_python_code(python_code: str) -> str:
-    return _run_x_code(python_code, ["python3"])
+    return _run_x_code(python_code, ["python3"], ".py")
 
 
 def run_systemf_code(code: str) -> str:
-    return _run_x_code(code, ["fullpoly"])
+    return _run_x_code(code, ["fullpoly"], ".sf")
 
 
 def run_go_code(go_code: str) -> str:
-    return _run_x_code(go_code, ["go", "run"])
+    return _run_x_code(go_code, ["go", "run"], ".go")
