@@ -632,15 +632,22 @@ class MinioGoCompiler:
                 cond_expr = self._compile_expression(condition)
                 then_val = self._compile_expression(then_expr)
                 else_val = self._compile_expression(else_expr)
-                return f"(func() interface{{}} {{ if {cond_expr} {{ return {then_val} }} else {{ return {else_val} }} }}())"
+                return f"(func() interface{{}} {{ if minioBool({cond_expr}) {{ return {then_val} }} else {{ return {else_val} }} }}())"
 
             # Function application
             case FunctionApplication(function=function, argument=argument):
                 func_expr = self._compile_expression(function)
                 arg_expr = self._compile_expression(argument)
 
+                # Helper function to unwrap GroupedExpressions
+                def unwrap_grouped(expr):
+                    while isinstance(expr, GroupedExpression):
+                        expr = expr.expression
+                    return expr
+
                 # Handle constructor calls specially
-                match function:
+                unwrapped_function = unwrap_grouped(function)
+                match unwrapped_function:
                     case Constructor(name=name):
                         # For constructors, we need to determine if it's record or positional
                         constructor_def = self._find_constructor_def(name)
@@ -664,7 +671,7 @@ class MinioGoCompiler:
                                     function=function,
                                 ):
                                     args.insert(0, argument)
-                                    current = function
+                                    current = unwrap_grouped(function)
                                 case _:
                                     break
 

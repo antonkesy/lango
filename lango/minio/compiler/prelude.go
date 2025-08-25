@@ -161,3 +161,22 @@ func minioCall(f interface{}, arg interface{}) interface{} {
 	// In a full implementation, this would handle function values
 	return nil
 }
+
+func minioBool(value interface{}) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case int:
+		return v != 0
+	case float64:
+		return v != 0.0
+	case string:
+		return v != ""
+	case []interface{}:
+		return len(v) > 0
+	case nil:
+		return false
+	default:
+		return true // Non-nil/non-zero values are truthy
+	}
+}
