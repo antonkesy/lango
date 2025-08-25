@@ -1,8 +1,8 @@
 -- RUN: OK
 -- TYPECHECK: OK
--- "01"
+-- "01-1"
 main = do {
   putStr (show (mod 15 3));
   putStr (show (mod 6 5));
---  putStr (show (mod 3 (-1))); -- TODO: add support for negative numbers
+  putStr (show (mod 5 (-2)));
 };
