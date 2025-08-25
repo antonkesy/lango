@@ -16,5 +16,8 @@ jobs:
       - name: Build Docker image
         run: docker build -t lango .
 
-      - name: Run container with example file
+      - name: Minio - Interpret example file
         run: docker run -it --rm lango run --input_file examples/minio/example.minio
+
+      - name: Minio - Compile example file
+        run: docker run -it --rm lango compile examples/minio/example.minio
