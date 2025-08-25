@@ -18,6 +18,12 @@ RUN add-apt-repository ppa:deadsnakes/ppa -y && \
   apt-get update && \
   apt-get install -y python3.13 python3.13-venv python3.13-dev && \
   rm -rf /var/lib/apt/lists/*
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
+
+# GHC
+RUN apt-get update && apt-get install -y ghc cabal-install && \
+  rm -rf /var/lib/apt/lists/*
+
 
 # OCaml
 RUN apt-get update && apt-get install -y ocaml opam && \
@@ -26,14 +32,14 @@ RUN apt-get update && apt-get install -y ocaml opam && \
 RUN apt-get install opam
 RUN opam init --auto-setup -n --disable-sandboxing && \
   opam switch create 5.3.0 && \
-  opam install ocaml-lsp-server odoc ocamlformat utop -y
+  opam install ocaml-lsp-server odoc ocamlformat utop dune -y
 
-# GHC
-RUN apt-get update && apt-get install -y ghc cabal-install && \
-  rm -rf /var/lib/apt/lists/*
-
-# Set default python3 to python3.13
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
+RUN git clone https://github.com/antonkesy/fullpoly
+RUN cd fullpoly && \
+  eval $(opam env) && \
+  dune build . && \
+  dune install && \
+  cp _build/install/default/bin/fullpoly /usr/local/bin/fullpoly
 
 RUN python3 -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
