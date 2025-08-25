@@ -76,6 +76,74 @@ func minioDiv(a, b interface{}) interface{} {
 	return nil
 }
 
+func minioPowInt(a, b interface{}) interface{} {
+	switch av := a.(type) {
+	case int:
+		if bv, ok := b.(int); ok {
+			result := 1
+			base := av
+			exp := bv
+			for exp > 0 {
+				if exp%2 == 1 {
+					result *= base
+				}
+				base *= base
+				exp /= 2
+			}
+			return result
+		}
+	case float64:
+		if bv, ok := b.(int); ok {
+			result := 1.0
+			base := av
+			exp := bv
+			for exp > 0 {
+				if exp%2 == 1 {
+					result *= base
+				}
+				base *= base
+				exp /= 2
+			}
+			return int(result)
+		}
+	}
+	return nil
+}
+
+func minioPowFloat(a, b interface{}) interface{} {
+	switch av := a.(type) {
+	case int:
+		if bv, ok := b.(int); ok {
+			result := 1.0
+			base := float64(av)
+			exp := bv
+			for exp > 0 {
+				if exp%2 == 1 {
+					result *= base
+				}
+				base *= base
+				exp /= 2
+			}
+			return result
+		}
+	case float64:
+		if bv, ok := b.(int); ok {
+			result := 1.0
+			base := av
+			exp := bv
+			for exp > 0 {
+				if exp%2 == 1 {
+					result *= base
+				}
+				base *= base
+				exp /= 2
+			}
+			return result
+		}
+	}
+	return nil
+}
+
 func minioLessThan(a, b interface{}) bool {
 	switch av := a.(type) {
 	case int:

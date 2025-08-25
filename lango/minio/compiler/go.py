@@ -37,6 +37,8 @@ from lango.minio.ast.nodes import (
     NotOperation,
     OrOperation,
     Pattern,
+    PowFloatOperation,
+    PowIntOperation,
     Program,
     StringLiteral,
     SubOperation,
@@ -63,6 +65,7 @@ class MinioGoCompiler:
         self.indent_level = 0
         self.defined_functions: Set[str] = set()
         self.nullary_functions: Set[str] = set()  # Functions with no parameters
+        self.nullary_constructors: Set[str] = set()  # Constructors with no parameters
         self.function_types: Dict[str, Type] = {}  # Track function types
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
@@ -138,10 +141,13 @@ class MinioGoCompiler:
                 | BoolLiteral()
                 | NegativeInt()
                 | NegativeFloat()
-                | ListLiteral()
             ):
                 # These don't reference variables
                 pass
+            case ListLiteral(elements=elements):
+                # List literals can contain expressions that reference variables
+                for element in elements:
+                    referenced.update(self._find_referenced_variables(element))
             case DoBlock(statements=statements):
                 for stmt in statements:
                     referenced.update(self._find_referenced_variables(stmt))
@@ -238,10 +244,52 @@ class MinioGoCompiler:
                     function_definitions[function_name].append(stmt)
                 case LetStatement(variable=variable, value=value):
                     prefixed_var = self._prefix_name(variable)
-                    go_type = "interface{}"  # Default type
-                    lines.append(
-                        f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
-                    )
+
+                    # Special handling for function applications that might be partial applications
+                    match value:
+                        case FunctionApplication(
+                            function=Variable(name=func_name),
+                            argument=arg,
+                        ):
+                            # This might be a partial application - generate a function instead of a variable
+                            if func_name in function_definitions and func_name not in [
+                                "show",
+                                "putStr",
+                                "error",
+                            ]:
+                                # Get the arity of the target function
+                                target_func_defs = function_definitions[func_name]
+                                if target_func_defs:
+                                    target_arity = (
+                                        len(target_func_defs[0].patterns)
+                                        if target_func_defs[0].patterns
+                                        else 0
+                                    )
+                                    if (
+                                        target_arity > 1
+                                    ):  # Multi-argument function, create partial application
+                                        prefixed_func = self._prefix_name(func_name)
+                                        arg_expr = self._compile_expression(arg)
+                                        lines.append(
+                                            f"func {prefixed_var}() interface{{}} {{",
+                                        )
+                                        lines.append(
+                                            f"\treturn {prefixed_func}({arg_expr})",
+                                        )
+                                        lines.append("}")
+                                        continue
+
+                            # Not a partial application, treat as normal variable assignment
+                            go_type = "interface{}"
+                            lines.append(
+                                f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
+                            )
+                        case _:
+                            # Normal let statement
+                            go_type = "interface{}"  # Default type
+                            lines.append(
+                                f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
+                            )
                 case _:
                     pass
 
@@ -250,6 +298,31 @@ class MinioGoCompiler:
             # Skip built-in functions to avoid conflicts
             if func_name not in ["show", "putStr", "error"]:
                 lines.append(self._compile_function_group(func_name, definitions))
+
+        # Generate function registry initialization
+        lines.append("")
+        lines.append("func init() {")
+        lines.append("\t// Populate function registry for first-class function support")
+        for func_name in function_definitions:
+            if func_name not in ["show", "putStr", "error", "main"]:
+                prefixed_name = self._prefix_name(func_name)
+                # Check if this is a nullary function
+                if func_name in self.nullary_functions:
+                    # Nullary functions need to be wrapped
+                    lines.append(
+                        f'\tminioFunctionRegistry["{func_name}"] = func(arg interface{{}}) interface{{}} {{',
+                    )
+                    lines.append(f"\t\t// Nullary function - ignore the argument")
+                    lines.append(f"\t\treturn {prefixed_name}()")
+                    lines.append("\t}")
+                else:
+                    # Regular functions
+                    lines.append(
+                        f'\tminioFunctionRegistry["{func_name}"] = func(arg interface{{}}) interface{{}} {{',
+                    )
+                    lines.append(f"\t\treturn {prefixed_name}(arg)")
+                    lines.append("\t}")
+        lines.append("}")
 
         # Add main function
         if "main" in function_definitions:
@@ -269,6 +342,13 @@ class MinioGoCompiler:
 
         for constructor in data_decl.constructors:
             class_name = constructor.name
+
+            # Track nullary constructors
+            is_nullary = not constructor.record_constructor and (
+                not constructor.type_atoms or len(constructor.type_atoms) == 0
+            )
+            if is_nullary:
+                self.nullary_constructors.add(class_name)
 
             # Generate struct for constructor
             if constructor.record_constructor:
@@ -381,57 +461,152 @@ class MinioGoCompiler:
                 )
             lines.append("")
 
-        # Generate pattern matching logic
-        for i, func_def in enumerate(definitions):
-            condition_parts = []
-            assignments = []
+        # Generate pattern matching logic - group by arity first
+        arity_groups = {}
+        for func_def in definitions:
+            arity = len(func_def.patterns)
+            if arity not in arity_groups:
+                arity_groups[arity] = []
+            arity_groups[arity].append(func_def)
 
-            for j, pattern in enumerate(func_def.patterns):
-                condition, assignment = self._compile_pattern_condition_and_assignment(
-                    pattern,
-                    f"args[{j}]",
-                    f"arg{j}",
-                    func_def.body,  # Pass function body for complex functions too
-                )
-                if condition:
-                    condition_parts.append(condition)
-                # Only add assignments for non-variable patterns since variables are pre-declared
-                # But also add assignments for variables that have a different name than the pre-declared one
-                if assignment:
-                    if isinstance(pattern, VariablePattern):
-                        # Don't use the assignment from the pattern method since we handle aliasing here
-                        if (
-                            j in used_final_arg_vars
-                            and pattern.name != used_final_arg_vars[j]
-                        ):
-                            assignments.append(
-                                f"{pattern.name} := {used_final_arg_vars[j]}",
-                            )
-                    else:
-                        assignments.append(assignment)
+        # Calculate maximum arity for partial application support
+        max_arity = max(arity_groups.keys()) if arity_groups else 0
 
-            # Generate a branch for every function definition
-            if i == 0:
-                lines.append(
-                    f"{self._indent()}if len(args) == {len(func_def.patterns)}{' && ' + ' && '.join(condition_parts) if condition_parts else ''} {{",
-                )
+        # Generate branches for each arity group
+        first_arity = True
+        for arity, func_defs in arity_groups.items():
+            if first_arity:
+                lines.append(f"{self._indent()}if len(args) == {arity} {{")
+                first_arity = False
             else:
+                lines.append(f"{self._indent()}}} else if len(args) == {arity} {{")
+
+            # Within this arity group, generate pattern matching for each function definition
+            first_pattern = True
+            for func_def in func_defs:
+                condition_parts = []
+                assignments = []
+
+                for j, pattern in enumerate(func_def.patterns):
+                    condition, assignment = (
+                        self._compile_pattern_condition_and_assignment(
+                            pattern,
+                            f"args[{j}]",
+                            f"arg{j}",
+                            func_def.body,
+                        )
+                    )
+                    if condition:
+                        condition_parts.append(condition)
+                    if assignment:
+                        if isinstance(pattern, VariablePattern):
+                            # Handle variable aliasing if needed
+                            if (
+                                j in used_final_arg_vars
+                                and pattern.name != used_final_arg_vars[j]
+                            ):
+                                assignments.append(
+                                    f"{pattern.name} := {used_final_arg_vars[j]}",
+                                )
+                        else:
+                            assignments.append(assignment)
+
+                # Generate condition check for this specific pattern
+                if condition_parts:
+                    # Check if any condition contains variable declarations (type assertions)
+                    has_type_assertions = any(":=" in cond for cond in condition_parts)
+
+                    if has_type_assertions:
+                        # Generate nested if statements for type assertions
+                        if first_pattern:
+                            lines.append(
+                                f"{self._indent()}\tif {condition_parts[0]} {{",
+                            )
+                        else:
+                            lines.append(
+                                f"{self._indent()}\t}} else if {condition_parts[0]} {{",
+                            )
+
+                        # Add additional nested conditions if needed
+                        for cond in condition_parts[1:]:
+                            if ":=" in cond:
+                                lines.append(f"{self._indent()}\t\tif {cond} {{")
+                            else:
+                                lines.append(f"{self._indent()}\t\tif {cond} {{")
+
+                        # Calculate correct indentation based on nested conditions
+                        indent_level = 2 + len(condition_parts) - 1
+                    else:
+                        # No type assertions - can use && to combine conditions
+                        combined_condition = " && ".join(condition_parts)
+                        if first_pattern:
+                            lines.append(
+                                f"{self._indent()}\tif {combined_condition} {{",
+                            )
+                        else:
+                            lines.append(
+                                f"{self._indent()}\t}} else if {combined_condition} {{",
+                            )
+                        indent_level = 2
+                else:
+                    # No pattern conditions - this is a variable-only pattern (always matches)
+                    if first_pattern:
+                        lines.append(f"{self._indent()}\t{{")  # No condition needed
+                    else:
+                        lines.append(f"{self._indent()}\t}} else {{")  # Fallback case
+                    indent_level = 2
+
+                # Add assignments
+                for assignment in assignments:
+                    lines.append(f"{self._indent()}{'\t' * indent_level}{assignment}")
+
+                # Compile function body
                 lines.append(
-                    f"{self._indent()}}} else if len(args) == {len(func_def.patterns)}{' && ' + ' && '.join(condition_parts) if condition_parts else ''} {{",
+                    f"{self._indent()}{'\t' * indent_level}return {self._compile_expression(func_def.body)}",
                 )
 
-            # Add assignments
-            for assignment in assignments:
-                lines.append(f"{self._indent()}\t{assignment}")
+                # Close nested conditions if needed
+                if condition_parts and any(":=" in cond for cond in condition_parts):
+                    for _ in condition_parts[1:]:  # Close additional nested conditions
+                        lines.append(f"{self._indent()}\t\t}}")
 
-            # Compile function body
-            self.indent_level += 1
+                first_pattern = False
+
+            # Close the pattern matching for this function definition group
+            if not first_pattern:  # Only if we had at least one pattern
+                lines.append(f"{self._indent()}\t}}")
+
+            # Add a fallback return for any unmatched patterns within this arity
+            # This should not normally be reached if patterns are exhaustive
             lines.append(
-                f"{self._indent()}return {self._compile_expression(func_def.body)}",
+                f'{self._indent()}\tpanic("Pattern match failure in {prefixed_func_name}")',
             )
-            self.indent_level -= 1
 
-        # Add fallback error
+        # Add fallback for partial application - if fewer arguments provided, return a closure
+        if max_arity > 1:  # Only for multi-argument functions
+            for partial_arity in range(1, max_arity):
+                lines.append(
+                    f"{self._indent()}}} else if len(args) == {partial_arity} {{",
+                )
+                lines.append(
+                    f"{self._indent()}\t// Partial application with {partial_arity} argument(s)",
+                )
+                lines.append(
+                    f"{self._indent()}\treturn func(remainingArgs ...interface{{}}) interface{{}} {{",
+                )
+                lines.append(
+                    f"{self._indent()}\t\tallArgs := make([]interface{{}}, {partial_arity}+len(remainingArgs))",
+                )
+                for i in range(partial_arity):
+                    lines.append(f"{self._indent()}\t\tallArgs[{i}] = args[{i}]")
+                lines.append(
+                    f"{self._indent()}\t\tcopy(allArgs[{partial_arity}:], remainingArgs)",
+                )
+                lines.append(
+                    f"{self._indent()}\t\treturn {prefixed_func_name}(allArgs...)",
+                )
+                lines.append(f"{self._indent()}\t}}")
+
         lines.append(f"{self._indent()}}} else {{")
         lines.append(
             f'{self._indent()}\tpanic("No matching pattern for {prefixed_func_name}")',
@@ -611,24 +786,64 @@ class MinioGoCompiler:
                 condition = f"len({value_expr}.([]interface{{}})) > 0"
                 assignments = []
 
+                # Determine which variables are actually used in the function body
+                used_variables = set()
+                if function_body:
+                    used_variables = self._find_referenced_variables(function_body)
+
                 if isinstance(head, VariablePattern):
-                    # Use the actual head variable name
-                    assignments.append(
-                        f"{head.name} := {value_expr}.([]interface{{}})[0]",
-                    )
-                    # Add unused variable suppression
-                    assignments.append(f"_ = {head.name}")
+                    # Check if head variable is actually used
+                    if function_body and head.name not in used_variables:
+                        # Variable is not used - use blank identifier
+                        assignments.append(
+                            f"_ = {value_expr}.([]interface{{}})[0]",
+                        )
+                    else:
+                        # Variable is used - generate normal assignment
+                        assignments.append(
+                            f"{head.name} := {value_expr}.([]interface{{}})[0]",
+                        )
                 else:
-                    assignments.append(f"_ = {value_expr}.([]interface{{}})[0]")
+                    # For non-variable patterns, still need to evaluate the head for pattern matching
+                    head_condition, head_assignment = (
+                        self._compile_pattern_condition_and_assignment(
+                            head,
+                            f"{value_expr}.([]interface{{}})[0]",
+                            f"{var_prefix}_head",
+                            function_body,
+                        )
+                    )
+                    if head_condition:
+                        condition = f"{condition} && {head_condition}"
+                    if head_assignment:
+                        assignments.append(head_assignment)
 
                 if isinstance(tail, VariablePattern):
-                    assignments.append(
-                        f"{tail.name} := {value_expr}.([]interface{{}})[1:]",
-                    )
-                    # Add unused variable suppression
-                    assignments.append(f"_ = {tail.name}")
+                    # Check if tail variable is actually used
+                    if function_body and tail.name not in used_variables:
+                        # Variable is not used - use blank identifier
+                        assignments.append(
+                            f"_ = {value_expr}.([]interface{{}})[1:]",
+                        )
+                    else:
+                        # Variable is used - generate normal assignment
+                        assignments.append(
+                            f"{tail.name} := {value_expr}.([]interface{{}})[1:]",
+                        )
                 else:
-                    assignments.append(f"_ = {value_expr}.([]interface{{}})[1:]")
+                    # For non-variable patterns, still need to evaluate the tail for pattern matching
+                    tail_condition, tail_assignment = (
+                        self._compile_pattern_condition_and_assignment(
+                            tail,
+                            f"{value_expr}.([]interface{{}})[1:]",
+                            f"{var_prefix}_tail",
+                            function_body,
+                        )
+                    )
+                    if tail_condition:
+                        condition = f"{condition} && {tail_condition}"
+                    if tail_assignment:
+                        assignments.append(tail_assignment)
 
                 assignment_str = "; ".join(assignments) if assignments else None
                 return condition, assignment_str
@@ -671,7 +886,11 @@ class MinioGoCompiler:
                 else:
                     return prefixed_name
             case Constructor(name=name):
-                return name
+                # For nullary constructors, return an instance, not the type
+                if name in self.nullary_constructors:
+                    return f"{name}{{}}"
+                else:
+                    return name
 
             # Binary operations
             case AddOperation(left=left, right=right):
@@ -682,6 +901,10 @@ class MinioGoCompiler:
                 return f"minioMul({self._compile_expression(left)}, {self._compile_expression(right)})"
             case DivOperation(left=left, right=right):
                 return f"minioDiv({self._compile_expression(left)}, {self._compile_expression(right)})"
+            case PowIntOperation(left=left, right=right):
+                return f"minioPowInt({self._compile_expression(left)}, {self._compile_expression(right)})"
+            case PowFloatOperation(left=left, right=right):
+                return f"minioPowFloat({self._compile_expression(left)}, {self._compile_expression(right)})"
             case EqualOperation(left=left, right=right):
                 return f"minioEqual({self._compile_expression(left)}, {self._compile_expression(right)})"
             case NotEqualOperation(left=left, right=right):
@@ -819,12 +1042,29 @@ class MinioGoCompiler:
                         func_expr = self._compile_expression(function)
                         arg_expr = self._compile_expression(argument)
 
-                        # If the function expression looks like a variable (could be interface{}),
-                        # use our function call helper
+                        # Check various cases where we should use minioCall instead of direct call
+                        should_use_minio_call = False
+
+                        # Case 1: Function is a local variable (could be interface{})
                         if (
                             isinstance(function, Variable)
                             and function.name in self.local_variables
                         ):
+                            should_use_minio_call = True
+
+                        # Case 2: Function expression contains function calls that might return closures
+                        # This handles cases like addOneAndDouble where the function is the result of another function call
+                        elif isinstance(function, FunctionApplication):
+                            should_use_minio_call = True
+
+                        # Case 3: Function is a nullary function (like addOneAndDouble) that returns a closure
+                        elif (
+                            isinstance(function, Variable)
+                            and function.name in self.nullary_functions
+                        ):
+                            should_use_minio_call = True
+
+                        if should_use_minio_call:
                             return f"minioCall({func_expr}, {arg_expr})"
                         else:
                             return f"{func_expr}({arg_expr})"
