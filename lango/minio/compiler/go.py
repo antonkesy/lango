@@ -114,7 +114,7 @@ class MinioGoCompiler:
             case TypeCon(name="Bool"):
                 return f"{var_name}.(bool)"
             case TypeApp(constructor=TypeCon(name="List")):
-                return f"{var_name}.([]interface{{}})"
+                return f"{var_name}.([]any)"
             case DataType(name=name):
                 return f"{var_name}.({name}Interface)"
             case TypeVar():
@@ -211,7 +211,7 @@ class MinioGoCompiler:
     def _minio_type_to_go_type(self, minio_type: Optional[Type]) -> str:
         """Convert a Minio type to a Go type string."""
         if minio_type is None:
-            return "interface{}"
+            return "any"
 
         match minio_type:
             case TypeCon(name="Int"):
@@ -223,13 +223,13 @@ class MinioGoCompiler:
             case TypeCon(name="Bool"):
                 return "bool"
             case TypeCon(name="()"):
-                return "interface{}"
+                return "any"
             case TypeApp(constructor=TypeCon(name="List"), argument=arg_type):
-                # For now, use []interface{} for all lists to simplify
-                return "[]interface{}"
+                # For now, use []any for all lists to simplify
+                return "[]any"
             case TypeApp(constructor=TypeCon(name="IO"), argument=arg_type):
                 # IO types typically don't have meaningful return types in our compiled Go
-                return "interface{}"
+                return "any"
             case FunctionType(param=param_type, result=result_type):
                 # For function types, we'll use func signatures
                 param_type_str = self._minio_type_to_go_type(param_type)
@@ -239,10 +239,10 @@ class MinioGoCompiler:
                 # Custom data types - use interface type
                 return f"{name}Interface"
             case TypeVar(name=name):
-                # Type variables become interface{} for now
-                return "interface{}"
+                # Type variables become any for now
+                return "any"
             case _:
-                return "interface{}"
+                return "any"
 
     def _extract_pattern_variables(self, pattern: Pattern) -> Set[str]:
         """Extract all variable names from a pattern recursively."""
@@ -335,7 +335,7 @@ class MinioGoCompiler:
                             )
                         case _:
                             # Normal let statement
-                            go_type = "interface{}"  # Default type
+                            go_type = "any"  # Default type
                             lines.append(
                                 f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
                             )
@@ -359,7 +359,7 @@ class MinioGoCompiler:
                 if func_name in self.nullary_functions:
                     # Nullary functions need to be wrapped
                     lines.append(
-                        f'\tminioFunctionRegistry["{func_name}"] = func(arg interface{{}}) interface{{}} {{',
+                        f'\tminioFunctionRegistry["{func_name}"] = func(arg any) any {{',
                     )
                     lines.append(f"\t\t// Nullary function - ignore the argument")
                     lines.append(f"\t\treturn {prefixed_name}()")
@@ -367,7 +367,7 @@ class MinioGoCompiler:
                 else:
                     # Regular functions - need proper type assertion
                     lines.append(
-                        f'\tminioFunctionRegistry["{func_name}"] = func(arg interface{{}}) interface{{}} {{',
+                        f'\tminioFunctionRegistry["{func_name}"] = func(arg any) any {{',
                     )
 
                     # Get function type information for proper type casting
@@ -471,7 +471,7 @@ class MinioGoCompiler:
             return self._compile_simple_function(definitions[0], prefixed_func_name)
 
         # Complex case: multiple patterns or multiple definitions
-        lines = [f"func {prefixed_func_name}(args ...interface{{}}) interface{{}} {{"]
+        lines = [f"func {prefixed_func_name}(args ...any) any {{"]
         self.indent_level += 1
 
         # Collect all pattern variables from all definitions
@@ -520,7 +520,7 @@ class MinioGoCompiler:
             lines.append(f"{self._indent()}// Declare argument variables")
             for arg_index in sorted(used_final_arg_vars.keys()):
                 var_name = used_final_arg_vars[arg_index]
-                lines.append(f"{self._indent()}var {var_name} interface{{}}")
+                lines.append(f"{self._indent()}var {var_name} any")
                 lines.append(
                     f"{self._indent()}if len(args) > {arg_index} {{ {var_name} = args[{arg_index}] }}",
                 )
@@ -657,10 +657,10 @@ class MinioGoCompiler:
                     f"{self._indent()}\t// Partial application with {partial_arity} argument(s)",
                 )
                 lines.append(
-                    f"{self._indent()}\treturn func(remainingArgs ...interface{{}}) interface{{}} {{",
+                    f"{self._indent()}\treturn func(remainingArgs ...any) any {{",
                 )
                 lines.append(
-                    f"{self._indent()}\t\tallArgs := make([]interface{{}}, {partial_arity}+len(remainingArgs))",
+                    f"{self._indent()}\t\tallArgs := make([]any, {partial_arity}+len(remainingArgs))",
                 )
                 for i in range(partial_arity):
                     lines.append(f"{self._indent()}\t\tallArgs[{i}] = args[{i}]")
@@ -700,7 +700,7 @@ class MinioGoCompiler:
             self.local_variables.update(self._extract_pattern_variables(pattern))
 
         # Determine return type
-        return_type = "interface{}"
+        return_type = "any"
         # Try to infer return type from the function body for simple cases
         if len(func_def.patterns) == 0:  # nullary function
             match func_def.body:
@@ -711,7 +711,7 @@ class MinioGoCompiler:
                             if constructor.name == constructor_name:
                                 return_type = f"{data_name}Interface"
                                 break
-                        if return_type != "interface{}":
+                        if return_type != "any":
                             break
                 case Variable(name=name) if name in self.data_types:
                     return_type = f"{name}Interface"
@@ -724,7 +724,7 @@ class MinioGoCompiler:
         else:
             # One parameter
             pattern = func_def.patterns[0]
-            param_type = "interface{}"
+            param_type = "any"
 
             # Try to get parameter type from function type
             if func_def.ty and isinstance(func_def.ty, FunctionType):
@@ -793,7 +793,7 @@ class MinioGoCompiler:
                 match value:
                     case []:
                         # Empty list comparison
-                        return f"len({value_expr}.([]interface{{}})) == 0", None
+                        return f"len({value_expr}.([]any)) == 0", None
                     case _:
                         go_value = self._compile_literal_value(value)
                         return f"{value_expr} == {go_value}", None
@@ -848,7 +848,7 @@ class MinioGoCompiler:
                 return condition, assignment_str
             case ConsPattern(head=head, tail=tail):
                 # Cons pattern - list with at least one element
-                condition = f"len({value_expr}.([]interface{{}})) > 0"
+                condition = f"len({value_expr}.([]any)) > 0"
                 assignments = []
 
                 # Determine which variables are actually used in the function body
@@ -861,19 +861,19 @@ class MinioGoCompiler:
                     if function_body and head.name not in used_variables:
                         # Variable is not used - use blank identifier
                         assignments.append(
-                            f"_ = {value_expr}.([]interface{{}})[0]",
+                            f"_ = {value_expr}.([]any)[0]",
                         )
                     else:
                         # Variable is used - generate normal assignment
                         assignments.append(
-                            f"{head.name} := {value_expr}.([]interface{{}})[0]",
+                            f"{head.name} := {value_expr}.([]any)[0]",
                         )
                 else:
                     # For non-variable patterns, still need to evaluate the head for pattern matching
                     head_condition, head_assignment = (
                         self._compile_pattern_condition_and_assignment(
                             head,
-                            f"{value_expr}.([]interface{{}})[0]",
+                            f"{value_expr}.([]any)[0]",
                             f"{var_prefix}_head",
                             function_body,
                         )
@@ -888,19 +888,19 @@ class MinioGoCompiler:
                     if function_body and tail.name not in used_variables:
                         # Variable is not used - use blank identifier
                         assignments.append(
-                            f"_ = {value_expr}.([]interface{{}})[1:]",
+                            f"_ = {value_expr}.([]any)[1:]",
                         )
                     else:
                         # Variable is used - generate normal assignment
                         assignments.append(
-                            f"{tail.name} := {value_expr}.([]interface{{}})[1:]",
+                            f"{tail.name} := {value_expr}.([]any)[1:]",
                         )
                 else:
                     # For non-variable patterns, still need to evaluate the tail for pattern matching
                     tail_condition, tail_assignment = (
                         self._compile_pattern_condition_and_assignment(
                             tail,
-                            f"{value_expr}.([]interface{{}})[1:]",
+                            f"{value_expr}.([]any)[1:]",
                             f"{var_prefix}_tail",
                             function_body,
                         )
@@ -934,7 +934,7 @@ class MinioGoCompiler:
                 compiled_elements = [
                     self._compile_expression(elem) for elem in elements
                 ]
-                return "[]interface{}{" + ", ".join(compiled_elements) + "}"
+                return "[]any{" + ", ".join(compiled_elements) + "}"
 
             # Variables and constructors
             case Variable(name="show"):
@@ -1001,8 +1001,8 @@ class MinioGoCompiler:
                 # If it's a simple variable (starts with Minio and contains only letters/numbers)
                 # or already contains type assertion, don't double-assert
                 if (
-                    ".([]interface{})" in list_compiled
-                    or list_compiled.startswith("[]interface{}")
+                    ".([]any)" in list_compiled
+                    or list_compiled.startswith("[]any")
                     or (
                         list_compiled.startswith("Minio")
                         and list_compiled.replace("Minio", "")
@@ -1012,13 +1012,13 @@ class MinioGoCompiler:
                 ):
                     return f"({list_compiled}[{index_compiled}])"
                 else:
-                    return f"({list_compiled}.([]interface{{}})[{index_compiled}])"
+                    return f"({list_compiled}.([]any)[{index_compiled}])"
             case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
                 # Use a more compact ternary-like expression in Go
                 cond_expr = self._compile_expression(condition)
                 then_val = self._compile_expression(then_expr)
                 else_val = self._compile_expression(else_expr)
-                return f"(func() interface{{}} {{ if minioBool({cond_expr}) {{ return {then_val} }} else {{ return {else_val} }} }}())"
+                return f"(func() any {{ if minioBool({cond_expr}) {{ return {then_val} }} else {{ return {else_val} }} }}())"
 
             # Function application
             case FunctionApplication(function=function, argument=argument):
@@ -1155,13 +1155,12 @@ class MinioGoCompiler:
             case GroupedExpression(expression=expression):
                 return f"({self._compile_expression(expression)})"
 
-            # Default case
             case _:
                 return f"nil  // Unsupported: {type(expr)}"
 
     def _compile_do_block(self, do_block: DoBlock) -> str:
         """Compile a do block as an immediately invoked function expression."""
-        lines = ["func() interface{} {"]
+        lines = ["func() any {"]
 
         # Process all statements except the last one
         for stmt in do_block.statements[:-1]:
@@ -1234,7 +1233,7 @@ class MinioGoCompiler:
             case bool():
                 return "true" if value else "false"
             case list():
-                return "[]interface{}{}"  # Handle empty list explicitly
+                return "[]any{}"  # Handle empty list explicitly
             case _:
                 return str(value)
 

@@ -13,7 +13,7 @@ type MinioInfinity struct{}
 
 var minioInfinity = MinioInfinity{}
 
-func minioAdd(a, b interface{}) interface{} {
+func minioAdd(a, b any) any {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -27,7 +27,7 @@ func minioAdd(a, b interface{}) interface{} {
 	return nil
 }
 
-func minioSub(a, b interface{}) interface{} {
+func minioSub(a, b any) any {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -41,7 +41,7 @@ func minioSub(a, b interface{}) interface{} {
 	return nil
 }
 
-func minioMul(a, b interface{}) interface{} {
+func minioMul(a, b any) any {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -55,7 +55,7 @@ func minioMul(a, b interface{}) interface{} {
 	return nil
 }
 
-func minioDiv(a, b interface{}) interface{} {
+func minioDiv(a, b any) any {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -76,7 +76,7 @@ func minioDiv(a, b interface{}) interface{} {
 	return nil
 }
 
-func minioPowInt(a, b interface{}) interface{} {
+func minioPowInt(a, b any) any {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -110,7 +110,7 @@ func minioPowInt(a, b interface{}) interface{} {
 	return nil
 }
 
-func minioPowFloat(a, b interface{}) interface{} {
+func minioPowFloat(a, b any) any {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -144,7 +144,7 @@ func minioPowFloat(a, b interface{}) interface{} {
 	return nil
 }
 
-func minioLessThan(a, b interface{}) bool {
+func minioLessThan(a, b any) bool {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -162,7 +162,7 @@ func minioLessThan(a, b interface{}) bool {
 	return false
 }
 
-func minioLessEqual(a, b interface{}) bool {
+func minioLessEqual(a, b any) bool {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -180,7 +180,7 @@ func minioLessEqual(a, b interface{}) bool {
 	return false
 }
 
-func minioGreaterThan(a, b interface{}) bool {
+func minioGreaterThan(a, b any) bool {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -198,7 +198,7 @@ func minioGreaterThan(a, b interface{}) bool {
 	return false
 }
 
-func minioGreaterEqual(a, b interface{}) bool {
+func minioGreaterEqual(a, b any) bool {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -216,7 +216,7 @@ func minioGreaterEqual(a, b interface{}) bool {
 	return false
 }
 
-func minioEqual(a, b interface{}) bool {
+func minioEqual(a, b any) bool {
 	switch av := a.(type) {
 	case int:
 		if bv, ok := b.(int); ok {
@@ -234,8 +234,8 @@ func minioEqual(a, b interface{}) bool {
 		if bv, ok := b.(bool); ok {
 			return av == bv
 		}
-	case []interface{}:
-		if bv, ok := b.([]interface{}); ok {
+	case []any:
+		if bv, ok := b.([]any); ok {
 			if len(av) != len(bv) {
 				return false
 			}
@@ -250,16 +250,16 @@ func minioEqual(a, b interface{}) bool {
 	return false
 }
 
-func minioNotEqual(a, b interface{}) bool {
+func minioNotEqual(a, b any) bool {
 	return !minioEqual(a, b)
 }
 
-func minioConcat(a, b interface{}) interface{} {
+func minioConcat(a, b any) any {
 	// Check if both operands are lists
-	if aList, aOk := a.([]interface{}); aOk {
-		if bList, bOk := b.([]interface{}); bOk {
+	if aList, aOk := a.([]any); aOk {
+		if bList, bOk := b.([]any); bOk {
 			// List concatenation
-			result := make([]interface{}, len(aList)+len(bList))
+			result := make([]any, len(aList)+len(bList))
 			copy(result, aList)
 			copy(result[len(aList):], bList)
 			return result
@@ -284,7 +284,7 @@ func minioConcat(a, b interface{}) interface{} {
 	return aStr + bStr
 }
 
-func minioShow(value interface{}) string {
+func minioShow(value any) string {
 	switch v := value.(type) {
 	case MinioInfinity:
 		return "Infinity"
@@ -296,7 +296,7 @@ func minioShow(value interface{}) string {
 		}
 	case string:
 		return `"` + v + `"`
-	case []interface{}:
+	case []any:
 		elements := make([]string, len(v))
 		for i, elem := range v {
 			elements[i] = minioShow(elem)
@@ -315,7 +315,7 @@ func minioShow(value interface{}) string {
 	}
 }
 
-func minioPutStr(s interface{}) interface{} {
+func minioPutStr(s any) any {
 	if str, ok := s.(string); ok {
 		fmt.Print(str)
 	} else {
@@ -324,27 +324,27 @@ func minioPutStr(s interface{}) interface{} {
 	return nil
 }
 
-func minioError(message string) interface{} {
+func minioError(message string) any {
 	panic("Runtime error: " + message)
 }
 
 // Forward declarations for functions that might be used as first-class values
-var minioFunctionRegistry = make(map[interface{}]func(interface{}) interface{})
+var minioFunctionRegistry = make(map[any]func(any) any)
 
 func init() {
 	// This will be populated by generated code
 }
 
-func minioCall(f interface{}, arg interface{}) interface{} {
+func minioCall(f any, arg any) any {
 	// Handle function calls by function name or function pointer
 
 	// Try function pointer first
-	if fn, ok := f.(func(interface{}) interface{}); ok {
+	if fn, ok := f.(func(any) any); ok {
 		return fn(arg)
 	}
 
 	// If f is a function that takes multiple arguments, we need to handle variadic calls
-	if fn, ok := f.(func(...interface{}) interface{}); ok {
+	if fn, ok := f.(func(...any) any); ok {
 		return fn(arg)
 	}
 
@@ -363,7 +363,7 @@ func minioCall(f interface{}, arg interface{}) interface{} {
 	}
 }
 
-func minioBool(value interface{}) bool {
+func minioBool(value any) bool {
 	switch v := value.(type) {
 	case bool:
 		return v
@@ -373,7 +373,7 @@ func minioBool(value interface{}) bool {
 		return v != 0.0
 	case string:
 		return v != ""
-	case []interface{}:
+	case []any:
 		return len(v) > 0
 	case nil:
 		return false
