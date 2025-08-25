@@ -46,3 +46,7 @@ def run_python_code(python_code: str) -> str:
 
 def run_systemf_code(code: str) -> str:
     return _run_x_code(code, ["fullpoly"])
+
+
+def run_go_code(go_code: str) -> str:
+    return _run_x_code(go_code, ["go", "run"])

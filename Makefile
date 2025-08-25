@@ -35,9 +35,13 @@ compile-python: install
 
 compile-systemf: install
 	. .venv/bin/activate && \
-	lango compile test/minio/files/math/arithmetic/add.minio -o ./build/example.sf --target systemf && \
+	lango compile examples/minio/example.minio -o ./build/example.sf --target systemf && \
 	fullpoly ./build/example.sf
 
+compile-go: install
+	. .venv/bin/activate && \
+	lango compile examples/minio/example.minio -o ./build/example.go --target go && \
+	go run ./build/example.go
 
 types: install
 	. .venv/bin/activate && \

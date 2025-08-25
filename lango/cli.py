@@ -4,6 +4,7 @@ import typer
 from rich.console import Console
 
 from lango.minio.ast.printer import print_annotated_ast
+from lango.minio.compiler.go import compile_program as go_compile_program
 from lango.minio.compiler.python import compile_program as python_compile_program
 from lango.minio.compiler.systemf import compile_program as systemf_compile_program
 from lango.minio.interpreter.interpreter import interpret
@@ -93,7 +94,7 @@ def compile(
         "python",
         "--target",
         "-t",
-        help="Target language (python|systemf)",
+        help="Target language (python|systemf|go)",
     ),
 ) -> int:
     try:
@@ -104,6 +105,8 @@ def compile(
                 compile_program = python_compile_program
             case "systemf":
                 compile_program = systemf_compile_program
+            case "go":
+                compile_program = go_compile_program
             case _:
                 console.print(f"Unknown target: {target}", style="bold red")
                 return 1
