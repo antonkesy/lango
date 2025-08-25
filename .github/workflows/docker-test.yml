@@ -13,9 +13,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Docker images
+      - name: Build Docker lango image
         run: docker build --target lango -t lango .
-          docker build --target test -t lango-test .
+
+      - name: Build Docker test image
+        run: docker build --target test -t lango-test .
 
       - name: Run tests
         run: docker run -it --rm lango-test
