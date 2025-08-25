@@ -93,6 +93,66 @@ class MinioGoCompiler:
                     return constructor
         return None
 
+    def _find_referenced_variables(self, expr) -> Set[str]:
+        """Find all variable names referenced in an expression."""
+        referenced = set()
+
+        match expr:
+            case Variable(name=name):
+                referenced.add(name)
+            case FunctionApplication(function=function, argument=argument):
+                referenced.update(self._find_referenced_variables(function))
+                referenced.update(self._find_referenced_variables(argument))
+            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
+                referenced.update(self._find_referenced_variables(condition))
+                referenced.update(self._find_referenced_variables(then_expr))
+                if else_expr:
+                    referenced.update(self._find_referenced_variables(else_expr))
+            case IndexOperation(list_expr=list_expr, index_expr=index_expr):
+                referenced.update(self._find_referenced_variables(list_expr))
+                referenced.update(self._find_referenced_variables(index_expr))
+            case (
+                AddOperation(left=left, right=right)
+                | SubOperation(left=left, right=right)
+                | MulOperation(left=left, right=right)
+                | DivOperation(left=left, right=right)
+                | AndOperation(left=left, right=right)
+                | OrOperation(left=left, right=right)
+                | EqualOperation(left=left, right=right)
+                | NotEqualOperation(left=left, right=right)
+                | GreaterThanOperation(left=left, right=right)
+                | GreaterEqualOperation(left=left, right=right)
+                | LessThanOperation(left=left, right=right)
+                | LessEqualOperation(left=left, right=right)
+                | ConcatOperation(left=left, right=right)
+            ):
+                referenced.update(self._find_referenced_variables(left))
+                referenced.update(self._find_referenced_variables(right))
+            case NotOperation(operand=operand):
+                referenced.update(self._find_referenced_variables(operand))
+            case (
+                ConstructorExpression()
+                | IntLiteral()
+                | FloatLiteral()
+                | StringLiteral()
+                | BoolLiteral()
+                | NegativeInt()
+                | NegativeFloat()
+                | ListLiteral()
+            ):
+                # These don't reference variables
+                pass
+            case DoBlock(statements=statements):
+                for stmt in statements:
+                    referenced.update(self._find_referenced_variables(stmt))
+            case GroupedExpression(expression=inner):
+                referenced.update(self._find_referenced_variables(inner))
+            case _:
+                # For other expression types, conservatively assume no references
+                pass
+
+        return referenced
+
     def _minio_type_to_go_type(self, minio_type: Optional[Type]) -> str:
         """Convert a Minio type to a Go type string."""
         if minio_type is None:
@@ -331,6 +391,7 @@ class MinioGoCompiler:
                     pattern,
                     f"args[{j}]",
                     f"arg{j}",
+                    func_def.body,  # Pass function body for complex functions too
                 )
                 if condition:
                     condition_parts.append(condition)
@@ -445,6 +506,7 @@ class MinioGoCompiler:
                             pattern,
                             "arg",
                             "matched",
+                            func_def.body,  # Pass function body to determine used variables
                         )
                     )
 
@@ -479,6 +541,7 @@ class MinioGoCompiler:
         pattern: Pattern,
         value_expr: str,
         var_prefix: str,
+        function_body=None,  # Optional function body to determine used variables
     ) -> tuple[Optional[str], Optional[str]]:
         """Compile a pattern into a condition check and variable assignment."""
         match pattern:
@@ -506,7 +569,17 @@ class MinioGoCompiler:
                     # Find constructor definition to determine field access method
                     constructor_def = self._find_constructor_def(constructor)
 
+                    # Determine which variables are actually used in the function body
+                    used_variables = set()
+                    if function_body:
+                        used_variables = self._find_referenced_variables(function_body)
+
                     for i, sub_pattern in enumerate(patterns):
+                        # Skip processing if this is a variable pattern that's not used
+                        if isinstance(sub_pattern, VariablePattern) and function_body:
+                            if sub_pattern.name not in used_variables:
+                                continue  # Skip unused variables
+
                         # Determine field access based on constructor type
                         if constructor_def and constructor_def.record_constructor:
                             # Record constructor - use field names
@@ -523,6 +596,7 @@ class MinioGoCompiler:
                                 sub_pattern,
                                 field_expr,
                                 f"{var_prefix}_{i}",
+                                function_body,
                             )
                         )
                         if sub_condition:
@@ -538,8 +612,12 @@ class MinioGoCompiler:
                 assignments = []
 
                 if isinstance(head, VariablePattern):
-                    # Use _ for the head variable since it's often unused in recursive list functions
-                    assignments.append(f"_ = {value_expr}.([]interface{{}})[0]")
+                    # Use the actual head variable name
+                    assignments.append(
+                        f"{head.name} := {value_expr}.([]interface{{}})[0]",
+                    )
+                    # Add unused variable suppression
+                    assignments.append(f"_ = {head.name}")
                 else:
                     assignments.append(f"_ = {value_expr}.([]interface{{}})[0]")
 
@@ -547,6 +625,8 @@ class MinioGoCompiler:
                     assignments.append(
                         f"{tail.name} := {value_expr}.([]interface{{}})[1:]",
                     )
+                    # Add unused variable suppression
+                    assignments.append(f"_ = {tail.name}")
                 else:
                     assignments.append(f"_ = {value_expr}.([]interface{{}})[1:]")
 
@@ -585,7 +665,8 @@ class MinioGoCompiler:
                 return "minioError"
             case Variable(name=name):
                 prefixed_name = self._prefix_name(name)
-                if name in self.nullary_functions:
+                # Only treat as function call if it's in nullary_functions AND not a local variable
+                if name in self.nullary_functions and name not in self.local_variables:
                     return f"{prefixed_name}()"
                 else:
                     return prefixed_name
@@ -602,17 +683,17 @@ class MinioGoCompiler:
             case DivOperation(left=left, right=right):
                 return f"minioDiv({self._compile_expression(left)}, {self._compile_expression(right)})"
             case EqualOperation(left=left, right=right):
-                return f"({self._compile_expression(left)} == {self._compile_expression(right)})"
+                return f"minioEqual({self._compile_expression(left)}, {self._compile_expression(right)})"
             case NotEqualOperation(left=left, right=right):
-                return f"({self._compile_expression(left)} != {self._compile_expression(right)})"
+                return f"minioNotEqual({self._compile_expression(left)}, {self._compile_expression(right)})"
             case LessThanOperation(left=left, right=right):
                 return f"minioLessThan({self._compile_expression(left)}, {self._compile_expression(right)})"
             case LessEqualOperation(left=left, right=right):
-                return f"({self._compile_expression(left)} <= {self._compile_expression(right)})"
+                return f"minioLessEqual({self._compile_expression(left)}, {self._compile_expression(right)})"
             case GreaterThanOperation(left=left, right=right):
-                return f"({self._compile_expression(left)} > {self._compile_expression(right)})"
+                return f"minioGreaterThan({self._compile_expression(left)}, {self._compile_expression(right)})"
             case GreaterEqualOperation(left=left, right=right):
-                return f"({self._compile_expression(left)} >= {self._compile_expression(right)})"
+                return f"minioGreaterEqual({self._compile_expression(left)}, {self._compile_expression(right)})"
             case ConcatOperation(left=left, right=right):
                 return f"minioConcat({self._compile_expression(left)}, {self._compile_expression(right)})"
             case AndOperation(left=left, right=right):
@@ -626,7 +707,24 @@ class MinioGoCompiler:
 
             # Other operations
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):
-                return f"({self._compile_expression(list_expr)}.([]interface{{}})[{self._compile_expression(index_expr)}])"
+                list_compiled = self._compile_expression(list_expr)
+                index_compiled = self._compile_expression(index_expr)
+                # Only add type assertion if we're not sure it's already a slice
+                # If it's a simple variable (starts with Minio and contains only letters/numbers)
+                # or already contains type assertion, don't double-assert
+                if (
+                    ".([]interface{})" in list_compiled
+                    or list_compiled.startswith("[]interface{}")
+                    or (
+                        list_compiled.startswith("Minio")
+                        and list_compiled.replace("Minio", "")
+                        .replace("_", "")
+                        .isalnum()
+                    )
+                ):
+                    return f"({list_compiled}[{index_compiled}])"
+                else:
+                    return f"({list_compiled}.([]interface{{}})[{index_compiled}])"
             case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
                 # Use a more compact ternary-like expression in Go
                 cond_expr = self._compile_expression(condition)
@@ -768,6 +866,10 @@ class MinioGoCompiler:
                     lines.append(
                         f"\t{prefixed_var} := {self._compile_expression(value)}",
                     )
+                    # Add a blank identifier assignment to avoid "declared and not used" errors
+                    lines.append(
+                        f"\t_ = {prefixed_var}",
+                    )  # This suppresses unused variable warnings
                 case _ if self._is_expression(stmt):
                     lines.append(f"\t{self._compile_expression(stmt)}")  # type: ignore
 
