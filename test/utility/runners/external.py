@@ -16,40 +16,16 @@ def run_haskell_file(path: str) -> str:
         raise RuntimeError(e.stderr.decode("utf-8").strip())
 
 
-def run_python_code(python_code: str) -> str:
+def _run_x_code(code: str, executable: list[str]) -> str:
     temp_file = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            temp_file = f.name
-            f.write(python_code)
-            f.flush()
-
-            result = subprocess.run(
-                ["python3", temp_file],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-            )
-            return result.stdout.decode("utf-8").strip()
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(
-            f"Python execution failed: {e.stderr.decode('utf-8').strip()}",
-        )
-    finally:
-        if temp_file:
-            os.unlink(temp_file)
-
-
-def run_systemf_code(code: str) -> str:
-    temp_file = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".sf", delete=False) as f:
             temp_file = f.name
             f.write(code)
             f.flush()
 
             result = subprocess.run(
-                ["fullpoly", temp_file],
+                executable + [temp_file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=True,
@@ -57,8 +33,16 @@ def run_systemf_code(code: str) -> str:
             return result.stdout.decode("utf-8").strip()
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
-            f"System F execution failed: {e.stderr.decode('utf-8').strip()}",
+            f"Execution failed: {e.stderr.decode('utf-8').strip()}",
         )
     finally:
         if temp_file:
             os.unlink(temp_file)
+
+
+def run_python_code(python_code: str) -> str:
+    return _run_x_code(python_code, ["python3"])
+
+
+def run_systemf_code(code: str) -> str:
+    return _run_x_code(code, ["fullpoly"])
