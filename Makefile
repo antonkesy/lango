@@ -62,3 +62,9 @@ mypy: install-dev
 
 clean: uninstall
 	rm -rf build/ dist/ *.egg-info/ .venv/ .pytest_cache/ .coverage htmlcov/
+
+docker-build:
+	docker build -t lango .
+
+docker-run:
+	docker run -it --rm lango run --input_file examples/minio/example.minio
