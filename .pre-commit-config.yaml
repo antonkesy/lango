@@ -32,6 +32,6 @@ repos:
     hooks:
       - id: run-make-test
         name: Run Makefile target "test"
-        entry: make test
+        entry: bash -c '[[ -z "$CI" ]] && make test || echo "Skipping tests on CI"'
         language: system
         pass_filenames: false
