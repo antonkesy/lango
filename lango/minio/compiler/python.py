@@ -36,6 +36,8 @@ from lango.minio.ast.nodes import (
     NotOperation,
     OrOperation,
     Pattern,
+    PowFloatOperation,
+    PowIntOperation,
     Program,
     StringLiteral,
     SubOperation,
@@ -884,7 +886,19 @@ class MinioCompiler:
                 else:
                     return prefixed_name
             case Constructor(name=name):
-                return name
+                # Nullary constructors should be instantiated
+                constructor_def = self._find_constructor_def(name)
+                if (
+                    constructor_def
+                    and (
+                        constructor_def.type_atoms is None
+                        or len(constructor_def.type_atoms) == 0
+                    )
+                    and constructor_def.record_constructor is None
+                ):
+                    return f"{name}()"
+                else:
+                    return name
 
             # Binary operations
             case AddOperation(left=left, right=right):
@@ -895,6 +909,10 @@ class MinioCompiler:
                 return f"({self._compile_expression(left)} * {self._compile_expression(right)})"
             case DivOperation(left=left, right=right):
                 return f"({self._compile_expression(left)} / {self._compile_expression(right)}) if {self._compile_expression(right)} != 0 else math.inf"
+            case PowIntOperation(left=left, right=right):
+                return f"int(({self._compile_expression(left)} ** {self._compile_expression(right)}))"
+            case PowFloatOperation(left=left, right=right):
+                return f"float(({self._compile_expression(left)} ** {self._compile_expression(right)}))"
             case EqualOperation(left=left, right=right):
                 return f"({self._compile_expression(left)} == {self._compile_expression(right)})"
             case NotEqualOperation(left=left, right=right):
