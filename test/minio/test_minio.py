@@ -8,7 +8,11 @@ from lango.minio.parser.parser import parse
 from lango.minio.typechecker.typecheck import type_check
 
 from ..utility.file_tester import file_test_output, file_test_type, get_all_test_files
-from ..utility.runners.external import run_haskell_file, run_python_code
+from ..utility.runners.external import (
+    run_haskell_file,
+    run_python_code,
+    run_systemf_code,
+)
 
 BASE_TEST_FILES_PATH = "./test/minio/files/"
 EXAMPLE = "./examples/minio/example.minio"
@@ -44,3 +48,12 @@ def test_is_type_valid(file_name: str) -> None:
         return type_check(parse(f))
 
     file_test_type(file_name, run_type_check)
+
+
+def test_systemf_example() -> None:
+    # TODO: replace with SystemF compiler test when available
+    example_code = "lambda x:A. x;"
+    expected = "(lambda x:A. x) : A -> A"
+
+    output = run_systemf_code(example_code)
+    assert output == expected
