@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VENV_PATH=/opt/venv
@@ -23,6 +23,11 @@ RUN add-apt-repository ppa:deadsnakes/ppa -y && \
 RUN apt-get update && apt-get install -y ocaml opam && \
   rm -rf /var/lib/apt/lists/*
 
+RUN apt-get install opam
+RUN opam init --auto-setup -n --disable-sandboxing && \
+  opam switch create 5.3.0 && \
+  opam install ocaml-lsp-server odoc ocamlformat utop -y
+
 # GHC
 RUN apt-get update && apt-get install -y ghc cabal-install && \
   rm -rf /var/lib/apt/lists/*
@@ -36,8 +41,12 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 WORKDIR /app
 COPY . /app
 
-
 RUN pip install --upgrade pip && \
   pip install .
 
+FROM base AS test
+RUN pip install -e .[dev]
+CMD ["pytest", "-vvs"]
+
+FROM base AS lango
 ENTRYPOINT ["lango"]

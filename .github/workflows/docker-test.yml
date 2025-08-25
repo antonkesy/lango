@@ -13,8 +13,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t lango .
+      - name: Build Docker images
+        run: docker build --target lango -t lango .
+          docker build --target test -t lango-test .
+
+      - name: Run tests
+        run: docker run -it --rm lango-test
 
       - name: Minio - Interpret example file
         run: docker run -it --rm lango run --input_file examples/minio/example.minio
