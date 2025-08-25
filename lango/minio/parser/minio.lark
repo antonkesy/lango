@@ -116,6 +116,7 @@ field_assign: ID "=" expr
 // --- Patterns ---
 ?pattern: constructor_pattern
         | cons_pattern
+        | UIDENT                 -> constructor_pattern_bare
         | ID
         | literal
         | "(" MINUS INT ")"      -> neg_int
