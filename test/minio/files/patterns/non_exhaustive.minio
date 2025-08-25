@@ -1,0 +1,8 @@
+-- RUN: FAIL
+-- TYPECHECK: OK
+-- ""
+safeHead (x:xs) = x;  -- Missing [] case
+
+main = do {
+  putStr (show (safeHead []));  -- Should fail
+};

@@ -1,0 +1,13 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42,"Hello","
+-- "42,"Hello",[]"
+identity x = x;
+
+main = do {
+  putStr (show (identity 42));
+  putStr ",";
+  putStr (show (identity "Hello"));
+  putStr ",";
+  -- putStr (show (identity [])); -- Haskell type error: Ambiguous type variable `a0' arising from a use of `identity'
+};

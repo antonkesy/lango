@@ -1,0 +1,15 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Leaf: 42,Node: 10"
+data Tree a = Leaf a | Node (Tree a) a (Tree a);
+
+getVal (Leaf x) = x;
+getVal (Node a x c) = x;
+
+main = do {
+  let { leaf = Leaf 42 };
+  let { node = Node (Leaf 5) 10 (Leaf 15) };
+  putStr ("Leaf: " ++ show (getVal leaf));
+  putStr ",";
+  putStr ("Node: " ++ show (getVal node));
+};

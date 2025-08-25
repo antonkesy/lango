@@ -1,0 +1,15 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Cons(1, Cons(2, Cons(3, Nil)))"
+data MyList a = Nil | Cons a (MyList a);
+
+showMyList Nil = "Nil";
+showMyList (Cons x xs) = "Cons(" ++ show x ++ ", " ++ showMyList xs ++ ")";
+
+listFromBuiltin [] = Nil;
+listFromBuiltin (x:xs) = Cons x (listFromBuiltin xs);
+
+main = do {
+  let { myList = listFromBuiltin [1,2,3] };
+  putStr (showMyList myList);
+};

@@ -1,0 +1,8 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "5"
+main = do {
+  let { negFive = (-5) };
+  let { posResult = negFive * (-1) };
+  putStr (show posResult);
+};
