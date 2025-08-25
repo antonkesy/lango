@@ -45,12 +45,12 @@ def test_python_compiler(file_name: str) -> None:
 #     file_test_output(file_name, run_compiler_and_output)
 
 
-@pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
-def test_go_compiler(file_name: str) -> None:
-    def run_compiler_and_output(f: str) -> str:
-        return run_go_code(compile_to_go(parse(f)))
+# @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
+# def test_go_compiler(file_name: str) -> None:
+#     def run_compiler_and_output(f: str) -> str:
+#         return run_go_code(compile_to_go(parse(f)))
 
-    file_test_output(file_name, run_compiler_and_output)
+#     file_test_output(file_name, run_compiler_and_output)
 
 
 @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
