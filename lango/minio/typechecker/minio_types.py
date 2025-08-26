@@ -217,7 +217,13 @@ class FreshVarGenerator:
 
     def fresh(self) -> str:
         """Generate a fresh type variable name"""
-        name = f"t{self.counter}"
+        # Use letters a, b, c, ... then a1, a2, a3, ...
+        if self.counter < 26:
+            name = chr(ord("a") + self.counter)
+        else:
+            base = self.counter // 26 - 1
+            offset = self.counter % 26
+            name = chr(ord("a") + offset) + str(base + 1)
         self.counter += 1
         return name
 
@@ -226,4 +232,36 @@ def generalize(type_env_free_vars: Set[str], typ: Type) -> TypeScheme:
     """Generalize a type by quantifying over variables not free in the environment"""
     free_in_type = typ.free_vars()
     quantified = free_in_type - type_env_free_vars
-    return TypeScheme(quantified, typ)
+    scheme = TypeScheme(quantified, typ)
+    return normalize_type_scheme(scheme)
+
+
+def normalize_type_scheme(scheme: TypeScheme) -> TypeScheme:
+    """Normalize type variable names in a type scheme to use a, b, c, ..."""
+    if not scheme.quantified_vars:
+        return scheme
+
+    # Sort quantified variables for consistent ordering
+    sorted_vars = sorted(list(scheme.quantified_vars))
+
+    # Create mapping from old names to normalized TypeVar objects
+    var_mapping: Dict[str, Type] = {}
+    for i, old_name in enumerate(sorted_vars):
+        if i < 26:
+            new_name = chr(ord("a") + i)
+        else:
+            base = i // 26 - 1
+            offset = i % 26
+            new_name = chr(ord("a") + offset) + str(base + 1)
+        var_mapping[old_name] = TypeVar(new_name)
+
+    # Apply the mapping
+    new_type = scheme.type.substitute(var_mapping)
+    # Extract the new variable names - we know they're all TypeVars
+    new_quantified = set()
+    for old_name in scheme.quantified_vars:
+        new_var = var_mapping[old_name]
+        if isinstance(new_var, TypeVar):
+            new_quantified.add(new_var.name)
+
+    return TypeScheme(new_quantified, new_type)
