@@ -12,6 +12,7 @@ from lango.minio.ast.nodes import (
     DoBlock,
     FloatLiteral,
     FunctionApplication,
+    FunctionDefinition,
     GroupedExpression,
     IfElse,
     IntLiteral,
@@ -63,6 +64,19 @@ def _print_node(node: ASTNode, indent: int = 0) -> None:
 
         case Variable(name=name):
             print(f"{prefix}Variable({name}) :: {type_str}")
+
+        case FunctionDefinition(
+            function_name=function_name,
+            patterns=patterns,
+            body=body,
+        ):
+            print(f"{prefix}FunctionDefinition({function_name}) :: {type_str}")
+            if patterns:
+                print(f"{prefix}  patterns:")
+                for pattern in patterns:
+                    _print_node(pattern, indent + 2)
+            print(f"{prefix}  body:")
+            _print_node(body, indent + 2)
 
         case AddOperation(left=left, right=right):
             print(f"{prefix}AddOperation :: {type_str}")
