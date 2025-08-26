@@ -30,18 +30,18 @@ run: install
 
 compile-python: install
 	. .venv/bin/activate && \
-	lango compile examples/minio/example.minio -o ./build/example.py && \
-	python3.13 ./build/example.py
+	lango compile examples/minio/example.minio -o build/example.py && \
+	python3.13 build/example.py
 
 compile-systemf: install
 	. .venv/bin/activate && \
-	lango compile examples/minio/example.minio -o ./build/example.sf --target systemf && \
-	fullpoly ./build/example.sf
+	lango compile examples/minio/example.minio -o build/example.sf --target systemf && \
+	fullpoly build/example.sf
 
 compile-go: install
 	. .venv/bin/activate && \
-	lango compile examples/minio/example.minio -o ./build/example.go --target go && \
-	go run ./build/example.go
+	lango compile examples/minio/example.minio -o build/example.go --target go && \
+	go run build/example.go
 
 types: install
 	. .venv/bin/activate && \
@@ -53,7 +53,7 @@ ast: install
 
 typecheck: install
 	. .venv/bin/activate && \
-	lango typecheck ./test/files/minio/types/custom/constrcutor/mixed.minio
+	lango typecheck examples/minio/example.minio
 
 test: install
 	. .venv/bin/activate && \
