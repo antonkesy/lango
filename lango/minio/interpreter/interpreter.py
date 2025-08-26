@@ -3,6 +3,7 @@ Rewritten interpreter that uses custom AST nodes instead of raw Lark objects.
 """
 
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -64,14 +65,20 @@ ConstructorInfo = Tuple[int, str]  # (arity, data_type_name)
 ConstructorEnvironment = Dict[str, ConstructorInfo]
 
 
+@dataclass
+class RunReturn:
+    output: str
+    exit_code: int
+
+
 def interpret(
     ast: Program,
     collectStdOut: bool = False,
-) -> str:
+) -> RunReturn:
     # TODO: return code
     if not type_check(ast):
         print("Type checking failed, cannot interpret.")
-        return ""
+        return RunReturn("", 1)
 
     env, constructors = build_environment(ast)
     interp = Interpreter(env, constructors)
@@ -93,7 +100,7 @@ def interpret(
             print(f"{result}\n")
         elif callable(result):
             print("[main] is a function")
-    return output
+    return RunReturn(output, 0)
 
 
 def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment]:

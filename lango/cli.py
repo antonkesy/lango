@@ -29,18 +29,13 @@ def run(
         help="Enable or disable type checking",
     ),
 ) -> int:
-    """Run a Minio program"""
     ast = parse(input_file)
     if enable_type_check:
-        # Use new AST-based type checker
         if not type_check(ast):
             print("Type checking failed, cannot interpret.")
             return 1
 
-    # Use new AST-based interpreter
-    interpret(ast)
-    # TODO: add return value handling
-    return 0
+    return interpret(ast).exit_code
 
 
 @app.command()

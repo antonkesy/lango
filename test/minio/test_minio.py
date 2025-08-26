@@ -24,7 +24,7 @@ EXAMPLE = "./examples/minio/example.minio"
 @pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
 def test_interpreter(file_name: str) -> None:
     def run_interpreter(f: str) -> str:
-        return interpret(parse(f), collectStdOut=True)
+        return interpret(parse(f), collectStdOut=True).output
 
     file_test_output(file_name, run_interpreter)
 
