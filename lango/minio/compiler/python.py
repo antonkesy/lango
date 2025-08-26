@@ -107,7 +107,7 @@ class MinioCompiler:
 
         return self._minio_type_to_python_hint(func_type)
 
-    def _convert_type_expression_to_type(self, type_expr) -> Optional[Type]:
+    def _convert_type_expression_to_type(self, type_expr: Any) -> Optional[Type]:
         """Convert a TypeExpression to a Type, using the ty field if available."""
         if hasattr(type_expr, "ty") and type_expr.ty is not None:
             return type_expr.ty
@@ -450,7 +450,7 @@ class MinioCompiler:
         # Use @curry decorator for multi-parameter functions
         if max_params > 1:
             # For curried functions, get parameter types from the function type
-            param_types = []
+            param_types: List[str] = []
             if definitions and definitions[0].ty:
                 current_type = definitions[0].ty
                 while (

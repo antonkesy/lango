@@ -953,9 +953,9 @@ def _print_node(
         # Constructor Expressions
         case ConstructorExpression(constructor_name=constructor_name, fields=fields):
             print(f"{prefix}ConstructorExpression({constructor_name}){type_str}")
-            for field in fields:
+            for field_assignment in fields:
                 _print_node(
-                    field,
+                    field_assignment,
                     indent + indent_step,
                     show_types,
                     compact,
@@ -1178,9 +1178,9 @@ def _print_node(
 
             if constructors and not compact:
                 print(f"{prefix}  constructors:")
-                for constructor in constructors:
+                for data_constructor in constructors:
                     _print_node(
-                        constructor,
+                        data_constructor,
                         indent + 2,
                         show_types,
                         compact,
@@ -1188,9 +1188,9 @@ def _print_node(
                         current_depth + 1,
                     )
             elif constructors:
-                for constructor in constructors:
+                for data_constructor in constructors:
                     _print_node(
-                        constructor,
+                        data_constructor,
                         indent + 1,
                         show_types,
                         compact,
@@ -1350,28 +1350,29 @@ def _print_node(
                                 max_depth,
                                 current_depth + 1,
                             )
-                    case [ASTNode() as first, *rest] if first is not None:
-                        if not compact:
-                            print(f"{prefix}  {attr_name}:")
-                            for item in attr_value:
-                                _print_node(
-                                    item,
-                                    indent + 2,
-                                    show_types,
-                                    compact,
-                                    max_depth,
-                                    current_depth + 1,
-                                )
-                        else:
-                            for item in attr_value:
-                                _print_node(
-                                    item,
-                                    indent + 1,
-                                    show_types,
-                                    compact,
-                                    max_depth,
-                                    current_depth + 1,
-                                )
+                    case [first, *rest]:
+                        if first is not None and isinstance(first, ASTNode):
+                            if not compact:
+                                print(f"{prefix}  {attr_name}:")
+                                for item in attr_value:
+                                    _print_node(
+                                        item,
+                                        indent + 2,
+                                        show_types,
+                                        compact,
+                                        max_depth,
+                                        current_depth + 1,
+                                    )
+                            else:
+                                for item in attr_value:
+                                    _print_node(
+                                        item,
+                                        indent + 1,
+                                        show_types,
+                                        compact,
+                                        max_depth,
+                                        current_depth + 1,
+                                    )
                     case _:
                         pass
 

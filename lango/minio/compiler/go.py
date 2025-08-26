@@ -16,6 +16,8 @@ from lango.minio.ast.nodes import (
     DoBlock,
     EqualOperation,
     Expression,
+    Field,
+    FieldAssignment,
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
@@ -145,7 +147,7 @@ class MinioGoCompiler:
                     return constructor
         return None
 
-    def _find_referenced_variables(self, expr) -> Set[str]:
+    def _find_referenced_variables(self, expr: Any) -> Set[str]:
         """Find all variable names referenced in an expression."""
         referenced = set()
 
@@ -483,7 +485,7 @@ class MinioGoCompiler:
         # For functions with multiple definitions, we need to ensure variables are accessible
         # across all branches. We'll pre-declare variables but handle name conflicts by
         # using the most common variable name for each argument position
-        arg_var_names = {}  # arg_index -> most_common_var_name
+        arg_var_names: Dict[int, List[str]] = {}  # arg_index -> list of var_names
         for func_def in definitions:
             for j, pattern in enumerate(func_def.patterns):
                 if isinstance(pattern, VariablePattern):
@@ -527,7 +529,7 @@ class MinioGoCompiler:
             lines.append("")
 
         # Generate pattern matching logic - group by arity first
-        arity_groups = {}
+        arity_groups: Dict[int, List[FunctionDefinition]] = {}
         for func_def in definitions:
             arity = len(func_def.patterns)
             if arity not in arity_groups:
@@ -781,7 +783,7 @@ class MinioGoCompiler:
         pattern: Pattern,
         value_expr: str,
         var_prefix: str,
-        function_body=None,  # Optional function body to determine used variables
+        function_body: Any = None,  # Optional function body to determine used variables
     ) -> tuple[Optional[str], Optional[str]]:
         """Compile a pattern into a condition check and variable assignment."""
         match pattern:
@@ -1026,7 +1028,7 @@ class MinioGoCompiler:
                 arg_expr = self._compile_expression(argument)
 
                 # Helper function to unwrap GroupedExpressions
-                def unwrap_grouped(expr):
+                def unwrap_grouped(expr: Any) -> Any:
                     while isinstance(expr, GroupedExpression):
                         expr = expr.expression
                     return expr
@@ -1141,9 +1143,9 @@ class MinioGoCompiler:
             ):
                 if fields:
                     field_assignments = []
-                    for field in fields:
+                    for field_assignment in fields:
                         field_assignments.append(
-                            f"{field.field_name.capitalize()}: {self._compile_expression(field.value)}",
+                            f"{field_assignment.field_name.capitalize()}: {self._compile_expression(field_assignment.value)}",
                         )
                     return f"{constructor_name}{{{', '.join(field_assignments)}}}"
                 else:
