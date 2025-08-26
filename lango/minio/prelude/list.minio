@@ -7,7 +7,7 @@ elem y (x:xs) =
         then True
         else elem y xs;
 
-tail [] = []; -- TODO: ghc throws an error for empty list
+tail [] = error "empty list";
 tail (x:xs) = xs;
 
 map x [] = [];
