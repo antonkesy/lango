@@ -238,11 +238,14 @@ def generalize(type_env_free_vars: Set[str], typ: Type) -> TypeScheme:
 
 def normalize_type_scheme(scheme: TypeScheme) -> TypeScheme:
     """Normalize type variable names in a type scheme to use a, b, c, ..."""
-    if not scheme.quantified_vars:
+    # Collect all type variables in the type (both quantified and free)
+    all_vars = scheme.type.free_vars()
+
+    if not all_vars:
         return scheme
 
-    # Sort quantified variables for consistent ordering
-    sorted_vars = sorted(list(scheme.quantified_vars))
+    # Sort all variables for consistent ordering
+    sorted_vars = sorted(list(all_vars))
 
     # Create mapping from old names to normalized TypeVar objects
     var_mapping: Dict[str, Type] = {}
@@ -257,11 +260,13 @@ def normalize_type_scheme(scheme: TypeScheme) -> TypeScheme:
 
     # Apply the mapping
     new_type = scheme.type.substitute(var_mapping)
-    # Extract the new variable names - we know they're all TypeVars
+
+    # Update quantified variables to use the new names
     new_quantified = set()
     for old_name in scheme.quantified_vars:
-        new_var = var_mapping[old_name]
-        if isinstance(new_var, TypeVar):
-            new_quantified.add(new_var.name)
+        if old_name in var_mapping:
+            new_var = var_mapping[old_name]
+            if isinstance(new_var, TypeVar):
+                new_quantified.add(new_var.name)
 
     return TypeScheme(new_quantified, new_type)

@@ -1,5 +1,6 @@
 from lango.minio.ast.nodes import Program
 from lango.minio.typechecker.infer import type_check_ast as type_check_ast_impl
+from lango.minio.typechecker.minio_types import normalize_type_scheme
 
 
 def get_type_str(ast: Program) -> str:
@@ -8,7 +9,8 @@ def get_type_str(ast: Program) -> str:
     try:
         type_env = type_check_ast_impl(ast)
         for name, scheme in type_env.items():
-            res += f"  {name} :: {scheme}\n"
+            normalized_scheme = normalize_type_scheme(scheme)
+            res += f"  {name} :: {normalized_scheme}\n"
     except Exception as e:
         res += f"Type checking failed: {e}"
     return res
