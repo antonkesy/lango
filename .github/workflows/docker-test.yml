@@ -29,4 +29,4 @@ jobs:
         run: docker run --rm lango compile examples/minio/example.minio
 
       - name: Minio - Go compile example file
-        run: lango compile examples/minio/example.minio -o ./build/example.go --target go
+        run: docker run --rm lango compile examples/minio/example.minio -o ./build/example.go --target go
