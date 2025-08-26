@@ -34,6 +34,7 @@ from lango.minio.ast.nodes import (
     LessThanOperation,
     LetStatement,
     ListLiteral,
+    LiteralPattern,
     MulOperation,
     NegativeFloat,
     NegativeInt,
@@ -796,6 +797,131 @@ class TypeInferrer:
         func_def.ty = func_type
         return scheme, env.extend(func_def.function_name, scheme)
 
+    def infer_function_group(
+        self,
+        func_defs: List[FunctionDefinition],
+        env: TypeEnvironment,
+    ) -> Tuple[TypeScheme, TypeEnvironment]:
+        """Infer the type of multiple function definitions with the same name."""
+        if not func_defs:
+            raise TypeInferenceError("Empty function group")
+
+        function_name = func_defs[0].function_name
+
+        # All function clauses must have the same arity
+        first_arity = len(func_defs[0].patterns)
+        for func_def in func_defs[1:]:
+            if len(func_def.patterns) != first_arity:
+                raise TypeInferenceError(
+                    f"Function {function_name} has clauses with different arities",
+                )
+
+        if first_arity == 0:
+            # Nullary functions - all clauses should return the same type
+            clause_types = []
+            final_subst = TypeSubstitution()
+
+            for func_def in func_defs:
+                body_type, body_subst = self.infer_expr(
+                    func_def.body,
+                    env.apply_substitution(final_subst),
+                )
+                final_subst = final_subst.compose(body_subst)
+                clause_types.append(body_type.apply_substitution(final_subst))
+
+            # Unify all clause return types
+            unified_type = clause_types[0]
+            for clause_type in clause_types[1:]:
+                try:
+                    unify_subst = unify_one(
+                        unified_type.apply_substitution(final_subst),
+                        clause_type,
+                    )
+                    final_subst = final_subst.compose(unify_subst)
+                    unified_type = unified_type.apply_substitution(unify_subst)
+                except UnificationError as e:
+                    raise TypeInferenceError(
+                        f"Function {function_name} clauses have incompatible return types: {e}",
+                    )
+
+            final_type = unified_type.apply_substitution(final_subst)
+            scheme = generalize(
+                env.apply_substitution(final_subst).free_type_vars(),
+                final_type,
+            )
+
+            # Set types on all function definitions
+            for func_def in func_defs:
+                func_def.ty = final_type
+
+            return scheme, env.extend(function_name, scheme)
+
+        # Functions with parameters - create shared parameter types
+        param_types = [self.fresh_type_var() for _ in range(first_arity)]
+        clause_return_types = []
+        final_subst = TypeSubstitution()
+
+        for func_def in func_defs:
+            # Extend environment with pattern bindings for this clause
+            clause_env = env
+            clause_subst = final_subst
+
+            for pattern, param_type in zip(func_def.patterns, param_types):
+                pattern_env, pattern_subst = self.infer_pattern(
+                    pattern,
+                    param_type.apply_substitution(clause_subst),
+                    clause_env.apply_substitution(clause_subst),
+                )
+                clause_env = pattern_env
+                clause_subst = clause_subst.compose(pattern_subst)
+
+            # Infer body type for this clause
+            body_type, body_subst = self.infer_expr(
+                func_def.body,
+                clause_env.apply_substitution(clause_subst),
+            )
+            clause_subst = clause_subst.compose(body_subst)
+            final_subst = final_subst.compose(clause_subst)
+
+            clause_return_types.append(body_type.apply_substitution(final_subst))
+
+        # Unify all clause return types
+        unified_return_type = clause_return_types[0]
+        for clause_return_type in clause_return_types[1:]:
+            try:
+                unify_subst = unify_one(
+                    unified_return_type.apply_substitution(final_subst),
+                    clause_return_type.apply_substitution(final_subst),
+                )
+                final_subst = final_subst.compose(unify_subst)
+                unified_return_type = unified_return_type.apply_substitution(
+                    unify_subst,
+                )
+            except UnificationError as e:
+                raise TypeInferenceError(
+                    f"Function {function_name} clauses have incompatible return types: {e}",
+                )
+
+        # Create function type
+        func_type = unified_return_type.apply_substitution(final_subst)
+        for param_type in reversed(param_types):
+            func_type = FunctionType(
+                param_type.apply_substitution(final_subst),
+                func_type,
+            )
+
+        # Generalize
+        scheme = generalize(
+            env.apply_substitution(final_subst).free_type_vars(),
+            func_type,
+        )
+
+        # Set types on all function definitions
+        for func_def in func_defs:
+            func_def.ty = func_type
+
+        return scheme, env.extend(function_name, scheme)
+
     def infer_do_block(
         self,
         statements: List["Statement"],
@@ -1091,6 +1217,30 @@ class TypeInferrer:
 
                 return extended_env, current_subst
 
+            case LiteralPattern(value=value):
+                # Literal patterns constrain the pattern type to the literal's type
+                literal_type = None
+                if isinstance(value, bool):
+                    literal_type = BOOL_TYPE
+                elif isinstance(value, int):
+                    literal_type = INT_TYPE
+                elif isinstance(value, float):
+                    literal_type = FLOAT_TYPE
+                elif isinstance(value, str):
+                    literal_type = STRING_TYPE
+                elif isinstance(value, list) and len(value) == 0:
+                    # Empty list pattern [] - constrain to List of some type
+                    elem_type = self.fresh_type_var()
+                    literal_type = TypeApp(TypeCon("List"), elem_type)
+                else:
+                    raise TypeInferenceError(
+                        f"Unsupported literal pattern type: {type(value)} with value: {value}",
+                    )
+
+                # Unify pattern type with literal type
+                unify_subst = unify_one(pattern_type, literal_type)
+                return env, unify_subst
+
             case _:
                 # Other pattern types (literals, etc.)
                 return env, TypeSubstitution()
@@ -1145,21 +1295,35 @@ class TypeInferrer:
                 case _:
                     continue
 
-        # Third pass: infer function definitions with forward declarations available
+        # Third pass: group function definitions and infer them together
+        from collections import defaultdict
+
+        function_groups: Dict[str, List[FunctionDefinition]] = defaultdict(list)
+
+        # Group function definitions by name
         for stmt in ast.statements:
             match stmt:
                 case FunctionDefinition(function_name=function_name) as func_def:
-                    try:
-                        scheme, _ = self.infer_function(func_def, env)
-                        # Replace the forward declaration with the properly inferred type
-                        env = env.extend(function_name, scheme)
-                    except TypeInferenceError as e:
-                        # Continue with other functions even if one fails
-                        raise TypeInferenceError(
-                            f"Failed to infer type for function {func_def.function_name}: {e}",
-                        ) from e
+                    function_groups[function_name].append(func_def)
                 case _:
                     continue
+
+        # Process each group of function definitions
+        for function_name, func_defs in function_groups.items():
+            try:
+                if len(func_defs) == 1:
+                    # Single function definition
+                    scheme, _ = self.infer_function(func_defs[0], env)
+                    env = env.extend(function_name, scheme)
+                else:
+                    # Multiple function clauses - group them together
+                    scheme, _ = self.infer_function_group(func_defs, env)
+                    env = env.extend(function_name, scheme)
+            except TypeInferenceError as e:
+                # Continue with other functions even if one fails
+                raise TypeInferenceError(
+                    f"Failed to infer type for function {function_name}: {e}",
+                ) from e
 
         return env
 
