@@ -3,7 +3,13 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from lango.minio.ast.printer import print_annotated_ast
+from lango.minio.ast.printer import (
+    print_annotated_ast,
+    print_ast_colored,
+    print_ast_compact,
+    print_ast_summary,
+    print_ast_types_only,
+)
 from lango.minio.compiler.go import compile_program as go_compile_program
 from lango.minio.compiler.python import compile_program as python_compile_program
 from lango.minio.compiler.systemf import compile_program as systemf_compile_program
@@ -52,12 +58,46 @@ def ast(
     input_file: str = typer.Argument(
         help="Path to .minio file to show annotated AST",
     ),
+    mode: str = typer.Option(
+        "full",
+        "--mode",
+        "-m",
+        help="AST display mode: full, compact, summary, types-only, colored",
+    ),
+    max_depth: int = typer.Option(
+        None,
+        "--max-depth",
+        "-d",
+        help="Maximum depth to display (for summary mode)",
+    ),
+    show_types: bool = typer.Option(
+        True,
+        "--types/--no-types",
+        help="Show type annotations",
+    ),
 ) -> None:
-    ast = parse(input_file)
-    if not type_check(ast):
+    ast_parsed = parse(input_file)
+    if not type_check(ast_parsed):
         console.print("Type checking failed, cannot print AST.", style="bold red")
         return
-    print_annotated_ast(ast)
+
+    match mode:
+        case "full":
+            print_annotated_ast(ast_parsed, show_types=show_types)
+        case "compact":
+            print_ast_compact(ast_parsed, show_types=show_types)
+        case "summary":
+            depth = max_depth if max_depth is not None else 3
+            print_annotated_ast(ast_parsed, show_types=show_types, max_depth=depth)
+        case "types-only":
+            print_ast_types_only(ast_parsed)
+        case "colored":
+            print_ast_colored(ast_parsed, show_types=show_types, compact=False)
+        case _:
+            console.print(
+                f"Unknown mode: {mode}. Use: full, compact, summary, types-only, or colored",
+                style="bold red",
+            )
 
 
 @app.command()

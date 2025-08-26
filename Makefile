@@ -49,7 +49,15 @@ types: install
 
 ast: install
 	. .venv/bin/activate && \
+	lango ast examples/minio/short.minio --mode compact --no-types
+
+ast-full: install
+	. .venv/bin/activate && \
 	lango ast examples/minio/short.minio
+
+ast-summary: install
+	. .venv/bin/activate && \
+	lango ast examples/minio/short.minio --mode summary --max-depth 3
 
 typecheck: install
 	. .venv/bin/activate && \
