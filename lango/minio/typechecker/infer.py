@@ -268,475 +268,371 @@ class TypeInferrer:
 
     def infer_expr(self, expr: Expression, env: TypeEnvironment) -> InferenceResult:
         """Infer the type of an expression."""
+        result = self._infer_expr_internal(expr, env)
+        # Set type on AST node if possible
+        try:
+            expr.ty = result[0]  # type: ignore
+        except AttributeError:
+            pass  # Some AST nodes don't have ty attribute
+        return result
 
+    def _infer_expr_internal(
+        self,
+        expr: Expression,
+        env: TypeEnvironment,
+    ) -> InferenceResult:
+        """Internal expression inference without side effects."""
         match expr:
             # Literals
             case IntLiteral() | NegativeInt():
                 return INT_TYPE, TypeSubstitution()
-
             case FloatLiteral() | NegativeFloat():
                 return FLOAT_TYPE, TypeSubstitution()
-
             case StringLiteral():
                 return STRING_TYPE, TypeSubstitution()
-
             case BoolLiteral():
                 return BOOL_TYPE, TypeSubstitution()
-
             case ListLiteral(elements=elements):
-                if not elements:
-                    # Empty list: infer polymorphic list type
-                    element_type = self.fresh_type_var()
-                    list_type = TypeApp(TypeCon("List"), element_type)
-                    expr.ty = list_type
-                    return list_type, TypeSubstitution()
-
-                # Non-empty list: infer element type from first element
-                # and unify with all other elements
-                first_type, subst1 = self.infer_expr(elements[0], env)
-                current_subst = subst1
-
-                for element in elements[1:]:
-                    elem_type, elem_subst = self.infer_expr(
-                        element,
-                        env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(elem_subst)
-
-                    try:
-                        unify_subst = unify_one(
-                            first_type.apply_substitution(current_subst),
-                            elem_type,
-                        )
-                        current_subst = current_subst.compose(unify_subst)
-                        first_type = first_type.apply_substitution(unify_subst)
-                    except UnificationError as e:
-                        raise TypeInferenceError(
-                            f"List elements have incompatible types: {e}",
-                        )
-
-                list_type = TypeApp(
-                    TypeCon("List"),
-                    first_type.apply_substitution(current_subst),
-                )
-                expr.ty = list_type
-                return list_type, current_subst
+                return self._infer_list_literal(elements, env)
 
             # Variables and constructors
-            case Variable(name=var_name):
-                scheme = env.lookup(var_name)
-                if scheme is None:
-                    raise TypeInferenceError(f"Unknown variable: {var_name}")
-                inferred_type = scheme.instantiate(self.fresh_var_gen)
-                expr.ty = inferred_type
-                return inferred_type, TypeSubstitution()
+            case Variable(name=name) | Constructor(name=name):
+                return self._infer_identifier(name, env)
 
-            case Constructor(name=constr_name):
-                scheme = env.lookup(constr_name)
-                if scheme is None:
-                    raise TypeInferenceError(f"Unknown constructor: {constr_name}")
-                inferred_type = scheme.instantiate(self.fresh_var_gen)
-                expr.ty = inferred_type
-                return inferred_type, TypeSubstitution()
+            # Binary operations
+            case (
+                AddOperation()
+                | SubOperation()
+                | MulOperation()
+                | DivOperation()
+                | PowIntOperation()
+                | PowFloatOperation()
+            ) as op:
+                return self._infer_binary_op(op.left, op.right, env, "numeric")
 
-            # Arithmetic operations
-            case AddOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
+            case (
+                EqualOperation()
+                | NotEqualOperation()
+                | LessThanOperation()
+                | LessEqualOperation()
+                | GreaterThanOperation()
+                | GreaterEqualOperation()
+            ) as op:
+                return self._infer_binary_op(op.left, op.right, env, "comparison")
+
+            case (AndOperation() | OrOperation()) as op:
+                return self._infer_binary_op(op.left, op.right, env, "logical")
+
+            # Unary operations
+            case NotOperation(operand=operand):
+                return self._infer_unary_op(
+                    operand,
                     env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case SubOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case MulOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case DivOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case PowIntOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case PowFloatOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            # Comparison operations
-            case EqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case NotEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case LessThanOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case LessEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case GreaterThanOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case GreaterEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            # Logical operations
-            case AndOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_logical_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case OrOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_logical_op(left_expr, right_expr, env)
-                expr.ty = result[0]
-                return result
-
-            case NotOperation(operand=operand_expr):
-                operand_type, subst = self.infer_expr(operand_expr, env)
-                try:
-                    bool_unify = unify_one(operand_type, BOOL_TYPE)
-                    final_subst = subst.compose(bool_unify)
-                    expr.ty = BOOL_TYPE
-                    return BOOL_TYPE, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"NOT operation requires Bool operand, got {operand_type}",
-                    )
-
-            # String/List operations
-            case ConcatOperation(left=left_expr, right=right_expr):
-                left_type, left_subst = self.infer_expr(left_expr, env)
-                right_type, right_subst = self.infer_expr(
-                    right_expr,
-                    env.apply_substitution(left_subst),
+                    BOOL_TYPE,
+                    "NOT operation requires Bool operand",
                 )
 
-                combined_subst = left_subst.compose(right_subst)
-
-                # Try to unify both operands
-                try:
-                    unify_subst = unify_one(
-                        left_type.apply_substitution(combined_subst),
-                        right_type.apply_substitution(combined_subst),
-                    )
-                    final_subst = combined_subst.compose(unify_subst)
-                    final_type = left_type.apply_substitution(final_subst)
-                    expr.ty = final_type
-                    return final_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"Concatenation operands must have same type",
-                    )
-
-            case IndexOperation(list_expr=list_expr, index_expr=idx_expr):
-                indexed_list_type: Type
-                indexed_list_type, list_subst = self.infer_expr(
-                    list_expr,
-                    env,
-                )
-                index_type, index_subst = self.infer_expr(
-                    idx_expr,
-                    env.apply_substitution(list_subst),
-                )
-
-                combined_subst = list_subst.compose(index_subst)
-
-                # Index must be Int
-                try:
-                    int_unify = unify_one(index_type, INT_TYPE)
-                    subst_with_int = combined_subst.compose(int_unify)
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"List index must be Int, got {index_type}",
-                    )
-
-                # List must be List[T] for some T
-                element_type = self.fresh_type_var()
-                expected_list_type = TypeApp(TypeCon("List"), element_type)
-
-                try:
-                    list_unify = unify_one(
-                        indexed_list_type.apply_substitution(subst_with_int),
-                        expected_list_type,
-                    )
-                    final_subst = subst_with_int.compose(list_unify)
-                    result_type = element_type.apply_substitution(final_subst)
-                    expr.ty = result_type
-                    return result_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"Index operation requires a List, got {indexed_list_type}",
-                    )
+            # Special operations
+            case ConcatOperation(left=left, right=right):
+                return self._infer_binary_op(left, right, env, "concat")
+            case IndexOperation(list_expr=list_expr, index_expr=index_expr):
+                return self._infer_index_operation(list_expr, index_expr, env)
 
             # Control flow
-            case IfElse(
-                condition=condition,
-                then_expr=then_branch,
-                else_expr=else_branch,
-            ):
-                cond_type, cond_subst = self.infer_expr(condition, env)
-
-                # Condition must be Bool
-                try:
-                    bool_unify = unify_one(cond_type, BOOL_TYPE)
-                    subst_after_cond = cond_subst.compose(bool_unify)
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"If condition must be Bool, got {cond_type}",
-                    )
-
-                # Infer then branch
-                then_type, then_subst = self.infer_expr(
-                    then_branch,
-                    env.apply_substitution(subst_after_cond),
-                )
-                subst_after_then = subst_after_cond.compose(then_subst)
-
-                # Infer else branch
-                else_type, else_subst = self.infer_expr(
-                    else_branch,
-                    env.apply_substitution(subst_after_then),
-                )
-                subst_after_else = subst_after_then.compose(else_subst)
-
-                # Then and else branches must have same type
-                try:
-                    branch_unify = unify_one(
-                        then_type.apply_substitution(subst_after_else),
-                        else_type,
-                    )
-                    final_subst = subst_after_else.compose(branch_unify)
-                    final_type = then_type.apply_substitution(final_subst)
-                    expr.ty = final_type
-                    return final_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"If branches have incompatible types: {then_type} vs {else_type}",
-                    )
+            case IfElse(condition=cond, then_expr=then_expr, else_expr=else_expr):
+                return self._infer_if_else(cond, then_expr, else_expr, env)
 
             # Function application
             case FunctionApplication(function=func_expr, argument=arg_expr):
-                func_type, func_subst = self.infer_expr(func_expr, env)
-                arg_type, arg_subst = self.infer_expr(
-                    arg_expr,
-                    env.apply_substitution(func_subst),
-                )
+                return self._infer_function_application(func_expr, arg_expr, env)
 
-                combined_subst = func_subst.compose(arg_subst)
-
-                # Create fresh return type
-                return_type = self.fresh_type_var()
-                expected_func_type = FunctionType(arg_type, return_type)
-
-                try:
-                    func_unify = unify_one(
-                        func_type.apply_substitution(combined_subst),
-                        expected_func_type,
-                    )
-                    final_subst = combined_subst.compose(func_unify)
-                    result_type = return_type.apply_substitution(final_subst)
-                    expr.ty = result_type
-                    return result_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(f"Function application type mismatch")
-
-            # Grouping
+            # Grouping and blocks
             case GroupedExpression(expression=inner_expr):
-                result = self.infer_expr(inner_expr, env)
-                expr.ty = result[0]
-                return result
-
-            # Do blocks
+                return self._infer_expr_internal(inner_expr, env)
             case DoBlock(statements=stmts):
-                result = self.infer_do_block(stmts, env)
-                expr.ty = result[0]
-                return result
-
-            # Constructor expressions
-            case ConstructorExpression(
-                constructor_name=constructor_name,
-                fields=fields,
-            ):
-                result = self.infer_constructor_expr(expr, env)
-                expr.ty = result[0]
-                return result
+                return self.infer_do_block(stmts, env)
+            case ConstructorExpression() as ctor_expr:
+                return self.infer_constructor_expr(ctor_expr, env)
 
             case _:
                 raise TypeInferenceError(
                     f"Unhandled expression type: {type(expr).__name__}",
                 )
 
-    def _infer_binary_numeric_op(
+    def _infer_list_literal(
+        self,
+        elements: List[Expression],
+        env: TypeEnvironment,
+    ) -> InferenceResult:
+        """Infer type of list literal."""
+        if not elements:
+            element_type = self.fresh_type_var()
+            return TypeApp(TypeCon("List"), element_type), TypeSubstitution()
+
+        # Infer first element type and unify with rest
+        first_type, subst = self.infer_expr(elements[0], env)
+        current_subst = subst
+
+        for element in elements[1:]:
+            elem_type, elem_subst = self.infer_expr(
+                element,
+                env.apply_substitution(current_subst),
+            )
+            current_subst = current_subst.compose(elem_subst)
+
+            try:
+                unify_subst = unify_one(
+                    first_type.apply_substitution(current_subst),
+                    elem_type,
+                )
+                current_subst = current_subst.compose(unify_subst)
+                first_type = first_type.apply_substitution(unify_subst)
+            except UnificationError as e:
+                raise TypeInferenceError(f"List elements have incompatible types: {e}")
+
+        list_type = TypeApp(
+            TypeCon("List"),
+            first_type.apply_substitution(current_subst),
+        )
+        return list_type, current_subst
+
+    def _infer_identifier(self, name: str, env: TypeEnvironment) -> InferenceResult:
+        """Infer type of variable or constructor."""
+        scheme = env.lookup(name)
+        if scheme is None:
+            raise TypeInferenceError(f"Unknown identifier: {name}")
+        return scheme.instantiate(self.fresh_var_gen), TypeSubstitution()
+
+    def _infer_binary_op(
         self,
         left: Expression,
         right: Expression,
         env: TypeEnvironment,
+        op_type: str,
     ) -> InferenceResult:
-        """Helper for binary numeric operations."""
+        """Unified binary operation inference."""
         left_type, left_subst = self.infer_expr(left, env)
         right_type, right_subst = self.infer_expr(
             right,
             env.apply_substitution(left_subst),
         )
-
         combined_subst = left_subst.compose(right_subst)
 
-        # Both operands must have the same numeric type
+        match op_type:
+            case "numeric":
+                return self._infer_numeric_op(left_type, right_type, combined_subst)
+            case "comparison":
+                return self._infer_comparison_op(left_type, right_type, combined_subst)
+            case "logical":
+                return self._infer_logical_op(left_type, right_type, combined_subst)
+            case "concat":
+                return self._infer_concat_op(left_type, right_type, combined_subst)
+            case _:
+                raise TypeInferenceError(f"Unknown binary operation type: {op_type}")
+
+    def _infer_numeric_op(
+        self,
+        left_type: Type,
+        right_type: Type,
+        subst: TypeSubstitution,
+    ) -> InferenceResult:
+        """Infer numeric binary operation."""
         try:
             unify_subst = unify_one(
-                left_type.apply_substitution(combined_subst),
-                right_type.apply_substitution(combined_subst),
+                left_type.apply_substitution(subst),
+                right_type.apply_substitution(subst),
             )
-            final_subst = combined_subst.compose(unify_subst)
-
-            # Check that the unified type is numeric (Int or Float)
+            final_subst = subst.compose(unify_subst)
             unified_type = left_type.apply_substitution(final_subst)
-            if unified_type == INT_TYPE or unified_type == FLOAT_TYPE:
+
+            if unified_type in (INT_TYPE, FLOAT_TYPE):
                 return unified_type, final_subst
-            else:
-                # Try to unify with Int
+
+            # Try Int, then Float
+            for target_type in (INT_TYPE, FLOAT_TYPE):
                 try:
-                    int_unify = unify_one(unified_type, INT_TYPE)
-                    return INT_TYPE, final_subst.compose(int_unify)
+                    type_unify = unify_one(unified_type, target_type)
+                    return target_type, final_subst.compose(type_unify)
                 except UnificationError:
-                    # Try to unify with Float
-                    try:
-                        float_unify = unify_one(unified_type, FLOAT_TYPE)
-                        return FLOAT_TYPE, final_subst.compose(float_unify)
-                    except UnificationError:
-                        raise TypeInferenceError(
-                            f"Numeric operation requires Int or Float, got {unified_type}",
-                        )
+                    continue
+
+            raise TypeInferenceError(
+                f"Numeric operation requires Int or Float, got {unified_type}",
+            )
         except UnificationError:
             raise TypeInferenceError(
-                f"Binary numeric operation requires operands of same type",
+                "Binary numeric operation requires operands of same type",
             )
 
-    def _infer_binary_comparison_op(
+    def _infer_comparison_op(
         self,
-        left: Expression,
-        right: Expression,
-        env: TypeEnvironment,
+        left_type: Type,
+        right_type: Type,
+        subst: TypeSubstitution,
     ) -> InferenceResult:
-        """Helper for binary comparison operations."""
-        left_type, left_subst = self.infer_expr(left, env)
-        right_type, right_subst = self.infer_expr(
-            right,
-            env.apply_substitution(left_subst),
-        )
-
-        combined_subst = left_subst.compose(right_subst)
-
-        # Both operands must have the same type (for comparison)
+        """Infer comparison binary operation."""
         try:
             unify_subst = unify_one(
-                left_type.apply_substitution(combined_subst),
-                right_type.apply_substitution(combined_subst),
+                left_type.apply_substitution(subst),
+                right_type.apply_substitution(subst),
             )
-            final_subst = combined_subst.compose(unify_subst)
-            return BOOL_TYPE, final_subst
+            return BOOL_TYPE, subst.compose(unify_subst)
         except UnificationError:
-            raise TypeInferenceError(f"Comparison requires operands of same type")
+            raise TypeInferenceError("Comparison requires operands of same type")
 
-    def _infer_binary_logical_op(
+    def _infer_logical_op(
         self,
-        left: Expression,
-        right: Expression,
+        left_type: Type,
+        right_type: Type,
+        subst: TypeSubstitution,
+    ) -> InferenceResult:
+        """Infer logical binary operation."""
+        try:
+            left_bool = unify_one(left_type, BOOL_TYPE)
+            right_bool = unify_one(right_type, BOOL_TYPE)
+            return BOOL_TYPE, subst.compose(left_bool).compose(right_bool)
+        except UnificationError:
+            raise TypeInferenceError("Logical operation requires Bool operands")
+
+    def _infer_concat_op(
+        self,
+        left_type: Type,
+        right_type: Type,
+        subst: TypeSubstitution,
+    ) -> InferenceResult:
+        """Infer concatenation operation."""
+        try:
+            unify_subst = unify_one(
+                left_type.apply_substitution(subst),
+                right_type.apply_substitution(subst),
+            )
+            final_subst = subst.compose(unify_subst)
+            return left_type.apply_substitution(final_subst), final_subst
+        except UnificationError:
+            raise TypeInferenceError("Concatenation operands must have same type")
+
+    def _infer_unary_op(
+        self,
+        operand: Expression,
+        env: TypeEnvironment,
+        expected_type: Type,
+        error_msg: str,
+    ) -> InferenceResult:
+        """Infer unary operation."""
+        operand_type, subst = self.infer_expr(operand, env)
+        try:
+            unify_subst = unify_one(operand_type, expected_type)
+            return expected_type, subst.compose(unify_subst)
+        except UnificationError:
+            raise TypeInferenceError(f"{error_msg}, got {operand_type}")
+
+    def _infer_index_operation(
+        self,
+        list_expr: Expression,
+        index_expr: Expression,
         env: TypeEnvironment,
     ) -> InferenceResult:
-        """Helper for binary logical operations."""
-        left_type, left_subst = self.infer_expr(left, env)
-        right_type, right_subst = self.infer_expr(
-            right,
-            env.apply_substitution(left_subst),
+        """Infer list indexing operation."""
+        list_type, list_subst = self.infer_expr(list_expr, env)
+        index_type, index_subst = self.infer_expr(
+            index_expr,
+            env.apply_substitution(list_subst),
         )
+        combined_subst = list_subst.compose(index_subst)
 
-        combined_subst = left_subst.compose(right_subst)
-
-        # Both operands must be Bool
+        # Index must be Int
         try:
-            left_bool_unify = unify_one(left_type, BOOL_TYPE)
-            subst_with_left = combined_subst.compose(left_bool_unify)
-
-            right_bool_unify = unify_one(right_type, BOOL_TYPE)
-            final_subst = subst_with_left.compose(right_bool_unify)
-
-            return BOOL_TYPE, final_subst
+            int_unify = unify_one(index_type, INT_TYPE)
+            subst_with_int = combined_subst.compose(int_unify)
         except UnificationError:
-            raise TypeInferenceError(f"Logical operation requires Bool operands")
+            raise TypeInferenceError(f"List index must be Int, got {index_type}")
+
+        # List must be List[T]
+        element_type = self.fresh_type_var()
+        expected_list_type = TypeApp(TypeCon("List"), element_type)
+
+        try:
+            list_unify = unify_one(
+                list_type.apply_substitution(subst_with_int),
+                expected_list_type,
+            )
+            final_subst = subst_with_int.compose(list_unify)
+            return element_type.apply_substitution(final_subst), final_subst
+        except UnificationError:
+            raise TypeInferenceError(
+                f"Index operation requires a List, got {list_type}",
+            )
+
+    def _infer_if_else(
+        self,
+        cond: Expression,
+        then_expr: Expression,
+        else_expr: Expression,
+        env: TypeEnvironment,
+    ) -> InferenceResult:
+        """Infer if-else expression."""
+        cond_type, cond_subst = self.infer_expr(cond, env)
+
+        # Condition must be Bool
+        try:
+            bool_unify = unify_one(cond_type, BOOL_TYPE)
+            subst_after_cond = cond_subst.compose(bool_unify)
+        except UnificationError:
+            raise TypeInferenceError(f"If condition must be Bool, got {cond_type}")
+
+        # Infer branches
+        then_type, then_subst = self.infer_expr(
+            then_expr,
+            env.apply_substitution(subst_after_cond),
+        )
+        subst_after_then = subst_after_cond.compose(then_subst)
+
+        else_type, else_subst = self.infer_expr(
+            else_expr,
+            env.apply_substitution(subst_after_then),
+        )
+        subst_after_else = subst_after_then.compose(else_subst)
+
+        # Branches must have same type
+        try:
+            branch_unify = unify_one(
+                then_type.apply_substitution(subst_after_else),
+                else_type,
+            )
+            final_subst = subst_after_else.compose(branch_unify)
+            return then_type.apply_substitution(final_subst), final_subst
+        except UnificationError:
+            raise TypeInferenceError(
+                f"If branches have incompatible types: {then_type} vs {else_type}",
+            )
+
+    def _infer_function_application(
+        self,
+        func_expr: Expression,
+        arg_expr: Expression,
+        env: TypeEnvironment,
+    ) -> InferenceResult:
+        """Infer function application."""
+        func_type, func_subst = self.infer_expr(func_expr, env)
+        arg_type, arg_subst = self.infer_expr(
+            arg_expr,
+            env.apply_substitution(func_subst),
+        )
+        combined_subst = func_subst.compose(arg_subst)
+
+        # Create fresh return type
+        return_type = self.fresh_type_var()
+        expected_func_type = FunctionType(arg_type, return_type)
+
+        try:
+            func_unify = unify_one(
+                func_type.apply_substitution(combined_subst),
+                expected_func_type,
+            )
+            final_subst = combined_subst.compose(func_unify)
+            return return_type.apply_substitution(final_subst), final_subst
+        except UnificationError:
+            raise TypeInferenceError("Function application type mismatch")
 
     def infer_function(
         self,
@@ -936,126 +832,91 @@ class TypeInferrer:
 
         # Process all statements except the last
         for stmt in statements[:-1]:
-            match stmt:
-                case LetStatement(variable=let_variable, value=let_value):
-                    # Handle let statements
-                    value_type, value_subst = self.infer_expr(
-                        let_value,
-                        current_env,
-                    )
-                    current_subst = current_subst.compose(value_subst)
-
-                    # Generalize and add to environment
-                    var_scheme = generalize(
-                        current_env.apply_substitution(
-                            current_subst,
-                        ).free_type_vars(),
-                        value_type,
-                    )
-                    current_env = current_env.extend(let_variable, var_scheme)
-
-                # Check if it's an expression (not a declaration)
-                case (
-                    IntLiteral()
-                    | FloatLiteral()
-                    | StringLiteral()
-                    | BoolLiteral()
-                    | ListLiteral()
-                    | Variable()
-                    | Constructor()
-                    | AddOperation()
-                    | SubOperation()
-                    | MulOperation()
-                    | DivOperation()
-                    | PowIntOperation()
-                    | PowFloatOperation()
-                    | EqualOperation()
-                    | NotEqualOperation()
-                    | LessThanOperation()
-                    | LessEqualOperation()
-                    | GreaterThanOperation()
-                    | GreaterEqualOperation()
-                    | AndOperation()
-                    | OrOperation()
-                    | NotOperation()
-                    | ConcatOperation()
-                    | IndexOperation()
-                    | IfElse()
-                    | DoBlock()
-                    | FunctionApplication()
-                    | ConstructorExpression()
-                    | GroupedExpression()
-                    | NegativeInt()
-                    | NegativeFloat() as expr_stmt
-                ):
-                    # Type check but ignore result for intermediate expressions
-                    _, stmt_subst = self.infer_expr(
-                        expr_stmt,
-                        current_env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(stmt_subst)
+            current_env, stmt_subst = self._process_statement(stmt, current_env)
+            current_subst = current_subst.compose(stmt_subst)
 
         # Process the last statement and return its type
-        last_stmt = statements[-1]
-        match last_stmt:
-            case LetStatement(variable=let_variable, value=let_value):
-                # Handle let statement
-                value_type, value_subst = self.infer_expr(let_value, current_env)
-                final_subst = current_subst.compose(value_subst)
+        return self._process_final_statement(
+            statements[-1],
+            current_env.apply_substitution(current_subst),
+            current_subst,
+        )
 
-                # Generalize and add to environment
+    def _process_statement(
+        self,
+        stmt: "Statement",
+        env: TypeEnvironment,
+    ) -> Tuple[TypeEnvironment, TypeSubstitution]:
+        """Process a statement and return updated environment and substitution."""
+        match stmt:
+            case LetStatement(variable=var, value=value):
+                value_type, subst = self.infer_expr(value, env)
                 var_scheme = generalize(
-                    current_env.apply_substitution(
-                        final_subst,
-                    ).free_type_vars(),
+                    env.apply_substitution(subst).free_type_vars(),
                     value_type,
                 )
-                current_env = current_env.extend(let_variable, var_scheme)
-
-                return UNIT_TYPE, final_subst  # Let statements don't return values
-
-            case (
-                IntLiteral()
-                | FloatLiteral()
-                | StringLiteral()
-                | BoolLiteral()
-                | ListLiteral()
-                | Variable()
-                | Constructor()
-                | AddOperation()
-                | SubOperation()
-                | MulOperation()
-                | DivOperation()
-                | PowIntOperation()
-                | PowFloatOperation()
-                | EqualOperation()
-                | NotEqualOperation()
-                | LessThanOperation()
-                | LessEqualOperation()
-                | GreaterThanOperation()
-                | GreaterEqualOperation()
-                | AndOperation()
-                | OrOperation()
-                | NotOperation()
-                | ConcatOperation()
-                | IndexOperation()
-                | IfElse()
-                | DoBlock()
-                | FunctionApplication()
-                | ConstructorExpression()
-                | GroupedExpression()
-                | NegativeInt()
-                | NegativeFloat() as expr_stmt
-            ):
-                # It's an expression - return its type
-                return self.infer_expr(
-                    expr_stmt,
-                    current_env.apply_substitution(current_subst),
-                )
-
+                return env.extend(var, var_scheme), subst
             case _:
-                # Other statement types (like declarations) don't return values
+                # For expression statements, just type check and return original env
+                if self._is_expression_statement(stmt):
+                    _, subst = self.infer_expr(stmt, env)  # type: ignore
+                    return env, subst
+                return env, TypeSubstitution()
+
+    def _process_final_statement(
+        self,
+        stmt: "Statement",
+        env: TypeEnvironment,
+        current_subst: TypeSubstitution,
+    ) -> InferenceResult:
+        """Process final statement and return its type."""
+        match stmt:
+            case LetStatement(variable=var, value=value):
+                value_type, subst = self.infer_expr(value, env)
+                return UNIT_TYPE, current_subst.compose(
+                    subst,
+                )  # Let statements don't return values
+            case _:
+                if self._is_expression_statement(stmt):
+                    return self.infer_expr(stmt, env)  # type: ignore
                 return UNIT_TYPE, current_subst
+
+    def _is_expression_statement(self, stmt: "Statement") -> bool:
+        """Check if statement is actually an expression."""
+        expression_types = (
+            IntLiteral,
+            FloatLiteral,
+            StringLiteral,
+            BoolLiteral,
+            ListLiteral,
+            Variable,
+            Constructor,
+            AddOperation,
+            SubOperation,
+            MulOperation,
+            DivOperation,
+            PowIntOperation,
+            PowFloatOperation,
+            EqualOperation,
+            NotEqualOperation,
+            LessThanOperation,
+            LessEqualOperation,
+            GreaterThanOperation,
+            GreaterEqualOperation,
+            AndOperation,
+            OrOperation,
+            NotOperation,
+            ConcatOperation,
+            IndexOperation,
+            IfElse,
+            DoBlock,
+            FunctionApplication,
+            ConstructorExpression,
+            GroupedExpression,
+            NegativeInt,
+            NegativeFloat,
+        )
+        return isinstance(stmt, expression_types)
 
     def infer_constructor_expr(
         self,
