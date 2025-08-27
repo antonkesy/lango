@@ -4,22 +4,22 @@ from pathlib import Path
 
 from lark import Lark, ParseTree
 
-from lango.minio.ast.nodes import FunctionDefinition, Program
-from lango.minio.ast.transformer import transform_parse_tree
+from lango.systemo.ast.nodes import FunctionDefinition, Program
+from lango.systemo.ast.transformer import transform_parse_tree
 
 
 def _parse_lark(path: Path) -> ParseTree:
     parser = Lark.open(
-        "./lango/minio/parser/minio.lark",
+        "./lango/systemo/parser/systemo.lark",
         parser="lalr",
     )
 
-    prelude_dir = "./lango/minio/prelude"
+    prelude_dir = "./lango/systemo/prelude"
     prelude_content = ""
 
     if os.path.exists(prelude_dir):
         for filename in sorted(os.listdir(prelude_dir)):
-            if filename.endswith(".minio"):
+            if filename.endswith(".syso"):
                 prelude_file_path = os.path.join(prelude_dir, filename)
                 try:
                     with open(prelude_file_path, "r") as prelude_file:

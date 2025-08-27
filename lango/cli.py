@@ -1,19 +1,19 @@
+from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
 
-from lango.minio.ast.printer import (
-    print_annotated_ast,
-    print_ast_colored,
-    print_ast_compact,
-    print_ast_types_only,
-)
-from lango.minio.compiler.go import compile_program as go_compile_program
-from lango.minio.compiler.python import compile_program as python_compile_program
-from lango.minio.interpreter.interpreter import interpret
-from lango.minio.parser.parser import parse
-from lango.minio.typechecker.typecheck import get_type_str, type_check
+from lango.minio.compiler.go import compile_program as minio_go_compile_program
+from lango.minio.compiler.python import compile_program as minio_python_compile_program
+from lango.minio.interpreter.interpreter import interpret as minio_interpret
+from lango.minio.parser.parser import parse as minio_parse
+from lango.minio.typechecker.typecheck import get_type_str as minio_get_type_str
+from lango.minio.typechecker.typecheck import type_check as minio_type_check
+from lango.systemo.interpreter.interpreter import interpret as systemo_interpret
+from lango.systemo.parser.parser import parse as systemo_parse
+from lango.systemo.typechecker.typecheck import get_type_str as systemo_get_type_str
+from lango.systemo.typechecker.typecheck import type_check as systemo_type_check
 
 app = typer.Typer()
 console = Console()
@@ -21,107 +21,70 @@ console = Console()
 
 @app.command()
 def run(
-    input_file: str = typer.Option(
-        "examples/minio/example.minio",
-        "--input_file",
-        "-i",
-        help="Path to .minio file to run",
-    ),
-    enable_type_check: bool = typer.Option(
-        True,
-        "--type_check/--no_type_check",
-        help="Enable or disable type checking",
-    ),
+    lang: str = typer.Argument(..., help="systemo|minio"),
+    input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
 ) -> int:
-    ast = parse(input_file)
-    if enable_type_check:
-        if not type_check(ast):
-            print("Type checking failed, cannot interpret.")
+    match lang:
+        case "systemo":
+            ast = systemo_parse(input_file)
+            return systemo_interpret(ast).exit_code
+        case "minio":
+            ast = minio_parse(input_file)
+            return minio_interpret(ast).exit_code
+        case _:
+            console.print(f"Unknown language: {lang}", style="bold red")
             return 1
-
-    return interpret(ast).exit_code
 
 
 @app.command()
 def types(
-    input_file: str = typer.Argument(
-        help="Path to .minio file to type check",
-    ),
+    lang: str = typer.Argument(..., help="systemo|minio"),
+    input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
 ) -> None:
-    print(get_type_str(parse(input_file)))
-
-
-@app.command()
-def ast(
-    input_file: str = typer.Argument(
-        help="Path to .minio file to show annotated AST",
-    ),
-    mode: str = typer.Option(
-        "full",
-        "--mode",
-        "-m",
-        help="AST display mode: full, compact, summary, types-only, colored",
-    ),
-    max_depth: int = typer.Option(
-        None,
-        "--max-depth",
-        "-d",
-        help="Maximum depth to display (for summary mode)",
-    ),
-    show_types: bool = typer.Option(
-        True,
-        "--types/--no-types",
-        help="Show type annotations",
-    ),
-) -> None:
-    ast_parsed = parse(input_file)
-    if not type_check(ast_parsed):
-        console.print("Type checking failed, cannot print AST.", style="bold red")
-        return
-
-    match mode:
-        case "full":
-            print_annotated_ast(ast_parsed, show_types=show_types)
-        case "compact":
-            print_ast_compact(ast_parsed, show_types=show_types)
-        case "summary":
-            depth = max_depth if max_depth is not None else 3
-            print_annotated_ast(ast_parsed, show_types=show_types, max_depth=depth)
-        case "types-only":
-            print_ast_types_only(ast_parsed)
-        case "colored":
-            print_ast_colored(ast_parsed, show_types=show_types, compact=False)
+    match lang:
+        case "systemo":
+            print(systemo_get_type_str(systemo_parse(input_file)))
+        case "minio":
+            print(minio_get_type_str(minio_parse(input_file)))
         case _:
-            console.print(
-                f"Unknown mode: {mode}. Use: full, compact, summary, types-only, or colored",
-                style="bold red",
-            )
+            console.print(f"Unknown language: {lang}", style="bold red")
+            return
 
 
 @app.command()
 def typecheck(
-    input_file: str = typer.Argument(
-        help="Path to .minio file to type check",
-    ),
+    lang: str = typer.Argument(..., help="systemo|minio"),
+    input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
 ) -> int:
-    if type_check(parse(input_file)):
-        console.print("Type checking succeeded", style="bold green")
-        return 0
-    else:
-        console.print("Type checking failed", style="bold red")
-        return 1
+    match lang:
+        case "systemo":
+            if systemo_type_check(systemo_parse(input_file)):
+                console.print("Type checking succeeded", style="bold green")
+                return 0
+            else:
+                console.print("Type checking failed", style="bold red")
+                return 1
+        case "minio":
+            if systemo_type_check(systemo_parse(input_file)):
+                console.print("Type checking succeeded", style="bold green")
+                return 0
+            else:
+                console.print("Type checking failed", style="bold red")
+                return 1
+        case _:
+            console.print(f"Unknown language: {lang}", style="bold red")
+            return 1
 
 
 @app.command()
 def compile(
-    input_file: str = typer.Argument(
-        help="Path to .minio file to compile to Python",
-    ),
+    lang: str = typer.Argument(..., help="systemo|minio"),
+    input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
     output_file: str = typer.Option(
         "out.py",
         "--output",
         "-o",
-        help="Output Python file path",
+        help="Output compiled target file path",
     ),
     target: str = typer.Option(
         "python",
@@ -130,28 +93,35 @@ def compile(
         help="Target language (python|go)",
     ),
 ) -> int:
-    try:
-        ast = parse(input_file)
-        type_check(ast)
-        match target:
-            case "python":
-                compile_program = python_compile_program
-            case "go":
-                compile_program = go_compile_program
-            case _:
-                console.print(f"Unknown target: {target}", style="bold red")
-                return 1
-        compiled_code = compile_program(ast)
 
-        with open(output_file, "w") as f:
-            f.write(compiled_code)
+    compiled_code: str
+    match lang:
+        case "systemo":
+            ast = systemo_parse(input_file)
+            systemo_type_check(ast)
+            raise NotImplementedError("Systemo compilation not implemented yet")
+        case "minio":
+            ast = minio_parse(input_file)
+            minio_type_check(ast)
+            match target:
+                case "python":
+                    compile_program = minio_python_compile_program
+                case "go":
+                    compile_program = minio_go_compile_program
+                case _:
+                    console.print(f"Unknown target: {target}", style="bold red")
+                    return 1
 
-        console.print(f"Compiled {input_file} to {output_file}", style="bold green")
-        return 0
+            compiled_code = compile_program(ast)
+        case _:
+            console.print(f"Unknown language: {lang}", style="bold red")
+            return 1
 
-    except Exception as e:
-        console.print(f"Compilation failed: {e}", style="bold red")
-        return 1
+    with open(output_file, "w") as f:
+        f.write(compiled_code)
+
+    console.print(f"Compiled {input_file} to {output_file}", style="bold green")
+    return 0
 
 
 def main() -> Any:

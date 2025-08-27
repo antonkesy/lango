@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,45 +16,62 @@ from ..utility.runners.external import (
     run_python_code,
 )
 
-BASE_TEST_FILES_PATH = "./test/minio/files/"
-EXAMPLE = "./examples/minio/example.minio"
+BASE_TEST_FILES_PATH = Path("./test/minio/files/")
+EXAMPLE = Path("./examples/minio/example.minio")
 
 
-@pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
-def test_interpreter(file_name: str) -> None:
-    def run_interpreter(f: str) -> str:
+@pytest.mark.parametrize(
+    "file_name",
+    list(get_all_test_files(BASE_TEST_FILES_PATH, "minio")),
+    ids=lambda p: str(p),
+)
+def test_interpreter(file_name: Path) -> None:
+    def run_interpreter(f: Path) -> str:
         return interpret(parse(f), collectStdOut=True).output
 
     file_test_output(file_name, run_interpreter)
 
 
-@pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
-def test_python_compiler(file_name: str) -> None:
-    def run_compiler_and_output(f: str) -> str:
+@pytest.mark.parametrize(
+    "file_name",
+    list(get_all_test_files(BASE_TEST_FILES_PATH, "minio")),
+    ids=lambda p: str(p),
+)
+def test_python_compiler(file_name: Path) -> None:
+    def run_compiler_and_output(f: Path) -> str:
         return run_python_code(compile_to_python(parse(f)))
 
     file_test_output(file_name, run_compiler_and_output)
 
 
-@pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
-def test_go_compiler(file_name: str) -> None:
-    def run_compiler_and_output(f: str) -> str:
+@pytest.mark.parametrize(
+    "file_name",
+    list(get_all_test_files(BASE_TEST_FILES_PATH, "minio")),
+    ids=lambda p: str(p),
+)
+def test_go_compiler(file_name: Path) -> None:
+    def run_compiler_and_output(f: Path) -> str:
         return run_go_code(compile_to_go(parse(f)))
 
     file_test_output(file_name, run_compiler_and_output)
 
 
-@pytest.mark.parametrize("file_name", list(get_all_test_files(BASE_TEST_FILES_PATH)))
-def test_is_haskell_compliant(file_name: str) -> None:
+@pytest.mark.parametrize(
+    "file_name",
+    list(get_all_test_files(BASE_TEST_FILES_PATH, "minio")),
+    ids=lambda p: str(p),
+)
+def test_is_haskell_compliant(file_name: Path) -> None:
     file_test_output(file_name, run_haskell_file)
 
 
 @pytest.mark.parametrize(
     "file_name",
-    list(get_all_test_files(BASE_TEST_FILES_PATH)) + [EXAMPLE],
+    list(get_all_test_files(BASE_TEST_FILES_PATH, "minio")) + [EXAMPLE],
+    ids=lambda p: str(p),
 )
-def test_is_type_valid(file_name: str) -> None:
-    def run_type_check(f: str) -> Any:
+def test_is_type_valid(file_name: Path) -> None:
+    def run_type_check(f: Path) -> Any:
         return type_check(parse(f))
 
     file_test_type(file_name, run_type_check)

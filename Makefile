@@ -24,40 +24,43 @@ install:
 install-dev:
 	.venv/bin/pip install -e .[dev]
 
-run: install
+# MiniO
+minio-run: install
 	. .venv/bin/activate && \
-	lango run --input_file examples/minio/example.minio
+	lango run minio examples/minio/example.minio
 
-compile-python: install
+minio-compile-python: install
 	. .venv/bin/activate && \
-	lango compile examples/minio/example.minio -o build/example.py && \
+	lango compile minio examples/minio/example.minio -o build/example.py && \
 	python3.13 build/example.py
 
-compile-go: install
+minio-compile-go: install
 	. .venv/bin/activate && \
-	lango compile examples/minio/example.minio -o build/example.go --target go && \
+	lango compile minio examples/minio/example.minio -o build/example.go --target go && \
 	go run build/example.go
 
-types: install
+minio-types: install
 	. .venv/bin/activate && \
-	lango types examples/minio/example.minio
+	lango types minio examples/minio/example.minio
 
-ast: install
+minio-typecheck: install
 	. .venv/bin/activate && \
-	lango ast examples/minio/short.minio --mode compact --no-types
+	lango typecheck minio examples/minio/example.minio
 
-ast-full: install
+# SystemO
+systemo-run: install
 	. .venv/bin/activate && \
-	lango ast examples/minio/short.minio
+	lango run systemo examples/minio/example.minio
 
-ast-summary: install
+systemo-types: install
 	. .venv/bin/activate && \
-	lango ast examples/minio/short.minio --mode summary --max-depth 3
+	lango types systemo examples/minio/example.minio
 
-typecheck: install
+systemo-typecheck: install
 	. .venv/bin/activate && \
-	lango typecheck examples/minio/example.minio
+	lango typecheck systemo examples/minio/example.minio
 
+# Quality
 test: install
 	. .venv/bin/activate && \
 	pytest -vvs

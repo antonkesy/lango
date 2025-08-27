@@ -13,5 +13,5 @@ inst xcoord :: CPoint -> Float
 inst ycoord :: CPoint -> Float
   ycoord (MkCPoint x y c) = y
 
-distance :: (xcoord,ycoord::a->Float) => a -> Float
+-- distance :: (xcoord,ycoord::a->Float) => a -> Float -- TODO: not required
 distance p = sqrt (sqr (xcoord p) + sqr (ycoord p))

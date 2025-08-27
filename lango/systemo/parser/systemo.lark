@@ -1,0 +1,152 @@
+start: prelude stmt* postlude
+
+prelude: COMMENT*
+postlude: COMMENT*
+
+?stmt: data_decl
+     | func_def
+
+// --- Data Declarations ---
+data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)* ";"
+
+type_param: ID
+
+constructor: UIDENT record_constructor
+           | UIDENT type_atom*
+
+record_constructor: "{" [field ("," field)*] "}"
+field: ID "::" type_expr
+
+// --- Function Signatures and Definitions ---
+
+func_def: ID pattern* "=" expr ";"
+
+// --- Expressions ---
+// Arithmetic
+PLUS: "+"
+MINUS: "-"
+MUL: "*"
+DIV: "/"
+POW_INT: "^"
+POW_FLOAT: "^^"|"**"
+// Comparison
+EQ: "=="
+NEQ: "/="
+LT: "<"
+LTEQ: "<="
+GT: ">"
+GTEQ: ">="
+// Logical
+AND: "&&"
+OR: "||"
+NOT: "not"
+// Pattern matching
+COLON: ":"
+
+do_stmt: "let" "{" (ID "=" expr ";")* ID "=" expr "}"
+        | expr
+
+stmt_list: (do_stmt ";")+
+
+// Operator precedence hierarchy (from lowest to highest)
+?expr: "do" "{" stmt_list "}"          -> do_block
+     | "if" expr "then" expr "else" expr -> if_else
+     | or_expr
+
+?or_expr: or_expr OR and_expr          -> or
+        | and_expr
+
+?and_expr: and_expr AND comp_expr      -> and
+         | comp_expr
+
+?comp_expr: comp_expr EQ concat_expr   -> eq
+          | comp_expr NEQ concat_expr  -> neq
+          | comp_expr LT concat_expr   -> lt
+          | comp_expr LTEQ concat_expr -> lteq
+          | comp_expr GT concat_expr   -> gt
+          | comp_expr GTEQ concat_expr -> gteq
+          | concat_expr
+
+?concat_expr: concat_expr "++" add_expr -> concat
+            | add_expr
+
+?add_expr: add_expr PLUS mul_expr      -> add
+         | add_expr MINUS mul_expr     -> sub
+         | mul_expr
+
+?mul_expr: mul_expr MUL pow_expr       -> mul
+         | mul_expr DIV pow_expr       -> div
+         | pow_expr
+
+?pow_expr: unary_expr POW_INT pow_expr    -> pow_int
+         | unary_expr POW_FLOAT pow_expr  -> pow_float
+         | unary_expr
+
+?unary_expr: NOT unary_expr            -> not
+           | index_expr
+
+?index_expr: index_expr "!!" app_expr  -> index
+           | app_expr
+
+?app_expr: app_expr atom_expr      -> app
+         | atom_expr
+
+?atom_expr: "(" expr ")"           -> grouped
+          | "(" MINUS INT ")"      -> neg_int
+          | "(" MINUS FLOAT ")"    -> neg_float
+          | constructor_expr
+          | UIDENT                 -> constructor
+          | ID                     -> var
+          | literal
+
+constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
+field_assign: ID "=" expr
+
+// --- Types ---
+?type_expr: type_app
+          | type_app "->" type_expr   -> arrow_type
+
+?type_app: type_app type_atom         -> type_application
+         | type_atom
+
+?type_atom: TYPE                      -> type_constructor
+          | ID                        -> type_var
+          | "(" type_expr ")"         -> grouped_type
+
+// --- Patterns ---
+?pattern: constructor_pattern
+        | cons_pattern
+        | UIDENT                 -> constructor_pattern_bare
+        | ID
+        | literal
+        | "(" MINUS INT ")"      -> neg_int
+        | "(" MINUS FLOAT ")"    -> neg_float
+
+constructor_pattern: "(" UIDENT pattern+ ")"
+cons_pattern: "(" pattern COLON pattern ")"   -> cons_pattern
+
+// --- Literals ---
+?literal: INT     -> int
+        | FLOAT   -> float
+        | STRING  -> string
+        | "True"  -> true
+        | "False" -> false
+        | list
+
+list: "[" [expr ("," expr)*] "]"
+
+// --- Tokens ---
+ID: /[a-z][a-zA-Z0-9_]*/
+TYPE: /[A-Z][a-zA-Z0-9_]*/
+UIDENT: TYPE
+STRING: /"[^"]*"/
+INT: /[0-9]+/
+FLOAT: /[0-9]+\.[0-9]+/
+
+COMMENT: /--.*/
+%ignore COMMENT
+%ignore /[ \t]+/
+%ignore /\n/
+
+%import common.WS
+%ignore WS

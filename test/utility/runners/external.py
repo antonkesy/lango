@@ -1,9 +1,10 @@
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 
 
-def run_haskell_file(path: str) -> str:
+def run_haskell_file(path: Path) -> str:
     try:
         result = subprocess.run(
             ["runghc", path],

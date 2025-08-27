@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Generator
 
 
@@ -10,7 +11,7 @@ class TestOutput:
     expected_output: str
 
 
-def _get_test_output(file_name: str) -> TestOutput:
+def _get_test_output(file_name: Path) -> TestOutput:
     """Parses the first lines of the test file to determine the expected output.
     Format:
         -- RUN: OK|FAIL
@@ -28,14 +29,14 @@ def _get_test_output(file_name: str) -> TestOutput:
         )
 
 
-def get_all_test_files(base_path: str) -> Generator[str, None, None]:
+def get_all_test_files(base_path: Path, extension: str) -> Generator[Path, None, None]:
     for root, _, files in os.walk(base_path):
         for file in files:
-            if file.endswith(".minio"):
-                yield os.path.join(root, file)
+            if file.endswith("." + extension):
+                yield Path(os.path.join(root, file))
 
 
-def file_test_output(file_name: str, runFn: Callable[[str], Any]) -> None:
+def file_test_output(file_name: Path, runFn: Callable[[Path], Any]) -> None:
     expected = _get_test_output(file_name)
     try:
         result = runFn(file_name)
@@ -51,7 +52,7 @@ def file_test_output(file_name: str, runFn: Callable[[str], Any]) -> None:
     ), f"{file_name}: Expected '{expected.expected_output}', got '{result}'"
 
 
-def file_test_type(file_name: str, runFn: Callable[[str], Any]) -> None:
+def file_test_type(file_name: Path, runFn: Callable[[Path], Any]) -> None:
     expected = _get_test_output(file_name)
     try:
         runFn(file_name)

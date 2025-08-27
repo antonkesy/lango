@@ -23,10 +23,10 @@ jobs:
         run: docker run --rm lango-test
 
       - name: Minio - Interpret example file
-        run: docker run --rm lango run --input_file examples/minio/example.minio
+        run: docker run --rm lango run minio examples/minio/example.minio
 
       - name: Minio - Python compile example file
-        run: docker run --rm lango compile examples/minio/example.minio
+        run: docker run --rm lango compile minio examples/minio/example.minio
 
       - name: Minio - Go compile example file
-        run: docker run --rm lango compile examples/minio/example.minio -o ./build/example.go --target go
+        run: docker run --rm lango compile minio examples/minio/example.minio -o ./build/example.go --target go
