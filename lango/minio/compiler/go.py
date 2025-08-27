@@ -16,8 +16,6 @@ from lango.minio.ast.nodes import (
     DoBlock,
     EqualOperation,
     Expression,
-    Field,
-    FieldAssignment,
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
@@ -48,11 +46,6 @@ from lango.minio.ast.nodes import (
     VariablePattern,
 )
 from lango.minio.typechecker.minio_types import (
-    BOOL_TYPE,
-    FLOAT_TYPE,
-    INT_TYPE,
-    STRING_TYPE,
-    UNIT_TYPE,
     DataType,
     FunctionType,
     Type,

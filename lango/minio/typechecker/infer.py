@@ -1,7 +1,4 @@
-"""
-AST-based type inference engine using the Hindley-Milner algorithm.
-"""
-
+from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
 from lango.minio.ast.nodes import (
@@ -79,30 +76,23 @@ InferenceResult = Tuple[Type, TypeSubstitution]
 
 
 class TypeEnvironment:
-    """Type environment mapping identifiers to type schemes."""
-
     def __init__(self, bindings: Optional[TypeBindings] = None) -> None:
-        """Initialize the type environment with optional bindings."""
         self.bindings: TypeBindings = bindings or {}
 
     def lookup(self, name: str) -> Optional[TypeScheme]:
-        """Look up a name in the environment and return its type scheme."""
         return self.bindings.get(name)
 
     def extend(self, name: str, scheme: TypeScheme) -> "TypeEnvironment":
-        """Return a new environment with an additional binding."""
         new_bindings = self.bindings.copy()
         new_bindings[name] = scheme
         return TypeEnvironment(new_bindings)
 
     def extend_many(self, new_bindings: Dict[str, TypeScheme]) -> "TypeEnvironment":
-        """Return a new environment with multiple additional bindings."""
         combined_bindings = self.bindings.copy()
         combined_bindings.update(new_bindings)
         return TypeEnvironment(combined_bindings)
 
     def apply_substitution(self, subst: TypeSubstitution) -> "TypeEnvironment":
-        """Apply a type substitution to all bindings in the environment."""
         new_bindings = {}
         for name, scheme in self.bindings.items():
             # Apply substitution to the scheme's type, keeping quantified vars
@@ -111,28 +101,22 @@ class TypeEnvironment:
         return TypeEnvironment(new_bindings)
 
     def free_type_vars(self) -> Set[str]:
-        """Return all free type variables in this environment."""
         free_vars = set()
         for scheme in self.bindings.values():
             free_vars.update(scheme.free_vars())
         return free_vars
 
     def items(self) -> ItemsView[str, TypeScheme]:
-        """Return items for iteration."""
         return self.bindings.items()
 
     def __contains__(self, name: str) -> bool:
-        """Check if a name is in the environment."""
         return name in self.bindings
 
     def __getitem__(self, name: str) -> TypeScheme:
-        """Get a type scheme by name."""
         return self.bindings[name]
 
 
 class TypeInferenceError(Exception):
-    """Exception raised during type inference."""
-
     def __init__(self, message: str, node: Optional[ASTNode] = None) -> None:
         self.message = message
         self.node = node
@@ -140,10 +124,7 @@ class TypeInferenceError(Exception):
 
 
 class TypeInferrer:
-    """AST-based Hindley-Milner type inference engine."""
-
     def __init__(self) -> None:
-        """Initialize the type inferrer."""
         self.fresh_var_gen = FreshVarGenerator()
         self.data_types: Dict[str, List[str]] = {}  # type_name -> [constructor_names]
         self.data_constructors: Dict[str, Tuple[str, List[Type]]] = (
@@ -151,12 +132,10 @@ class TypeInferrer:
         )  # constructor -> (type_name, field_types)
 
     def fresh_type_var(self) -> TypeVar:
-        """Generate a fresh type variable."""
         var_name = self.fresh_var_gen.fresh()
         return TypeVar(var_name)
 
     def infer_data_decl(self, node: DataDeclaration) -> TypeEnvironment:
-        """Process a data type declaration and return updated environment."""
         type_name = node.type_name
         type_params = [param.name for param in node.type_params]
 
@@ -228,7 +207,6 @@ class TypeInferrer:
         return env
 
     def parse_type_expr(self, node: TypeExpression) -> Type:
-        """Parse a type expression from the AST."""
         match node:
             case TypeConstructor(name=type_name):
                 match type_name:
@@ -267,8 +245,6 @@ class TypeInferrer:
                 )
 
     def infer_expr(self, expr: Expression, env: TypeEnvironment) -> InferenceResult:
-        """Infer the type of an expression."""
-
         match expr:
             # Literals
             case IntLiteral() | NegativeInt():
@@ -645,7 +621,6 @@ class TypeInferrer:
         right: Expression,
         env: TypeEnvironment,
     ) -> InferenceResult:
-        """Helper for binary numeric operations."""
         left_type, left_subst = self.infer_expr(left, env)
         right_type, right_subst = self.infer_expr(
             right,
@@ -691,7 +666,6 @@ class TypeInferrer:
         right: Expression,
         env: TypeEnvironment,
     ) -> InferenceResult:
-        """Helper for binary comparison operations."""
         left_type, left_subst = self.infer_expr(left, env)
         right_type, right_subst = self.infer_expr(
             right,
@@ -717,7 +691,6 @@ class TypeInferrer:
         right: Expression,
         env: TypeEnvironment,
     ) -> InferenceResult:
-        """Helper for binary logical operations."""
         left_type, left_subst = self.infer_expr(left, env)
         right_type, right_subst = self.infer_expr(
             right,
@@ -743,7 +716,6 @@ class TypeInferrer:
         func_def: FunctionDefinition,
         env: TypeEnvironment,
     ) -> Tuple[TypeScheme, TypeEnvironment]:
-        """Infer the type of a function definition."""
         # For now, handle simple functions without pattern matching
         if len(func_def.patterns) == 0:
             # Nullary function
@@ -802,7 +774,6 @@ class TypeInferrer:
         func_defs: List[FunctionDefinition],
         env: TypeEnvironment,
     ) -> Tuple[TypeScheme, TypeEnvironment]:
-        """Infer the type of multiple function definitions with the same name."""
         if not func_defs:
             raise TypeInferenceError("Empty function group")
 
@@ -927,7 +898,6 @@ class TypeInferrer:
         statements: List["Statement"],
         env: TypeEnvironment,
     ) -> InferenceResult:
-        """Infer type of do block - return type of last statement."""
         if not statements:
             return UNIT_TYPE, TypeSubstitution()
 
@@ -1062,7 +1032,6 @@ class TypeInferrer:
         expr: ConstructorExpression,
         env: TypeEnvironment,
     ) -> InferenceResult:
-        """Infer type of constructor expression."""
         # Look up constructor in environment
         constructor_name = expr.constructor_name
         if constructor_name not in env:
@@ -1105,7 +1074,6 @@ class TypeInferrer:
         pattern_type: Type,
         env: TypeEnvironment,
     ) -> Tuple[TypeEnvironment, TypeSubstitution]:
-        """Infer pattern and return extended environment and substitution."""
         match pattern:
             case VariablePattern(name=name):
                 # Variable patterns bind the variable to the pattern type
@@ -1198,25 +1166,6 @@ class TypeInferrer:
 
                 return tail_env, current_subst
 
-            case ListLiteral(elements=elements):
-                # List literal pattern [] or [p1, p2, ...]
-                elem_type = self.fresh_type_var()
-                list_type = TypeApp(TypeCon("List"), elem_type)
-
-                # Unify pattern type with list type
-                unify_subst = unify_one(pattern_type, list_type)
-                current_subst = unify_subst
-                extended_env = env
-
-                # For now, only handle empty lists properly
-                # TODO: Handle non-empty list patterns when elements are patterns, not expressions
-                if len(elements) > 0:
-                    # This is a limitation - we can't properly handle non-empty list patterns yet
-                    # because elements are typed as expressions, not patterns
-                    pass
-
-                return extended_env, current_subst
-
             case LiteralPattern(value=value):
                 # Literal patterns constrain the pattern type to the literal's type
                 literal_type: Type
@@ -1246,7 +1195,6 @@ class TypeInferrer:
                 return env, TypeSubstitution()
 
     def infer_program(self, ast: Program) -> TypeEnvironment:
-        """Infer types for an entire program."""
         env = TypeEnvironment()
 
         # Add built-in functions
@@ -1296,8 +1244,6 @@ class TypeInferrer:
                     continue
 
         # Third pass: group function definitions and infer them together
-        from collections import defaultdict
-
         function_groups: Dict[str, List[FunctionDefinition]] = defaultdict(list)
 
         # Group function definitions by name
@@ -1329,6 +1275,5 @@ class TypeInferrer:
 
 
 def type_check_ast(ast: Program) -> TypeEnvironment:
-    """Type check an AST and return the type environment."""
     inferrer = TypeInferrer()
     return inferrer.infer_program(ast)

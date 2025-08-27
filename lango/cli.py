@@ -7,7 +7,6 @@ from lango.minio.ast.printer import (
     print_annotated_ast,
     print_ast_colored,
     print_ast_compact,
-    print_ast_summary,
     print_ast_types_only,
 )
 from lango.minio.compiler.go import compile_program as go_compile_program

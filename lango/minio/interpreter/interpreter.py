@@ -1,7 +1,3 @@
-"""
-Rewritten interpreter that uses custom AST nodes instead of raw Lark objects.
-"""
-
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
@@ -16,7 +12,6 @@ from lango.minio.ast.nodes import (
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
-    DataConstructor,
     DataDeclaration,
     DivOperation,
     DoBlock,
@@ -75,7 +70,6 @@ def interpret(
     ast: Program,
     collectStdOut: bool = False,
 ) -> RunReturn:
-    # TODO: return code
     if not type_check(ast):
         print("Type checking failed, cannot interpret.")
         return RunReturn("", 1)
@@ -104,7 +98,6 @@ def interpret(
 
 
 def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment]:
-    """Build environment from AST collecting function definitions and data type constructors."""
     env: Environment = {}
     constructors: ConstructorEnvironment = {}
 
@@ -168,12 +161,10 @@ def flexible_putStr(
 
 
 def _error(message: str) -> Any:
-    """Runtime error function that throws an exception."""
     raise RuntimeError(f"Runtime error: {message}")
 
 
 def _show(value: Value) -> str:
-    """Convert a value to its string representation."""
     match value:
         case str():
             return f'"{value}"'
@@ -214,17 +205,12 @@ builtins: Dict[str, Callable[..., Any]] = {
 
 
 class Interpreter:
-    """Interpreter class for evaluating AST expressions."""
-
     def __init__(self, env: Environment, constructors: ConstructorEnvironment) -> None:
-        """Initialize interpreter with environment of functions and constructors."""
         self.env = env
         self.constructors = constructors
         self.variables: Dict[str, Value] = {}
 
     def eval(self, node: Expression) -> Value:
-        """Evaluate an AST expression node and return its value."""
-
         match node:
             # Literals
             case IntLiteral(value=value):
@@ -412,7 +398,6 @@ class Interpreter:
                 )
 
     def eval_do_block(self, statements: List[Statement]) -> Value:
-        """Evaluate a do block with statements."""
         result: Value = None
         for stmt in statements:
             match stmt:
@@ -459,7 +444,6 @@ class Interpreter:
         return result
 
     def eval_func(self, func_name: str) -> Value:
-        """Evaluate a function by name."""
         if func_name not in self.env:
             raise RuntimeError(f"Unknown function: {func_name}")
 
@@ -468,8 +452,7 @@ class Interpreter:
         if func_type != "pattern_match":
             raise RuntimeError(f"Unsupported function type: {func_type}")
 
-        # For now, handle only nullary functions (no arguments)
-        # This is a simplified implementation
+        # Handle only nullary functions (no arguments)
         for patterns, body in clauses:
             if len(patterns) == 0:
                 # Nullary function - just evaluate the body
@@ -486,7 +469,6 @@ class Interpreter:
         clauses: List[FunctionClause],
         args: List[Value],
     ) -> Value:
-        """Apply function with pattern matching."""
         for patterns, body in clauses:
             if len(patterns) == len(args):
                 # Try to match this clause
@@ -513,7 +495,6 @@ class Interpreter:
         )
 
     def _match_patterns(self, patterns: List[Pattern], args: List[Value]) -> bool:
-        """Check if patterns match arguments and bind variables."""
         if len(patterns) != len(args):
             return False
 
@@ -544,22 +525,6 @@ class Interpreter:
                 # Literal pattern must match exactly
                 return pattern_value == value
 
-            case ListLiteral(elements=elements):
-                # Match list literal pattern against list value
-                match value:
-                    case list():
-                        pass  # Valid list
-                    case _:
-                        return False
-                if len(elements) != len(value):
-                    return False
-                # For list literals as patterns, evaluate elements and compare values
-                for pattern_elem, value_elem in zip(elements, value):
-                    pattern_val = self.eval(pattern_elem)
-                    if pattern_val != value_elem:
-                        return False
-                return True
-
             case ConstructorPattern(constructor=constructor, patterns=patterns):
                 # Match constructor pattern
                 match value:
@@ -588,12 +553,10 @@ class Interpreter:
 
                     if has_named_fields:
                         # Record constructor pattern matching
-                        # For record patterns like (Person id_ name), we need to match against
-                        # record fields in the order they were declared
+                        # For record patterns like (Person id_ name), we need to match against record fields in the order they were declared
                         # This requires looking up the field names from the data type definition
 
-                        # For now, assume the pattern variables match the field names in declaration order
-                        # This is a simplification - a full implementation would need the actual field order
+                        # Assume the pattern variables match the field names in declaration order
                         field_names = [
                             key for key in value.keys() if key != "_constructor"
                         ]

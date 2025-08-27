@@ -1,16 +1,6 @@
-"""
-AST printer for displaying type-annotated AST nodes.
-"""
+from typing import Optional
 
-from typing import TYPE_CHECKING, Optional
-
-try:
-    from rich.console import Console
-    from rich.text import Text
-
-    RICH_AVAILABLE = True
-except ImportError:
-    RICH_AVAILABLE = False
+from rich.console import Console
 
 from lango.minio.ast.nodes import (
     AddOperation,
@@ -66,9 +56,7 @@ from lango.minio.ast.nodes import (
     Variable,
     VariablePattern,
 )
-
-if TYPE_CHECKING:
-    from lango.minio.typechecker.minio_types import Type
+from lango.minio.typechecker.minio_types import Type
 
 
 def format_type(

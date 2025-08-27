@@ -5,7 +5,6 @@ from typing import Any, List, Optional, Union
 from lango.minio.typechecker.minio_types import Type
 
 
-# Base AST Node
 @dataclass
 class ASTNode(ABC):
     pass
@@ -313,8 +312,6 @@ class NegativeFloatPattern(ASTNode):
 # Top-level Declarations
 @dataclass
 class TypeParameter(ASTNode):
-    """Type parameter in data declaration."""
-
     name: str
     ty: Optional[Type] = None
 

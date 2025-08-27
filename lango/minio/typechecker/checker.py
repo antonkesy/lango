@@ -1,8 +1,3 @@
-"""
-Simplified AST-based type checker that provides basic type checking for custom AST nodes.
-This is a minimal implementation to demonstrate the concept.
-"""
-
 from typing import Dict
 
 from lango.minio.ast.nodes import (
@@ -45,14 +40,11 @@ from lango.minio.ast.nodes import (
 
 
 class TypeChecker:
-    """Simplified type checker for AST nodes."""
-
     def __init__(self) -> None:
         self.var_types: Dict[str, str] = {}  # Simple string types for now
         self.function_types: Dict[str, str] = {}
 
     def check_program(self, ast: Program) -> bool:
-        """Type check an entire program."""
         try:
             for stmt in ast.statements:
                 self.check_statement(stmt)
@@ -62,7 +54,6 @@ class TypeChecker:
             return False
 
     def check_statement(self, stmt: Statement) -> None:
-        """Check a single statement."""
         match stmt:
             case FunctionDefinition():
                 # Set up parameter types (assume they're polymorphic for now)
@@ -80,7 +71,7 @@ class TypeChecker:
                 try:
                     body_type = self.infer_expression(stmt.body)
                     self.function_types[stmt.function_name] = body_type
-                except Exception as e:
+                except Exception:
                     # If inference fails, try with numeric assumptions
                     for pattern in stmt.patterns:
                         match pattern:
@@ -91,7 +82,7 @@ class TypeChecker:
                     try:
                         body_type = self.infer_expression(stmt.body)
                         self.function_types[stmt.function_name] = body_type
-                    except:
+                    except Exception:
                         # Still failed, just register as unknown
                         self.function_types[stmt.function_name] = "Unknown"
 
@@ -106,8 +97,6 @@ class TypeChecker:
                     )
 
     def infer_expression(self, expr: Expression) -> str:
-        """Infer the type of an expression (simplified string-based types)."""
-
         # Literals
         match expr:
             case IntLiteral() | NegativeInt():
@@ -304,7 +293,6 @@ class TypeChecker:
 
 
 def type_check_ast(ast: Program) -> Dict[str, str]:
-    """Simple type check that returns a dictionary of inferred types."""
     checker = TypeChecker()
     if checker.check_program(ast):
         result = {}

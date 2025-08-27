@@ -1,10 +1,3 @@
-"""
-AST Transformer for converting Lark parse trees to custom AST nodes.
-
-This module provides a transformer that converts raw Lark Tree and Token
-objects into structured AST node classes defined in ast_nodes.py.
-"""
-
 from typing import Any, List, Union
 
 from lark import Token, Transformer, Tree
@@ -44,9 +37,7 @@ from lango.minio.ast.nodes import (
     LiteralPattern,
     MulOperation,
     NegativeFloat,
-    NegativeFloatPattern,
     NegativeInt,
-    NegativeIntPattern,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -68,8 +59,6 @@ from lango.minio.ast.nodes import (
 
 
 class ASTTransformer(Transformer):
-    """Transformer that converts Lark parse trees to custom AST nodes."""
-
     def __init__(self) -> None:
         super().__init__()
         # Add methods for keywords that can't be used as method names
@@ -78,20 +67,16 @@ class ASTTransformer(Transformer):
         setattr(self, "not", self._not)
 
     def _and(self, items: List[Any]) -> AndOperation:
-        """Transform logical AND operation."""
         return AndOperation(items[0], items[2])
 
     def _or(self, items: List[Any]) -> OrOperation:
-        """Transform logical OR operation."""
         return OrOperation(items[0], items[2])
 
     def _not(self, items: List[Any]) -> NotOperation:
-        """Transform logical NOT operation."""
         return NotOperation(items[1])
 
     # Literals
     def int(self, items: List[Any]) -> IntLiteral:
-        """Transform integer literal."""
         value = items[0]
         match value:
             case Token():
@@ -100,7 +85,6 @@ class ASTTransformer(Transformer):
                 return IntLiteral(int(value))
 
     def float(self, items: List[Any]) -> FloatLiteral:
-        """Transform float literal."""
         value = items[0]
         match value:
             case Token():
@@ -109,7 +93,6 @@ class ASTTransformer(Transformer):
                 return FloatLiteral(float(value))
 
     def neg_int(self, items: List[Any]) -> NegativeInt:
-        """Transform negative integer literal."""
         value = items[1]
         match value:
             case Token():
@@ -118,7 +101,6 @@ class ASTTransformer(Transformer):
                 return NegativeInt(-int(value))
 
     def neg_float(self, items: List[Any]) -> NegativeFloat:
-        """Transform negative float literal."""
         value = items[1]
         match value:
             case Token():
@@ -127,7 +109,6 @@ class ASTTransformer(Transformer):
                 return NegativeFloat(-float(value))
 
     def string(self, items: List[Any]) -> StringLiteral:
-        """Transform string literal."""
         value = items[0]
         match value:
             case Token():
@@ -141,15 +122,12 @@ class ASTTransformer(Transformer):
                 return StringLiteral(text)
 
     def true(self, items: List[Any]) -> BoolLiteral:
-        """Transform True literal."""
         return BoolLiteral(True)
 
     def false(self, items: List[Any]) -> BoolLiteral:
-        """Transform False literal."""
         return BoolLiteral(False)
 
     def list(self, items: List[Any]) -> ListLiteral:
-        """Transform list literal."""
         # Filter out None items from empty list grammar
         elements = [item for item in items if item is not None]
         return ListLiteral(elements)
@@ -170,16 +148,13 @@ class ASTTransformer(Transformer):
 
         match items:
             case [Token(value=value)]:
-                # This is a constructor reference
                 return Constructor(value)
             case [token, *rest]:
-                # This is a data constructor definition
                 match token:
                     case Token(value=name):
                         pass
                     case value:
                         name = str(value)
-
                 match rest:
                     case [RecordConstructor() as record_constructor]:
                         # Record constructor
@@ -196,74 +171,57 @@ class ASTTransformer(Transformer):
 
     # Arithmetic Operations
     def add(self, items: List[Any]) -> AddOperation:
-        """Transform addition operation."""
         return AddOperation(items[0], items[2])
 
     def sub(self, items: List[Any]) -> SubOperation:
-        """Transform subtraction operation."""
         return SubOperation(items[0], items[2])
 
     def mul(self, items: List[Any]) -> MulOperation:
-        """Transform multiplication operation."""
         return MulOperation(items[0], items[2])
 
     def div(self, items: List[Any]) -> DivOperation:
-        """Transform division operation."""
         return DivOperation(items[0], items[2])
 
     def pow_int(self, items: List[Any]) -> PowIntOperation:
-        """Transform integer power operation."""
         return PowIntOperation(items[0], items[2])
 
     def pow_float(self, items: List[Any]) -> PowFloatOperation:
-        """Transform float power operation."""
         return PowFloatOperation(items[0], items[2])
 
     # Comparison Operations
     def eq(self, items: List[Any]) -> EqualOperation:
-        """Transform equality comparison."""
         return EqualOperation(items[0], items[2])
 
     def neq(self, items: List[Any]) -> NotEqualOperation:
-        """Transform not equal comparison."""
         return NotEqualOperation(items[0], items[2])
 
     def lt(self, items: List[Any]) -> LessThanOperation:
-        """Transform less than comparison."""
         return LessThanOperation(items[0], items[2])
 
     def lteq(self, items: List[Any]) -> LessEqualOperation:
-        """Transform less than or equal comparison."""
         return LessEqualOperation(items[0], items[2])
 
     def gt(self, items: List[Any]) -> GreaterThanOperation:
-        """Transform greater than comparison."""
         return GreaterThanOperation(items[0], items[2])
 
     def gteq(self, items: List[Any]) -> GreaterEqualOperation:
-        """Transform greater than or equal comparison."""
         return GreaterEqualOperation(items[0], items[2])
 
     # String/List Operations
     def concat(self, items: List[Any]) -> ConcatOperation:
-        """Transform concatenation operation."""
         return ConcatOperation(items[0], items[1])
 
     def index(self, items: List[Any]) -> IndexOperation:
-        """Transform list indexing operation."""
         return IndexOperation(items[0], items[1])
 
     # Control Flow
     def if_else(self, items: List[Any]) -> IfElse:
-        """Transform if-then-else expression."""
         return IfElse(items[0], items[1], items[2])
 
     def do_block(self, items: List[Any]) -> DoBlock:
-        """Transform do block."""
         return DoBlock(items[0])
 
     def stmt_list(self, items: List[Any]) -> List[Statement]:
-        """Transform statement list, flattening any list of statements."""
         flattened = []
         for item in items:
             match item:
@@ -278,7 +236,6 @@ class ASTTransformer(Transformer):
         self,
         items: List[Any],
     ) -> Union[LetStatement, Expression, List[LetStatement]]:
-        """Transform do statement (either let or expression)."""
         if len(items) >= 2 and len(items) % 2 == 0:
             # Let block with multiple assignments
             # Create a LetStatement for each variable=expr pair
@@ -298,7 +255,6 @@ class ASTTransformer(Transformer):
             return items[0]
 
     def let(self, items: List[Any]) -> LetStatement:
-        """Transform let statement."""
         match items[0]:
             case Token(value=var_name):
                 pass
@@ -308,12 +264,10 @@ class ASTTransformer(Transformer):
 
     # Function Application
     def app(self, items: List[Any]) -> FunctionApplication:
-        """Transform function application."""
         return FunctionApplication(items[0], items[1])
 
     # Constructor Expressions
     def field_assign(self, items: List[Any]) -> FieldAssignment:
-        """Transform field assignment."""
         match items[0]:
             case Token(value=field_name):
                 pass
@@ -322,7 +276,6 @@ class ASTTransformer(Transformer):
         return FieldAssignment(field_name, items[1])
 
     def constructor_expr(self, items: List[Any]) -> ConstructorExpression:
-        """Transform constructor expression."""
         match items[0]:
             case Token(value=constructor_name):
                 pass
@@ -333,12 +286,10 @@ class ASTTransformer(Transformer):
 
     # Grouping
     def grouped(self, items: List[Any]) -> GroupedExpression:
-        """Transform grouped expression."""
         return GroupedExpression(items[0])
 
     # Type System
     def type_constructor(self, items: List[Any]) -> TypeConstructor:
-        """Transform type constructor."""
         match items[0]:
             case Token(value=name):
                 pass
@@ -347,7 +298,6 @@ class ASTTransformer(Transformer):
         return TypeConstructor(name)
 
     def type_var(self, items: List[Any]) -> TypeVariable:
-        """Transform type variable."""
         match items[0]:
             case Token(value=name):
                 pass
@@ -356,20 +306,16 @@ class ASTTransformer(Transformer):
         return TypeVariable(name)
 
     def arrow_type(self, items: List[Any]) -> ArrowType:
-        """Transform arrow type."""
         return ArrowType(items[0], items[1])
 
     def type_application(self, items: List[Any]) -> TypeApplication:
-        """Transform type application."""
         return TypeApplication(items[0], items[1])
 
     def grouped_type(self, items: List[Any]) -> GroupedType:
-        """Transform grouped type."""
         return GroupedType(items[0])
 
     # Patterns
     def constructor_pattern(self, items: List[Any]) -> ConstructorPattern:
-        """Transform constructor pattern."""
         match items[0]:
             case Token(value=constructor_name):
                 pass
@@ -400,7 +346,6 @@ class ASTTransformer(Transformer):
         return ConstructorPattern(constructor_name, converted_patterns)
 
     def constructor_pattern_bare(self, items: List[Any]) -> ConstructorPattern:
-        """Transform bare constructor pattern (nullary constructor used as pattern)."""
         match items[0]:
             case Token(value=constructor_name):
                 pass
@@ -410,7 +355,6 @@ class ASTTransformer(Transformer):
         return ConstructorPattern(constructor_name, [])
 
     def cons_pattern(self, items: List[Any]) -> ConsPattern:
-        """Transform cons pattern."""
         # items = [head_pattern, COLON_token, tail_pattern]
         head = items[0]
         tail = items[2]  # Skip the COLON token at items[1]
@@ -446,12 +390,8 @@ class ASTTransformer(Transformer):
 
         return ConsPattern(head, tail)
 
-    # Patterns for literals (used in function definitions) - simplified approach
-    # Remove __default_token__ to avoid conflicts
-
     # Top-level Declarations
     def type_param(self, items: List[Any]) -> TypeParameter:
-        """Transform type parameter."""
         match items[0]:
             case Token(value=name):
                 pass
@@ -460,7 +400,6 @@ class ASTTransformer(Transformer):
         return TypeParameter(name)
 
     def field(self, items: List[Any]) -> Field:
-        """Transform field in record constructor."""
         match items[0]:
             case Token(value=field_name):
                 pass
@@ -469,12 +408,10 @@ class ASTTransformer(Transformer):
         return Field(field_name, items[1])
 
     def record_constructor(self, items: List[Any]) -> RecordConstructor:
-        """Transform record constructor."""
         fields = [item for item in items if item is not None]
         return RecordConstructor(fields)
 
     def data_decl(self, items: List[Any]) -> DataDeclaration:
-        """Transform data declaration."""
         match items[0]:
             case Token(value=type_name):
                 pass
@@ -500,7 +437,6 @@ class ASTTransformer(Transformer):
         return DataDeclaration(type_name, type_params, constructors)
 
     def func_def(self, items: List[Any]) -> FunctionDefinition:
-        """Transform function definition."""
         match items[0]:
             case Token(value=func_name):
                 pass
@@ -534,7 +470,6 @@ class ASTTransformer(Transformer):
 
     # Root
     def start(self, items: List[Any]) -> Program:
-        """Transform the root program."""
         statements = []
         for item in items:
             match item:
@@ -549,8 +484,5 @@ class ASTTransformer(Transformer):
 
 
 def transform_parse_tree(tree: Tree) -> Program:
-    """
-    Transform a Lark parse tree into a custom AST.
-    """
     transformer = ASTTransformer()
     return transformer.transform(tree)
