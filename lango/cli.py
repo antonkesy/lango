@@ -11,7 +11,6 @@ from lango.minio.ast.printer import (
 )
 from lango.minio.compiler.go import compile_program as go_compile_program
 from lango.minio.compiler.python import compile_program as python_compile_program
-from lango.minio.compiler.systemf import compile_program as systemf_compile_program
 from lango.minio.interpreter.interpreter import interpret
 from lango.minio.parser.parser import parse
 from lango.minio.typechecker.typecheck import get_type_str, type_check
@@ -128,7 +127,7 @@ def compile(
         "python",
         "--target",
         "-t",
-        help="Target language (python|systemf|go)",
+        help="Target language (python|go)",
     ),
 ) -> int:
     try:
@@ -137,8 +136,6 @@ def compile(
         match target:
             case "python":
                 compile_program = python_compile_program
-            case "systemf":
-                compile_program = systemf_compile_program
             case "go":
                 compile_program = go_compile_program
             case _:

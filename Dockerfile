@@ -30,24 +30,6 @@ RUN add-apt-repository ppa:longsleep/golang-backports -y
 RUN apt update
 RUN apt install -y golang-go
 
-# OCaml
-RUN apt-get update && apt-get install -y ocaml opam && \
-  rm -rf /var/lib/apt/lists/*
-
-RUN apt-get install opam
-RUN opam init --auto-setup -n --disable-sandboxing && \
-  opam switch create 5.3.0 && \
-  opam install ocaml-lsp-server odoc ocamlformat utop dune -y
-
-# SystemF
-RUN git clone https://github.com/antonkesy/fullpoly
-RUN cd fullpoly && \
-  eval $(opam env) && \
-  dune build . && \
-  dune install && \
-  cp _build/install/default/bin/fullpoly /usr/local/bin/fullpoly
-
-
 # venv
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
 RUN python3 -m venv $VENV_PATH

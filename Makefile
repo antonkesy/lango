@@ -33,11 +33,6 @@ compile-python: install
 	lango compile examples/minio/example.minio -o build/example.py && \
 	python3.13 build/example.py
 
-compile-systemf: install
-	. .venv/bin/activate && \
-	lango compile examples/minio/example.minio -o build/example.sf --target systemf && \
-	fullpoly build/example.sf
-
 compile-go: install
 	. .venv/bin/activate && \
 	lango compile examples/minio/example.minio -o build/example.go --target go && \
