@@ -79,6 +79,9 @@ docker-build:
 	docker build --target lango -t lango .
 	docker build --target test -t lango-test .
 
+docker-clean:
+	docker rmi lango lango-test || true
+
 docker-run:
 	docker run -it --rm lango run --input_file examples/minio/example.minio
 
