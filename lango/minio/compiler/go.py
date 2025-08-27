@@ -113,7 +113,7 @@ class MinioGoCompiler:
             case DataType(name=name):
                 return f"{var_name}.({name}Interface)"
             case TypeVar():
-                # Type variables remain as interface{}
+                # Type variables remain as any
                 return var_name
             case _:
                 return var_name
@@ -324,7 +324,7 @@ class MinioGoCompiler:
                                         continue
 
                             # Not a partial application, treat as normal variable assignment
-                            go_type = "interface{}"
+                            go_type = "any"
                             lines.append(
                                 f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
                             )
@@ -415,7 +415,7 @@ class MinioGoCompiler:
                 # Named fields like Person { id_ :: Int, name :: String }
                 lines.append(f"type {class_name} struct {{")
                 for field in constructor.record_constructor.fields:
-                    field_type = "interface{}"  # Default type
+                    field_type = "any"  # Default type
                     if field.field_type and hasattr(field.field_type, "ty"):
                         field_type = self._minio_type_to_go_type(field.field_type.ty)
                     lines.append(f"\t{field.name.capitalize()} {field_type}")
@@ -425,7 +425,7 @@ class MinioGoCompiler:
                 if constructor.type_atoms:
                     lines.append(f"type {class_name} struct {{")
                     for i, type_atom in enumerate(constructor.type_atoms):
-                        field_type = "interface{}"
+                        field_type = "any"
                         if hasattr(type_atom, "ty"):
                             field_type = self._minio_type_to_go_type(type_atom.ty)
                         lines.append(f"\tArg{i} {field_type}")
@@ -1105,7 +1105,7 @@ class MinioGoCompiler:
                         # Check various cases where we should use minioCall instead of direct call
                         should_use_minio_call = False
 
-                        # Case 1: Function is a local variable (could be interface{})
+                        # Case 1: Function is a local variable (could be any)
                         if (
                             isinstance(function, Variable)
                             and function.name in self.local_variables
