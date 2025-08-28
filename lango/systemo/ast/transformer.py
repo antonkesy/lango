@@ -124,12 +124,12 @@ class ASTTransformer(Transformer):
     def symbolic_operator(self, items: List[Any]) -> str:
         """Transform symbolic operator token."""
         if not items:
-            return ""  # Handle empty symbolic_operator rules
+            raise Exception("Empty symbolic_operator rule")
         match items[0]:
             case Token(value=value):
-                return f"({value})"  # Wrap in parentheses for symbolic operators
+                return value  # Don't wrap in parentheses for operator symbols
             case value:
-                return f"({str(value)})"
+                return str(value)
 
     def cons_op(self, items: List[Any]) -> FunctionApplication:
         """Transform binary : operator into function application."""
@@ -169,18 +169,36 @@ class ASTTransformer(Transformer):
                 # Default case - empty list should never happen in valid input
                 raise ValueError(f"Invalid constructor items: {items}")
 
-    # Generic Operator Transformations  
-    def __default__(self, data: str, children: List[Any], meta=None) -> Any:
-        """Handle generic operator transformations."""
-        # Check if this is an operator rule
-        if data.startswith(("infix_op_", "prefix_op_", "postfix_op_")):
-            # Instead of trying to reverse-engineer the operator, let's just use 
-            # the rule name directly as a unique identifier for the operation
-            # The actual operator symbol doesn't matter for the AST representation
-            return SymbolicOperation(data, children)
+    # Generic Operator Transformations
+    def infix_op(self, items: List[Any]) -> SymbolicOperation:
+        """Transform infix operator expressions."""
+        # items = [left_operand, symbolic_operator_string, right_operand]
+        left = items[0]
+        operator = items[1] if len(items) > 1 else "UNKNOWN_OP"
+        right = items[2] if len(items) > 2 else None
+        return SymbolicOperation(
+            operator, [left, right] if right is not None else [left]
+        )
 
-        # If not a recognized operator, fall back to default behavior
-        return super().__default__(data, children, meta)    # Control Flow
+    def prefix_op(self, items: List[Any]) -> SymbolicOperation:
+        """Transform prefix operator expressions."""
+        # items = [symbolic_operator_string, operand]
+        operator = items[0] if len(items) > 0 else "UNKNOWN_OP"
+        operand = items[1] if len(items) > 1 else None
+        return SymbolicOperation(operator, [operand] if operand is not None else [])
+
+    def postfix_op(self, items: List[Any]) -> SymbolicOperation:
+        """Transform postfix operator expressions."""
+        # items = [operand, symbolic_operator_string]
+        operand = items[0] if len(items) > 0 else None
+        operator = items[1] if len(items) > 1 else "UNKNOWN_OP"
+        return SymbolicOperation(operator, [operand] if operand is not None else [])
+
+    def __default__(self, data: str, children: List[Any], meta=None) -> Any:
+        """Handle any remaining transformations."""
+        # If not a recognized rule, fall back to default behavior
+        return super().__default__(data, children, meta)  # Control Flow
+
     def if_else(self, items: List[Any]) -> IfElse:
         return IfElse(items[0], items[1], items[2])
 

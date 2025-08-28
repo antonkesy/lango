@@ -26,25 +26,27 @@ inst_decl: "inst" operator_name "::" type_expr "{" func_def "}" ";"
 operator_name: ID
              | "(" symbolic_operator ")"
 
-symbolic_operator: "?"
-                  | "+"
-                  | "++"
-                  | "-"
-                  | "*"
-                  | "**"
-                  | "/"
-                  | "^"
-                  | "^^"
-                  | "=="
-                  | "/="
-                  | "<"
-                  | "<="
-                  | ">"
-                  | ">="
-                  | "&&"
-                  | "||"
-                  | ":"
-                  | "@"
+symbolic_operator: SYMBOLIC_OP
+
+SYMBOLIC_OP: "?"
+           | "+"
+           | "++"
+           | "-"
+           | "*"
+           | "**"
+           | "/"
+           | "^"
+           | "^^"
+           | "=="
+           | "/="
+           | "<"
+           | "<="
+           | ">"
+           | ">="
+           | "&&"
+           | "||"
+           | ":"
+           | "@"
 
 func_def: operator_name pattern* "=" expr ";"
 
@@ -61,7 +63,7 @@ stmt_list: (do_stmt ";")+
 ?infix_expr: infix_expr symbolic_operator prefix_expr -> infix_op
            | prefix_expr
 
-// Prefix expressions - any symbolic operator can be used as prefix
+// Prefix expressions - any symbolic operator can be used as prefix  
 ?prefix_expr: symbolic_operator postfix_expr -> prefix_op
             | postfix_expr
 

@@ -11,7 +11,7 @@ from lango.systemo.ast.transformer import transform_parse_tree
 def _parse_lark(path: Path) -> ParseTree:
     parser = Lark.open(
         "./lango/systemo/parser/systemo.lark",
-        parser="lalr",
+        parser="earley",
     )
 
     prelude_dir = "./lango/systemo/prelude"
