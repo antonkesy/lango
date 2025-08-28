@@ -38,5 +38,4 @@ def type_check(ast: Program) -> bool:
         type_check_ast_impl(ast)
         return True
     except Exception as e:
-        print(f"Type checking failed: {e}")
-        return False
+        raise e

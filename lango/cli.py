@@ -58,17 +58,19 @@ def typecheck(
 ) -> int:
     match lang:
         case "systemo":
-            if systemo_type_check(systemo_parse(input_file)):
+            try:
+                systemo_type_check(systemo_parse(input_file))
                 console.print("Type checking succeeded", style="bold green")
                 return 0
-            else:
+            except Exception:
                 console.print("Type checking failed", style="bold red")
                 return 1
         case "minio":
-            if systemo_type_check(systemo_parse(input_file)):
+            try:
+                systemo_type_check(systemo_parse(input_file))
                 console.print("Type checking succeeded", style="bold green")
                 return 0
-            else:
+            except Exception:
                 console.print("Type checking failed", style="bold red")
                 return 1
         case _:
