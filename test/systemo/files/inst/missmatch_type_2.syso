@@ -1,10 +1,9 @@
--- RUN: OK
--- TYPECHECK: OK
--- "1.0"
-
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
 data Point = MkPoint Float Float;
 
-inst xcoord :: Point -> Float;
+inst xcoord :: Point -> Int;
   xcoord (MkPoint x y) = x;
 
 test_simple p = xcoord p;

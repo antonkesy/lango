@@ -1,3 +1,7 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "1.03.0"
+
 data Point = MkPoint Float Float;
 data CPoint = MkCPoint Float Float String;
 
