@@ -1,14 +1,14 @@
 from abc import ABC
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
 from enum import Enum
+from typing import Any, List, Optional, Union
 
 from lango.systemo.typechecker.systemo_types import Type
 
 
 class Associativity(Enum):
     LEFT = "left"
-    RIGHT = "right" 
+    RIGHT = "right"
     NONE = "none"
 
 
@@ -34,12 +34,23 @@ class StringLiteral(ASTNode):
 
 
 @dataclass
+class CharLiteral(ASTNode):
+    value: str
+
+
+@dataclass
 class BoolLiteral(ASTNode):
     value: bool
 
 
 @dataclass
 class ListLiteral(ASTNode):
+    elements: List["Expression"]
+    ty: Optional[Type] = None
+
+
+@dataclass
+class TupleLiteral(ASTNode):
     elements: List["Expression"]
     ty: Optional[Type] = None
 
@@ -171,6 +182,12 @@ class ListType(ASTNode):
     ty: Optional[Type] = None
 
 
+@dataclass
+class TupleType(ASTNode):
+    element_types: List["TypeExpression"]
+    ty: Optional[Type] = None
+
+
 # Patterns
 @dataclass
 class ConstructorPattern(ASTNode):
@@ -183,6 +200,12 @@ class ConstructorPattern(ASTNode):
 class ConsPattern(ASTNode):
     head: "Pattern"
     tail: "Pattern"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class TuplePattern(ASTNode):
+    patterns: List["Pattern"]
     ty: Optional[Type] = None
 
 
@@ -281,8 +304,10 @@ type Expression = Union[
     IntLiteral,
     FloatLiteral,
     StringLiteral,
+    CharLiteral,
     BoolLiteral,
     ListLiteral,
+    TupleLiteral,
     Variable,
     Constructor,
     SymbolicOperation,
@@ -302,11 +327,13 @@ type TypeExpression = Union[
     TypeApplication,
     GroupedType,
     ListType,
+    TupleType,
 ]
 
 type Pattern = Union[
     ConstructorPattern,
     ConsPattern,
+    TuplePattern,
     VariablePattern,
     LiteralPattern,
     NegativeIntPattern,

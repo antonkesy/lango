@@ -1,6 +1,7 @@
 from lango.systemo.typechecker.systemo_types import (
     DataType,
     FunctionType,
+    TupleType,
     Type,
     TypeApp,
     TypeCon,
@@ -26,6 +27,8 @@ def occurs_check(var: str, typ: Type) -> bool:
             return occurs_check(var, constructor) or occurs_check(var, argument)
         case DataType(type_args=type_args):
             return any(occurs_check(var, arg) for arg in type_args)
+        case TupleType(element_types=element_types):
+            return any(occurs_check(var, elem_type) for elem_type in element_types)
         case _:
             raise UnificationError(f"Unknown type in occurs check: {type(typ)}")
 
@@ -87,6 +90,20 @@ def unify_one(t1: Type, t2: Type) -> TypeSubstitution:
             subst = TypeSubstitution()
             for arg1, arg2 in zip(type_args1, type_args2):
                 s = unify_one(subst.apply(arg1), subst.apply(arg2))
+                subst = s.compose(subst)
+            return subst
+        case (
+            TupleType(element_types=element_types1),
+            TupleType(element_types=element_types2),
+        ):
+            if len(element_types1) != len(element_types2):
+                raise UnificationError(
+                    f"Cannot unify tuples of different lengths: {t1} and {t2}",
+                )
+
+            subst = TypeSubstitution()
+            for elem_type1, elem_type2 in zip(element_types1, element_types2):
+                s = unify_one(subst.apply(elem_type1), subst.apply(elem_type2))
                 subst = s.compose(subst)
             return subst
         case _:

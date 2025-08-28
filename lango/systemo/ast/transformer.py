@@ -6,6 +6,7 @@ from lango.systemo.ast.nodes import (
     ArrowType,
     Associativity,
     BoolLiteral,
+    CharLiteral,
     ConsPattern,
     Constructor,
     ConstructorExpression,
@@ -37,6 +38,9 @@ from lango.systemo.ast.nodes import (
     Statement,
     StringLiteral,
     SymbolicOperation,
+    TupleLiteral,
+    TuplePattern,
+    TupleType,
     TypeApplication,
     TypeConstructor,
     TypeParameter,
@@ -96,6 +100,19 @@ class ASTTransformer(Transformer):
                     return StringLiteral(text[1:-1])
                 return StringLiteral(text)
 
+    def char(self, items: List[Any]) -> CharLiteral:
+        value = items[0]
+        match value:
+            case Token():
+                # Remove single quotes
+                return CharLiteral(value.value[1:-1])
+            case _:
+                # Already processed, remove quotes if still present
+                text = str(value)
+                if text.startswith("'") and text.endswith("'"):
+                    return CharLiteral(text[1:-1])
+                return CharLiteral(text)
+
     def true(self, items: List[Any]) -> BoolLiteral:
         return BoolLiteral(True)
 
@@ -106,6 +123,12 @@ class ASTTransformer(Transformer):
         # Filter out None items from empty list grammar
         elements = [item for item in items if item is not None]
         return ListLiteral(elements)
+
+    def tuple_literal(self, items: List[Any]) -> TupleLiteral:
+        """Transform tuple literal like (a, b, c)"""
+        # Filter out None items
+        elements = [item for item in items if item is not None]
+        return TupleLiteral(elements)
 
     # Variables and Identifiers
     def var(self, items: List[Any]) -> Variable:
@@ -254,23 +277,25 @@ class ASTTransformer(Transformer):
         self,
         items: List[Any],
     ) -> Union[LetStatement, Expression, List[LetStatement]]:
-        if len(items) >= 2 and len(items) % 2 == 0:
-            # Let block with multiple assignments
-            # Create a LetStatement for each variable=expr pair
-            statements = []
-            for i in range(0, len(items), 2):
-                match items[i]:
-                    case Token(value=var_name):
-                        pass
-                    case value:
-                        var_name = str(value)
-                statements.append(LetStatement(var_name, items[i + 1]))
-
-            # Return all let statements
-            return statements
-        else:
+        if len(items) == 1:
             # Just an expression
             return items[0]
+        else:
+            # Let block with assignments (items are LetStatement objects from assignment_list rule)
+            return items
+
+    def assignment_list(self, items: List[Any]) -> List[LetStatement]:
+        """Transform list of assignments (either comma or semicolon separated)"""
+        return items
+
+    def assignment(self, items: List[Any]) -> LetStatement:
+        """Transform assignment in let block"""
+        match items[0]:
+            case Token(value=var_name):
+                pass
+            case value:
+                var_name = str(value)
+        return LetStatement(var_name, items[1])
 
     def let(self, items: List[Any]) -> LetStatement:
         match items[0]:
@@ -334,6 +359,12 @@ class ASTTransformer(Transformer):
 
     def list_type(self, items: List[Any]) -> ListType:
         return ListType(items[0])
+
+    def tuple_type(self, items: List[Any]) -> TupleType:
+        """Transform tuple type like (a, b, c)"""
+        # Filter out None items
+        elements = [item for item in items if item is not None]
+        return TupleType(elements)
 
     # Patterns
     def constructor_pattern(self, items: List[Any]) -> ConstructorPattern:
@@ -427,6 +458,30 @@ class ASTTransformer(Transformer):
                 tail = LiteralPattern(value)
 
         return ConsPattern(head, tail)
+
+    def tuple_pattern(self, items: List[Any]) -> TuplePattern:
+        """Transform tuple pattern like (a, b, c)"""
+        # Convert tokens and expressions to patterns
+        converted_patterns: List[Pattern] = []
+        for pattern in items:
+            match pattern:
+                case Token(type=token_type, value=token_value):
+                    if token_type == "ID":
+                        converted_patterns.append(VariablePattern(token_value))
+                    else:
+                        converted_patterns.append(LiteralPattern(token_value))
+                case (
+                    IntLiteral(value=value)
+                    | FloatLiteral(value=value)
+                    | StringLiteral(value=value)
+                    | CharLiteral(value=value)
+                    | BoolLiteral(value=value)
+                ):
+                    converted_patterns.append(LiteralPattern(value))
+                case _:
+                    converted_patterns.append(pattern)
+
+        return TuplePattern(converted_patterns)
 
     # Top-level Declarations
     def type_param(self, items: List[Any]) -> TypeParameter:

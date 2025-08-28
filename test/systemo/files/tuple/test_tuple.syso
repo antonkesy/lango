@@ -1,0 +1,7 @@
+inst first :: (a,b) -> a;
+  first (x,y) = x;
+
+main = do {
+  let { pair = (42, "hello") };
+  putStr (show (first pair));
+};

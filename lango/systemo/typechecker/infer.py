@@ -6,6 +6,7 @@ from lango.systemo.ast.nodes import (
     Associativity,
     ASTNode,
     BoolLiteral,
+    CharLiteral,
     ConsPattern,
     Constructor,
     ConstructorExpression,
@@ -33,6 +34,11 @@ from lango.systemo.ast.nodes import (
     Statement,
     StringLiteral,
     SymbolicOperation,
+    TupleLiteral,
+    TuplePattern,
+)
+from lango.systemo.ast.nodes import TupleType as ASTTupleType
+from lango.systemo.ast.nodes import (
     TypeApplication,
     TypeConstructor,
     TypeExpression,
@@ -49,6 +55,7 @@ from lango.systemo.typechecker.systemo_types import (
     DataType,
     FreshVarGenerator,
     FunctionType,
+    TupleType,
     Type,
     TypeApp,
     TypeCon,
@@ -238,6 +245,11 @@ class TypeInferrer:
             case ListType(element_type=element_type):
                 element_type_parsed = self.parse_type_expr(element_type)
                 return TypeApp(TypeCon("List"), element_type_parsed)
+            case ASTTupleType(element_types=element_types):
+                element_types_parsed = [
+                    self.parse_type_expr(elem_type) for elem_type in element_types
+                ]
+                return TupleType(element_types_parsed)
             case GroupedType(type_expr=type_expr):
                 return self.parse_type_expr(type_expr)
             case _:
@@ -558,6 +570,9 @@ class TypeInferrer:
             case StringLiteral():
                 return STRING_TYPE, TypeSubstitution()
 
+            case CharLiteral():
+                return STRING_TYPE, TypeSubstitution()  # For now, treat char as string
+
             case BoolLiteral():
                 return BOOL_TYPE, TypeSubstitution()
 
@@ -599,6 +614,29 @@ class TypeInferrer:
                 )
                 expr.ty = list_type
                 return list_type, current_subst
+
+            case TupleLiteral(elements=elements):
+                if not elements:
+                    # Empty tuple: unit type
+                    tuple_type = TupleType([])
+                    expr.ty = tuple_type
+                    return tuple_type, TypeSubstitution()
+
+                # Non-empty tuple: infer type of each element
+                element_types = []
+                current_subst = TypeSubstitution()
+
+                for element in elements:
+                    elem_type, elem_subst = self.infer_expr(
+                        element,
+                        env.apply_substitution(current_subst),
+                    )
+                    current_subst = current_subst.compose(elem_subst)
+                    element_types.append(elem_type.apply_substitution(current_subst))
+
+                tuple_type = TupleType(element_types)
+                expr.ty = tuple_type
+                return tuple_type, current_subst
 
             # Variables and constructors
             case Variable(name=var_name):
@@ -1363,6 +1401,37 @@ class TypeInferrer:
                 # Unify pattern type with literal type
                 unify_subst = unify_one(pattern_type, literal_type)
                 return env, unify_subst
+
+            case TuplePattern(patterns=patterns):
+                # Tuple pattern must match a tuple type with same arity
+                if not patterns:
+                    # Empty tuple pattern
+                    empty_tuple_type = TupleType([])
+                    unify_subst = unify_one(pattern_type, empty_tuple_type)
+                    return env, unify_subst
+
+                # Non-empty tuple pattern
+                # Create type variables for each element
+                element_types: List[Type] = [self.fresh_type_var() for _ in patterns]
+                tuple_type = TupleType(element_types)
+
+                # Unify pattern type with tuple type
+                unify_subst = unify_one(pattern_type, tuple_type)
+                current_subst = unify_subst
+                extended_env = env
+
+                # Infer each sub-pattern with its corresponding element type
+                for i, sub_pattern in enumerate(patterns):
+                    elem_type = element_types[i].apply_substitution(current_subst)
+                    sub_env, sub_subst = self.infer_pattern(
+                        sub_pattern,
+                        elem_type,
+                        extended_env.apply_substitution(current_subst),
+                    )
+                    extended_env = sub_env
+                    current_subst = current_subst.compose(sub_subst)
+
+                return extended_env, current_subst
 
             case _:
                 # Other pattern types (literals, etc.)
