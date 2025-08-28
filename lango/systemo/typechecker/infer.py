@@ -1684,6 +1684,17 @@ class TypeInferrer:
             ),
         )
 
+        env = env.extend(
+            "primStringConcat",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    TypeCon("String"),
+                    FunctionType(TypeCon("String"), TypeCon("String")),
+                ),
+            ),
+        )
+
         # First pass: collect data declarations
         for stmt in ast.statements:
             match stmt:
