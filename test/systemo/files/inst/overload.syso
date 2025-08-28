@@ -5,11 +5,13 @@
 data Point = MkPoint Float Float;
 data CPoint = MkCPoint Float Float String;
 
-inst xcoord :: Point -> Float;
+inst xcoord :: Point -> Float {
   xcoord (MkPoint x y) = x;
+};
 
-inst xcoord :: CPoint -> Float;
+inst xcoord :: CPoint -> Float {
   xcoord (MkCPoint x y c) = x;
+};
 
 test_both = do {
   let { point = MkPoint 1.0 2.0 };

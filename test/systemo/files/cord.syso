@@ -1,17 +1,21 @@
 data Point = MkPoint Float Float;
 data CPoint = MkCPoint Float Float Colour;
 
-inst xcoord :: Point -> Float;
+inst xcoord :: Point -> Float {
   xcoord (MkPoint x y) = x;
+};
 
-inst ycoord :: Point -> Float;
+inst ycoord :: Point -> Float {
   ycoord (MkPoint x y) = y;
+};
 
-inst xcoord :: CPoint -> Float;
+inst xcoord :: CPoint -> Float {
   xcoord (MkCPoint x y c) = x;
+};
 
-inst ycoord :: CPoint -> Float;
+inst ycoord :: CPoint -> Float {
   ycoord (MkCPoint x y c) = y;
+};
 
 demo p = (xcoord p) + (ycoord p);
 

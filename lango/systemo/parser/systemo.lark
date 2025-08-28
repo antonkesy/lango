@@ -19,7 +19,7 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Instance Declarations ---
-inst_decl: "inst" operator_name "::" type_expr ";" func_def
+inst_decl: "inst" operator_name "::" type_expr "{" func_def "}" ";"
 
 // --- Function Signatures and Definitions ---
 

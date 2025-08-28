@@ -2,8 +2,9 @@
 -- TYPECHECK: OK
 -- "-1"
 
-inst (@) :: Int -> Int;
+inst (@) :: Int -> Int {
   x (@) = -x;
+};
 
 main = do {
   putStr (show (3 @));

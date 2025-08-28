@@ -3,8 +3,9 @@
 -- ""
 data Point = MkPoint Float Int;
 
-inst xcoord :: Point -> Float;
+inst xcoord :: Point -> Float {
   xcoord (MkPoint x y) = x;
+};
 
 test_simple p = xcoord p;
 
