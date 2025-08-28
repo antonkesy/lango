@@ -97,8 +97,8 @@ docker-build:
 docker-clean:
 	docker rmi lango lango-test || true
 
-docker-run:
-	docker run -it --rm lango run --input_file examples/minio/example.minio
+docker-run-minio:
+	docker run -it --rm lango run minio examples/minio/example.minio
 
 docker-test:
 	docker run -it --rm lango-test
