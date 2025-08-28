@@ -178,7 +178,8 @@ class ASTTransformer(Transformer):
         operator = items[1] if len(items) > 1 else "UNKNOWN_OP"
         right = items[2] if len(items) > 2 else None
         return SymbolicOperation(
-            operator, [left, right] if right is not None else [left]
+            operator,
+            [left, right] if right is not None else [left],
         )
 
     def prefix_op(self, items: List[Any]) -> SymbolicOperation:
@@ -202,6 +203,29 @@ class ASTTransformer(Transformer):
 
     def if_else(self, items: List[Any]) -> IfElse:
         return IfElse(items[0], items[1], items[2])
+
+    def if_else_extended(self, items: List[Any]) -> IfElse:
+        # if condition then expr elsif_clauses else expr
+        condition = items[0]
+        then_expr = items[1]
+        elsif_clauses = items[2]  # List of elsif conditions and expressions
+        else_expr = items[3]
+
+        # Build nested IfElse from right to left
+        result = else_expr
+        for elsif_cond, elsif_then in reversed(elsif_clauses):
+            result = IfElse(elsif_cond, elsif_then, result)
+
+        return IfElse(condition, then_expr, result)
+
+    def elsif_clauses(self, items: List[Any]) -> List[tuple]:
+        return items
+
+    def elsif_clause(self, items: List[Any]) -> tuple:
+        # else if condition then expr
+        condition = items[0]
+        then_expr = items[1]
+        return (condition, then_expr)
 
     def do_block(self, items: List[Any]) -> DoBlock:
         return DoBlock(items[0])
