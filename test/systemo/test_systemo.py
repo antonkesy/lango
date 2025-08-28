@@ -41,6 +41,19 @@ def test_interpreter(file_name: Path) -> None:
 
 @pytest.mark.parametrize(
     "file_name",
+    list(get_all_test_files(MINIO_BASE_TEST_FILES_PATH, "minio")),
+    ids=lambda p: str(p),
+    # TODO: check example files
+)
+def test_is_superset_of_minio(file_name: Path) -> None:
+    def run_type_check(f: Path) -> Any:
+        return type_check(parse(f))
+
+    file_test_type(file_name, run_type_check)
+
+
+@pytest.mark.parametrize(
+    "file_name",
     list(get_all_test_files(SYSO_BASE_TEST_FILES_PATH, "syso")),
     ids=lambda p: str(p),
     # TODO: check example files

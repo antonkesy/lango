@@ -53,6 +53,7 @@ SYMBOLIC_OP: "?"
            | ">="
            | "&&"
            | "||"
+           | "!!"
            | "@"
 
 func_def: operator_name pattern* "=" expr ";"

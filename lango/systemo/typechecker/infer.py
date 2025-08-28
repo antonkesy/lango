@@ -358,16 +358,23 @@ class TypeInferrer:
     def _extract_operator_name(self, instance_name: str) -> str:
         """Extract operator name from Tree structure like "Tree(Token('RULE', 'inst_operator_name'), ['?'])" or "Tree(Token('RULE', 'inst_operator_name'), [Token('ID', 'xcoord')])" """
         import re
+
         # Look for pattern Tree(Token('RULE', 'inst_operator_name'), ['<operator>'])
-        match = re.search(r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']*)'\]\)", instance_name)
+        match = re.search(
+            r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']*)'\]\)",
+            instance_name,
+        )
         if match:
             return match.group(1)
-        
+
         # Look for pattern Tree(Token('RULE', 'inst_operator_name'), [Token('ID', '<operator>')])
-        match = re.search(r"Tree\(Token\('RULE', 'inst_operator_name'\), \[Token\('ID', '([^']*)'\)\]\)", instance_name)
+        match = re.search(
+            r"Tree\(Token\('RULE', 'inst_operator_name'\), \[Token\('ID', '([^']*)'\)\]\)",
+            instance_name,
+        )
         if match:
             return match.group(1)
-        
+
         # Fallback: return the instance_name as is
         return instance_name
 
@@ -590,6 +597,15 @@ class TypeInferrer:
 
             # Variables and constructors
             case Variable(name=var_name):
+                # Check if this is an overloaded function first
+                if var_name in self.instances:
+                    # For overloaded functions, we can't resolve the type without context,
+                    # so we'll let the function application handler deal with it
+                    # Return a placeholder type that will be resolved during function application
+                    placeholder_type = self.fresh_type_var()
+                    expr.ty = placeholder_type
+                    return placeholder_type, TypeSubstitution()
+
                 scheme = env.lookup(var_name)
                 if scheme is None:
                     raise TypeInferenceError(f"Unknown variable: {var_name}")
@@ -1356,10 +1372,6 @@ class TypeInferrer:
         putstr_type = FunctionType(TypeCon("String"), TypeApp(TypeCon("IO"), UNIT_TYPE))
         env = env.extend("putStr", TypeScheme(set(), putstr_type))
 
-        # show :: a -> String
-        show_type = FunctionType(TypeVar("a"), TypeCon("String"))
-        env = env.extend("show", TypeScheme({"a"}, show_type))
-
         # error :: String -> a
         error_type = FunctionType(STRING_TYPE, TypeVar("a"))
         env = env.extend("error", TypeScheme({"a"}, error_type))
@@ -1438,6 +1450,65 @@ class TypeInferrer:
                 FunctionType(
                     FLOAT_TYPE,
                     FunctionType(FLOAT_TYPE, FLOAT_TYPE),
+                ),
+            ),
+        )
+
+        # Integer division primitive
+        env = env.extend(
+            "primIntDiv",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, INT_TYPE),
+                ),
+            ),
+        )
+
+        # Modulo primitive
+        env = env.extend(
+            "primIntMod",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, INT_TYPE),
+                ),
+            ),
+        )
+
+        # Exponentiation primitives
+        env = env.extend(
+            "primIntPow",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, INT_TYPE),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatPow",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, FLOAT_TYPE),
+                ),
+            ),
+        )
+
+        # List indexing primitive
+        env = env.extend(
+            "primListIndex",
+            TypeScheme(
+                {"a"},
+                FunctionType(
+                    TypeApp(TypeCon("List"), TypeVar("a")),
+                    FunctionType(INT_TYPE, TypeVar("a")),
                 ),
             ),
         )
@@ -1643,6 +1714,218 @@ class TypeInferrer:
                 ),
             ),
         )
+
+        # Create dummy function definition for built-in operators
+        from lango.systemo.ast.nodes import FunctionDefinition, IntLiteral
+
+        dummy_func_def = FunctionDefinition("dummy", [], IntLiteral(0))
+
+        # Add built-in operator instances
+        # Arithmetic operators for Int
+        self.instances["+"] = [
+            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
+        ]
+        self.instances["-"] = [
+            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
+        ]
+        self.instances["*"] = [
+            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
+        ]
+        self.instances["/"] = [
+            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
+        ]
+        self.instances["^"] = [
+            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
+        ]
+
+        # Arithmetic operators for Float
+        self.instances["+"].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
+                dummy_func_def,
+            ),
+        )
+        self.instances["-"].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
+                dummy_func_def,
+            ),
+        )
+        self.instances["*"].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
+                dummy_func_def,
+            ),
+        )
+        self.instances["/"].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
+                dummy_func_def,
+            ),
+        )
+        self.instances["^^"] = [
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
+                dummy_func_def,
+            ),
+        ]
+
+        # Comparison operators for Int
+        self.instances["<"] = [
+            (
+                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        ]
+        self.instances["<="] = [
+            (
+                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        ]
+        self.instances[">"] = [
+            (
+                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        ]
+        self.instances[">="] = [
+            (
+                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        ]
+        self.instances["=="] = [
+            (
+                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        ]
+        self.instances["/="] = [
+            (
+                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        ]
+
+        # Comparison operators for Float
+        self.instances["<"].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+        self.instances["<="].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+        self.instances[">"].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+        self.instances[">="].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+        self.instances["=="].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+        self.instances["/="].append(
+            (
+                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+
+        # Comparison operators for Bool
+        self.instances["=="].append(
+            (
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+                dummy_func_def,
+            ),
+        )
+        self.instances["/="].append(
+            (
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+                dummy_func_def,
+            ),
+        )
+
+        # Logical operators
+        self.instances["&&"] = [
+            (
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+                dummy_func_def,
+            ),
+        ]
+        self.instances["||"] = [
+            (
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+                dummy_func_def,
+            ),
+        ]
+
+        # String concatenation
+        self.instances["++"] = [
+            (
+                FunctionType(
+                    TypeCon("String"),
+                    FunctionType(TypeCon("String"), TypeCon("String")),
+                ),
+                dummy_func_def,
+            ),
+        ]
+
+        # List operations
+        list_elem_type = TypeVar("a")
+        list_type = TypeApp(TypeCon("List"), list_elem_type)
+        self.instances["!!"] = [
+            (
+                FunctionType(list_type, FunctionType(INT_TYPE, list_elem_type)),
+                dummy_func_def,
+            ),
+        ]
+        self.instances["++"].append(
+            (
+                FunctionType(list_type, FunctionType(list_type, list_type)),
+                dummy_func_def,
+            ),
+        )
+        self.instances["=="].append(
+            (
+                FunctionType(list_type, FunctionType(list_type, TypeCon("Bool"))),
+                dummy_func_def,
+            ),
+        )
+
+        # Show function instances for different types
+        self.instances["show"] = [
+            (FunctionType(INT_TYPE, TypeCon("String")), dummy_func_def),
+            (FunctionType(FLOAT_TYPE, TypeCon("String")), dummy_func_def),
+            (FunctionType(TypeCon("Bool"), TypeCon("String")), dummy_func_def),
+            (FunctionType(TypeCon("String"), TypeCon("String")), dummy_func_def),
+        ]
 
         # First pass: collect data declarations and precedence declarations
         for stmt in ast.statements:

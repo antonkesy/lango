@@ -3,8 +3,8 @@ from typing import Any, List, Union
 from lark import Token, Transformer, Tree
 
 from lango.systemo.ast.nodes import (
-    Associativity,
     ArrowType,
+    Associativity,
     BoolLiteral,
     ConsPattern,
     Constructor,
@@ -68,7 +68,7 @@ class ASTTransformer(Transformer):
                 return FloatLiteral(float(value))
 
     def neg_int(self, items: List[Any]) -> NegativeInt:
-        value = items[1]
+        value = items[0]
         match value:
             case Token():
                 return NegativeInt(-int(value.value))
@@ -76,7 +76,7 @@ class ASTTransformer(Transformer):
                 return NegativeInt(-int(value))
 
     def neg_float(self, items: List[Any]) -> NegativeFloat:
-        value = items[1]
+        value = items[0]
         match value:
             case Token():
                 return NegativeFloat(-float(value.value))
@@ -553,18 +553,18 @@ class ASTTransformer(Transformer):
         return InstanceDeclaration(instance_name, type_signature, function_definition)
 
     def infixl_decl(self, items: List[Any]) -> PrecedenceDeclaration:
-        precedence = int(items[0].value if hasattr(items[0], 'value') else items[0])
-        operator = str(items[1].value if hasattr(items[1], 'value') else items[1])
+        precedence = int(items[0].value if hasattr(items[0], "value") else items[0])
+        operator = str(items[1].value if hasattr(items[1], "value") else items[1])
         return PrecedenceDeclaration(precedence, Associativity.LEFT, operator)
 
     def infixr_decl(self, items: List[Any]) -> PrecedenceDeclaration:
-        precedence = int(items[0].value if hasattr(items[0], 'value') else items[0])
-        operator = str(items[1].value if hasattr(items[1], 'value') else items[1])
+        precedence = int(items[0].value if hasattr(items[0], "value") else items[0])
+        operator = str(items[1].value if hasattr(items[1], "value") else items[1])
         return PrecedenceDeclaration(precedence, Associativity.RIGHT, operator)
 
     def infix_decl(self, items: List[Any]) -> PrecedenceDeclaration:
-        precedence = int(items[0].value if hasattr(items[0], 'value') else items[0])
-        operator = str(items[1].value if hasattr(items[1], 'value') else items[1])
+        precedence = int(items[0].value if hasattr(items[0], "value") else items[0])
+        operator = str(items[1].value if hasattr(items[1], "value") else items[1])
         return PrecedenceDeclaration(precedence, Associativity.NONE, operator)
 
     # Root
