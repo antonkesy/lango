@@ -1,3 +1,4 @@
+
 -- Operator precedence declarations
 infixl 6 +;
 infixl 6 -;
@@ -46,7 +47,6 @@ inst (/) :: Float -> Float -> Float {
   (/) x y = primFloatDiv x y;
 };
 
--- Unary minus operators
 inst (-) :: Int -> Int {
   (-) x = primIntNeg x;
 };
@@ -99,16 +99,24 @@ inst (==) :: Bool -> Bool -> Bool {
   (==) x y = primBoolEq x y;
 };
 
+inst (==) :: [a] -> [a] -> Bool {
+  (==) x y = primListEq x y;
+};
+
 inst (/=) :: Int -> Int -> Bool {
-  (/=) x y = primIntNe x y;
+  (/=) x y = not (x == y);
 };
 
 inst (/=) :: Float -> Float -> Bool {
-  (/=) x y = primFloatNe x y;
+  (/=) x y = not (x == y);
 };
 
 inst (/=) :: Bool -> Bool -> Bool {
-  (/=) x y = primBoolNe x y;
+  (/=) x y = not (x == y);
+};
+
+inst (/=) :: [a] -> [a] -> Bool {
+  (/=) x y = not (x == y);
 };
 
 inst (&&) :: Bool -> Bool -> Bool {

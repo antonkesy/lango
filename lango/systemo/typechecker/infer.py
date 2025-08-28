@@ -2,8 +2,8 @@ from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
 from lango.systemo.ast.nodes import (
-    Associativity,
     ArrowType,
+    Associativity,
     ASTNode,
     BoolLiteral,
     ConsPattern,
@@ -1547,34 +1547,15 @@ class TypeInferrer:
         )
 
         env = env.extend(
-            "primIntNe",
+            "primListEq",
             TypeScheme(
-                set(),
+                {"a"},
                 FunctionType(
-                    INT_TYPE,
-                    FunctionType(INT_TYPE, TypeCon("Bool")),
-                ),
-            ),
-        )
-
-        env = env.extend(
-            "primFloatNe",
-            TypeScheme(
-                set(),
-                FunctionType(
-                    FLOAT_TYPE,
-                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
-                ),
-            ),
-        )
-
-        env = env.extend(
-            "primBoolNe",
-            TypeScheme(
-                set(),
-                FunctionType(
-                    TypeCon("Bool"),
-                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                    TypeApp(TypeCon("List"), TypeVar("a")),
+                    FunctionType(
+                        TypeApp(TypeCon("List"), TypeVar("a")),
+                        TypeCon("Bool"),
+                    ),
                 ),
             ),
         )
