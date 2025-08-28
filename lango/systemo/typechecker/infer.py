@@ -442,7 +442,12 @@ class TypeInferrer:
 
         return None
 
-    def _infer_operator_application(self, func_app: FunctionApplication, env: TypeEnvironment, expected_arity: int) -> InferenceResult:
+    def _infer_operator_application(
+        self,
+        func_app: FunctionApplication,
+        env: TypeEnvironment,
+        expected_arity: int,
+    ) -> InferenceResult:
         """Helper method to infer operator applications with expected arity"""
         # First, infer the argument type
         arg_type, arg_subst = self.infer_expr(func_app.argument, env)
@@ -581,15 +586,23 @@ class TypeInferrer:
                     # Unary operation: f x
                     func_app = FunctionApplication(operator_var, operands[0])
                     # Pass expected arity through a custom inference
-                    return self._infer_operator_application(func_app, env, expected_arity=1)
+                    return self._infer_operator_application(
+                        func_app,
+                        env,
+                        expected_arity=1,
+                    )
                 elif len(operands) == 2:
                     # Binary operation: ((f x) y)
                     partial_app = FunctionApplication(operator_var, operands[0])
                     full_app = FunctionApplication(partial_app, operands[1])
-                    return self._infer_operator_application(full_app, env, expected_arity=2)
+                    return self._infer_operator_application(
+                        full_app,
+                        env,
+                        expected_arity=2,
+                    )
                 else:
                     raise TypeInferenceError(
-                        f"Unsupported arity for operator {operator}: {len(operands)}"
+                        f"Unsupported arity for operator {operator}: {len(operands)}",
                     )
 
             # Control flow
@@ -901,7 +914,10 @@ class TypeInferrer:
             recursive_func_type = func_type_var
             for param_type in reversed(param_types):
                 recursive_func_type = FunctionType(param_type, recursive_func_type)
-            recursive_env = env.extend(function_name, TypeScheme(set(), recursive_func_type))
+            recursive_env = env.extend(
+                function_name,
+                TypeScheme(set(), recursive_func_type),
+            )
 
         if first_arity == 0:
             # Nullary functions - all clauses should return the same type
@@ -1010,7 +1026,9 @@ class TypeInferrer:
             )
 
         # Unify the assumed recursive function type with the inferred type
-        assumed_recursive_type = recursive_env[function_name].instantiate(self.fresh_var_gen)
+        assumed_recursive_type = recursive_env[function_name].instantiate(
+            self.fresh_var_gen,
+        )
         try:
             unify_subst = unify_one(
                 assumed_recursive_type.apply_substitution(final_subst),

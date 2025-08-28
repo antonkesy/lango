@@ -282,7 +282,9 @@ class Interpreter:
                     partial_app = FunctionApplication(operator_var, operands[0])
                     return self.eval(FunctionApplication(partial_app, operands[1]))
                 else:
-                    raise RuntimeError(f"Unsupported arity for operator {operator}: {len(operands)}")
+                    raise RuntimeError(
+                        f"Unsupported arity for operator {operator}: {len(operands)}",
+                    )
                 match list_val:
                     case list():
                         pass  # Valid list
