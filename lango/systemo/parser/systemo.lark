@@ -4,6 +4,7 @@ prelude: COMMENT*
 postlude: COMMENT*
 
 ?stmt: data_decl
+     | inst_decl
      | func_def
 
 // --- Data Declarations ---
@@ -16,6 +17,9 @@ constructor: UIDENT record_constructor
 
 record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
+
+// --- Instance Declarations ---
+inst_decl: "inst" ID "::" type_expr ";" func_def
 
 // --- Function Signatures and Definitions ---
 
