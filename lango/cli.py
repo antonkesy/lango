@@ -16,7 +16,7 @@ from lango.systemo.parser.parser import parse as systemo_parse
 from lango.systemo.typechecker.typecheck import get_type_str as systemo_get_type_str
 from lango.systemo.typechecker.typecheck import type_check as systemo_type_check
 
-app = typer.Typer()
+app = typer.Typer(pretty_exceptions_enable=False)
 console = Console()
 
 
