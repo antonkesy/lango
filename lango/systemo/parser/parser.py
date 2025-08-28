@@ -12,7 +12,7 @@ from lango.systemo.ast.transformer import transform_parse_tree
 def _parse_lark(path: Path) -> ParseTree:
     parser = Lark.open(
         "./lango/systemo/parser/systemo.lark",
-        parser="earley",
+        parser="lalr",
     )
 
     prelude_dir = "./lango/systemo/prelude"
@@ -30,6 +30,10 @@ def _parse_lark(path: Path) -> ParseTree:
 
     with open(path) as f:
         main_content = f.read()
+
+    # write main_content + prelude to a temporary file
+    with open("./build/main.syso", "w") as temp_file:
+        temp_file.write(main_content + prelude_content)
 
     return parser.parse(main_content + prelude_content)
 
