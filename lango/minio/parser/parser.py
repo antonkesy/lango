@@ -1,40 +1,20 @@
-import os
 from collections import defaultdict
 from pathlib import Path
 
-from lark import Lark, ParseTree
-
 from lango.minio.ast.nodes import FunctionDefinition, Program
 from lango.minio.ast.transformer import transform_parse_tree
-
-
-def _parse_lark(path: Path) -> ParseTree:
-    parser = Lark.open(
-        "./lango/minio/parser/minio.lark",
-        parser="lalr",
-    )
-
-    prelude_dir = "./lango/minio/prelude"
-    prelude_content = ""
-
-    if os.path.exists(prelude_dir):
-        for filename in sorted(os.listdir(prelude_dir)):
-            if filename.endswith(".minio"):
-                prelude_file_path = os.path.join(prelude_dir, filename)
-                try:
-                    with open(prelude_file_path, "r") as prelude_file:
-                        prelude_content += prelude_file.read() + "\n"
-                except FileNotFoundError:
-                    pass
-
-    with open(path) as f:
-        main_content = f.read()
-
-    return parser.parse(main_content + prelude_content)
+from lango.shared.parser import parse_lark
 
 
 def parse(path: Path) -> Program:
-    program = transform_parse_tree(_parse_lark(path))
+    program = transform_parse_tree(
+        parse_lark(
+            path,
+            grammar=Path("./lango/minio/parser/minio.lark"),
+            prelude_dir=Path("./lango/minio/prelude"),
+            file_extension="minio",
+        ),
+    )
 
     _validate_program(program)
 
