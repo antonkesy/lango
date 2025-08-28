@@ -28,6 +28,7 @@ from lango.minio.ast.nodes import (
     LessThanOperation,
     LetStatement,
     ListLiteral,
+    ListPattern,
     LiteralPattern,
     MulOperation,
     NegativeFloat,
@@ -42,6 +43,8 @@ from lango.minio.ast.nodes import (
     Program,
     StringLiteral,
     SubOperation,
+    TupleLiteral,
+    TuplePattern,
     Variable,
     VariablePattern,
 )
@@ -170,6 +173,9 @@ class MinioCompiler:
             case ConsPattern(head=head, tail=tail):
                 variables.update(self._extract_pattern_variables(head))
                 variables.update(self._extract_pattern_variables(tail))
+            case TuplePattern(patterns=patterns):
+                for sub_pattern in patterns:
+                    variables.update(self._extract_pattern_variables(sub_pattern))
             case _:
                 # Other pattern types don't contain variables
                 pass
@@ -260,6 +266,52 @@ class MinioCompiler:
             assignments.append(f"        {tail_var} = {value_expr}[1:]")
 
         lines = [f"if len({value_expr}) > 0:"]
+        lines.extend(assignments)
+        lines.extend(
+            [
+                f"        return {self._compile_expression(body)}",
+                "    else:",
+                "        raise ValueError('Pattern match failed')",
+            ],
+        )
+        return "\n    ".join(lines)
+
+    def _build_tuple_pattern_match(
+        self,
+        value_expr: str,
+        tuple_vars: List[str],
+        body: Expression,
+    ) -> str:
+        """Build a readable pattern match for tuple patterns."""
+        assignments = []
+        for i, var in enumerate(tuple_vars):
+            if not var.startswith("_tuple_elem_"):
+                assignments.append(f"        {var} = {value_expr}[{i}]")
+
+        lines = [f"if len({value_expr}) == {len(tuple_vars)}:"]
+        lines.extend(assignments)
+        lines.extend(
+            [
+                f"        return {self._compile_expression(body)}",
+                "    else:",
+                "        raise ValueError('Pattern match failed')",
+            ],
+        )
+        return "\n".join(lines)
+
+    def _build_list_pattern_match(
+        self,
+        value_expr: str,
+        list_vars: List[str],
+        body: Expression,
+    ) -> str:
+        """Build a readable pattern match for list patterns."""
+        assignments = []
+        for i, var in enumerate(list_vars):
+            if not var.startswith("_list_elem_"):
+                assignments.append(f"        {var} = {value_expr}[{i}]")
+
+        lines = [f"if len({value_expr}) == {len(list_vars)}:"]
         lines.extend(assignments)
         lines.extend(
             [
@@ -532,6 +584,30 @@ class MinioCompiler:
                                     assignments.append(f"{name} = {arg_name}[1:]")
                                 case _:
                                     pass
+                        case TuplePattern(patterns=patterns):
+                            # Tuple pattern - check tuple length and destructure
+                            pattern_matches.append(
+                                f"len({arg_name}) == {len(patterns)}",
+                            )
+                            for i, sub_pattern in enumerate(patterns):
+                                match sub_pattern:
+                                    case VariablePattern(name=name):
+                                        assignments.append(f"{name} = {arg_name}[{i}]")
+                                    case _:
+                                        # For non-variable patterns, add recursive matching
+                                        pass
+                        case ListPattern(patterns=patterns):
+                            # List pattern - check list length and destructure
+                            pattern_matches.append(
+                                f"len({arg_name}) == {len(patterns)}",
+                            )
+                            for i, sub_pattern in enumerate(patterns):
+                                match sub_pattern:
+                                    case VariablePattern(name=name):
+                                        assignments.append(f"{name} = {arg_name}[{i}]")
+                                    case _:
+                                        # For non-variable patterns, add recursive matching
+                                        pass
                         case ConstructorPattern(
                             constructor=constructor,
                             patterns=sub_patterns,
@@ -748,6 +824,22 @@ class MinioCompiler:
                     tail_var,
                     body,
                 )
+            case TuplePattern(patterns=patterns):
+                # Tuple pattern - destructure tuple
+                tuple_vars = []
+                for i, sub_pattern in enumerate(patterns):
+                    match sub_pattern:
+                        case VariablePattern(name=name):
+                            tuple_vars.append(name)
+                            self.local_variables.add(name)
+                        case _:
+                            tuple_vars.append(f"_tuple_elem_{i}")
+
+                return self._build_tuple_pattern_match(
+                    value_expr,
+                    tuple_vars,
+                    body,
+                )
             case ConstructorPattern(constructor=constructor, patterns=patterns):
                 # Extract variables from constructor pattern
                 for sub_pattern in patterns:
@@ -833,6 +925,22 @@ class MinioCompiler:
                         constructor,
                         body,
                     )
+            case ListPattern(patterns=patterns):
+                # List pattern - destructure list
+                list_vars = []
+                for i, sub_pattern in enumerate(patterns):
+                    match sub_pattern:
+                        case VariablePattern(name=name):
+                            list_vars.append(name)
+                            self.local_variables.add(name)
+                        case _:
+                            list_vars.append(f"_list_elem_{i}")
+
+                return self._build_list_pattern_match(
+                    value_expr,
+                    list_vars,
+                    body,
+                )
             case _:
                 return f"return {self._compile_expression(body)}"
 
@@ -867,6 +975,15 @@ class MinioCompiler:
                     self._compile_expression(elem) for elem in elements
                 ]
                 return f"[{', '.join(compiled_elements)}]"
+
+            case TupleLiteral(elements=elements):
+                compiled_elements = [
+                    self._compile_expression(elem) for elem in elements
+                ]
+                # Ensure we have proper tuple syntax - add comma for single element
+                if len(compiled_elements) == 1:
+                    return f"({compiled_elements[0]},)"
+                return f"({', '.join(compiled_elements)})"
 
             # Variables and constructors
             case Variable(name="show"):

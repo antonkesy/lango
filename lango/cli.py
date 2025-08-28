@@ -30,7 +30,6 @@ def parse(
             ast = systemo_parse(input_file)
         case "minio":
             ast = minio_parse(input_file)
-            return minio_interpret(ast).exit_code
         case _:
             console.print(f"Unknown language: {lang}", style="bold red")
             return 1
@@ -103,7 +102,7 @@ def compile(
     lang: str = typer.Argument(..., help="systemo|minio"),
     input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
     output_file: str = typer.Option(
-        "out.py",
+        "",
         "--output",
         "-o",
         help="Output compiled target file path",
@@ -138,6 +137,9 @@ def compile(
         case _:
             console.print(f"Unknown language: {lang}", style="bold red")
             return 1
+
+    if not output_file:
+        output_file = f"out.{'py' if target == 'python' else 'go'}"
 
     with open(output_file, "w") as f:
         f.write(compiled_code)

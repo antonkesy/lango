@@ -24,6 +24,7 @@ from lango.systemo.ast.nodes import (
     IntLiteral,
     LetStatement,
     ListLiteral,
+    ListPattern,
     ListType,
     LiteralPattern,
     NegativeFloat,
@@ -1401,6 +1402,38 @@ class TypeInferrer:
                 # Unify pattern type with literal type
                 unify_subst = unify_one(pattern_type, literal_type)
                 return env, unify_subst
+
+            case ListPattern(patterns=patterns):
+                # List pattern must match a list type with same element type
+                if not patterns:
+                    # Empty list pattern []
+                    elem_type = self.fresh_type_var()
+                    list_type = TypeApp(TypeCon("List"), elem_type)
+                    unify_subst = unify_one(pattern_type, list_type)
+                    return env, unify_subst
+
+                # Non-empty list pattern [p1, p2, ..., pn]
+                # All elements must have the same type
+                elem_type = self.fresh_type_var()
+                list_type = TypeApp(TypeCon("List"), elem_type)
+
+                # Unify pattern type with list type
+                unify_subst = unify_one(pattern_type, list_type)
+                current_subst = unify_subst
+                extended_env = env
+
+                # Infer each sub-pattern with the same element type
+                for sub_pattern in patterns:
+                    current_elem_type = elem_type.apply_substitution(current_subst)
+                    sub_env, sub_subst = self.infer_pattern(
+                        sub_pattern,
+                        current_elem_type,
+                        extended_env.apply_substitution(current_subst),
+                    )
+                    extended_env = sub_env
+                    current_subst = current_subst.compose(sub_subst)
+
+                return extended_env, current_subst
 
             case TuplePattern(patterns=patterns):
                 # Tuple pattern must match a tuple type with same arity

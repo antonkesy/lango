@@ -27,6 +27,7 @@ from lango.systemo.ast.nodes import (
     IntLiteral,
     LetStatement,
     ListLiteral,
+    ListPattern,
     ListType,
     LiteralPattern,
     NegativeFloat,
@@ -555,7 +556,20 @@ class ASTTransformer(Transformer):
                 ):
                     converted_patterns.append(LiteralPattern(v))
                 case ListLiteral(elements):
-                    converted_patterns.append(LiteralPattern(elements))
+                    # Convert ListLiteral to ListPattern in pattern context
+                    list_patterns = []
+                    for element in elements:
+                        if isinstance(element, Variable):
+                            list_patterns.append(VariablePattern(element.name))
+                        elif isinstance(
+                            element,
+                            (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
+                        ):
+                            list_patterns.append(LiteralPattern(element.value))
+                        else:
+                            # Other pattern types, assume they're already patterns
+                            list_patterns.append(element)
+                    converted_patterns.append(ListPattern(list_patterns))
                 case _:
                     converted_patterns.append(pattern)
 
@@ -588,7 +602,20 @@ class ASTTransformer(Transformer):
                 ):
                     converted_patterns.append(LiteralPattern(v))
                 case ListLiteral(elements):
-                    converted_patterns.append(LiteralPattern(elements))
+                    # Convert ListLiteral to ListPattern in pattern context
+                    list_patterns = []
+                    for element in elements:
+                        if isinstance(element, Variable):
+                            list_patterns.append(VariablePattern(element.name))
+                        elif isinstance(
+                            element,
+                            (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
+                        ):
+                            list_patterns.append(LiteralPattern(element.value))
+                        else:
+                            # Other pattern types, assume they're already patterns
+                            list_patterns.append(element)
+                    converted_patterns.append(ListPattern(list_patterns))
                 case _:
                     converted_patterns.append(pattern)
 

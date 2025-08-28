@@ -29,6 +29,7 @@ from lango.minio.ast.nodes import (
     LessThanOperation,
     LetStatement,
     ListLiteral,
+    ListPattern,
     LiteralPattern,
     MulOperation,
     NegativeFloat,
@@ -43,6 +44,8 @@ from lango.minio.ast.nodes import (
     Program,
     StringLiteral,
     SubOperation,
+    TupleLiteral,
+    TuplePattern,
     Variable,
     VariablePattern,
 )
@@ -195,6 +198,10 @@ class MinioGoCompiler:
                 # List literals can contain expressions that reference variables
                 for element in elements:
                     referenced.update(self._find_referenced_variables(element))
+            case TupleLiteral(elements=elements):
+                # Tuple literals can contain expressions that reference variables
+                for element in elements:
+                    referenced.update(self._find_referenced_variables(element))
             case DoBlock(statements=statements):
                 for stmt in statements:
                     referenced.update(self._find_referenced_variables(stmt))
@@ -254,6 +261,12 @@ class MinioGoCompiler:
             case ConsPattern(head=head, tail=tail):
                 variables.update(self._extract_pattern_variables(head))
                 variables.update(self._extract_pattern_variables(tail))
+            case ListPattern(patterns=patterns):
+                for sub_pattern in patterns:
+                    variables.update(self._extract_pattern_variables(sub_pattern))
+            case TuplePattern(patterns=patterns):
+                for sub_pattern in patterns:
+                    variables.update(self._extract_pattern_variables(sub_pattern))
             case _:
                 # Other pattern types don't contain variables
                 pass
@@ -263,6 +276,21 @@ class MinioGoCompiler:
         lines = []
         with open("lango/minio/compiler/prelude.go", "r") as f:
             lines.extend(f.read().splitlines())
+
+        # Generate built-in tuple type definitions
+        lines.append("")
+        lines.append("// Built-in tuple types")
+        lines.append("type Tuple2 struct {")
+        lines.append("\tArg0 any")
+        lines.append("\tArg1 any")
+        lines.append("}")
+        lines.append("")
+        lines.append("type Tuple3 struct {")
+        lines.append("\tArg0 any")
+        lines.append("\tArg1 any")
+        lines.append("\tArg2 any")
+        lines.append("}")
+        lines.append("")
 
         # Collect data types
         for stmt in program.statements:
@@ -910,6 +938,78 @@ class MinioGoCompiler:
 
                 assignment_str = "; ".join(assignments) if assignments else None
                 return condition, assignment_str
+            case ListPattern(patterns=patterns):
+                # List pattern - exact length match
+                condition = f"len({value_expr}.([]any)) == {len(patterns)}"
+                assignments = []
+
+                # Determine which variables are actually used in the function body
+                used_variables = set()
+                if function_body:
+                    used_variables = self._find_referenced_variables(function_body)
+
+                for i, sub_pattern in enumerate(patterns):
+                    # Skip processing if this is a variable pattern that's not used
+                    if isinstance(sub_pattern, VariablePattern) and function_body:
+                        if sub_pattern.name not in used_variables:
+                            continue  # Skip unused variables
+
+                    element_expr = f"{value_expr}.([]any)[{i}]"
+                    sub_condition, sub_assignment = (
+                        self._compile_pattern_condition_and_assignment(
+                            sub_pattern,
+                            element_expr,
+                            f"{var_prefix}_{i}",
+                            function_body,
+                        )
+                    )
+                    if sub_condition:
+                        condition = f"{condition} && {sub_condition}"
+                    if sub_assignment:
+                        assignments.append(sub_assignment)
+
+                assignment_str = "; ".join(assignments) if assignments else None
+                return condition, assignment_str
+            case TuplePattern(patterns=patterns):
+                # Tuple pattern - exact structure match
+                # Check that value is a tuple and has the right number of elements
+                tuple_type = f"Tuple{len(patterns)}"
+                condition = f"_, ok := {value_expr}.({tuple_type}); ok"
+                assignments = []
+
+                # Determine which variables are actually used in the function body
+                used_variables = set()
+                if function_body:
+                    used_variables = self._find_referenced_variables(function_body)
+
+                if patterns:
+                    typed_var = f"{var_prefix}_{tuple_type}"
+                    assignments.append(f"{typed_var} := {value_expr}.({tuple_type})")
+
+                    for i, sub_pattern in enumerate(patterns):
+                        # Skip processing if this is a variable pattern that's not used
+                        if isinstance(sub_pattern, VariablePattern) and function_body:
+                            if sub_pattern.name not in used_variables:
+                                continue  # Skip unused variables
+
+                        # Access tuple element by field name
+                        field_expr = f"{typed_var}.Arg{i}"
+
+                        sub_condition, sub_assignment = (
+                            self._compile_pattern_condition_and_assignment(
+                                sub_pattern,
+                                field_expr,
+                                f"{var_prefix}_{i}",
+                                function_body,
+                            )
+                        )
+                        if sub_condition:
+                            condition = f"{condition} && {sub_condition}"
+                        if sub_assignment:
+                            assignments.append(sub_assignment)
+
+                assignment_str = "; ".join(assignments) if assignments else None
+                return condition, assignment_str
             case _:
                 return None, None
 
@@ -933,6 +1033,18 @@ class MinioGoCompiler:
                     self._compile_expression(elem) for elem in elements
                 ]
                 return "[]any{" + ", ".join(compiled_elements) + "}"
+
+            case TupleLiteral(elements=elements):
+                compiled_elements = [
+                    self._compile_expression(elem) for elem in elements
+                ]
+                # In Go, represent tuples as structs or arrays depending on size
+                if len(compiled_elements) <= 3:
+                    # Use built-in tuple types for small tuples (Tuple2, Tuple3)
+                    return f"Tuple{len(compiled_elements)}{{{', '.join(compiled_elements)}}}"
+                else:
+                    # Use slice for larger tuples
+                    return "[]any{" + ", ".join(compiled_elements) + "}"
 
             # Variables and constructors
             case Variable(name="show"):

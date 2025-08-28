@@ -222,6 +222,12 @@ class LiteralPattern(ASTNode):
 
 
 @dataclass
+class ListPattern(ASTNode):
+    patterns: List["Pattern"]
+    ty: Optional[Type] = None
+
+
+@dataclass
 class NegativeIntPattern(ASTNode):
     value: int
     ty: Optional[Type] = None
@@ -336,6 +342,7 @@ type Pattern = Union[
     TuplePattern,
     VariablePattern,
     LiteralPattern,
+    ListPattern,
     NegativeIntPattern,
     NegativeFloatPattern,
 ]

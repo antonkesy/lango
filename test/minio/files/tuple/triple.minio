@@ -1,0 +1,12 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "246"
+
+sumTuple (x, y) = x + y;
+sumTuple3 (x, y, z) = x + y + z;
+
+main = do {
+  let { pair = (10, 14); triple = (1, 2, 3) };
+  putStr (show (sumTuple pair));
+  putStr (show (sumTuple3 triple));
+};

@@ -1,0 +1,10 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "1"
+
+first (x, y) = x;
+
+main = do {
+  let { pair = (1, 2) };
+  putStr (show (first pair));
+};

@@ -37,6 +37,12 @@ class ListLiteral(ASTNode):
     ty: Optional[Type] = None
 
 
+@dataclass
+class TupleLiteral(ASTNode):
+    elements: List["Expression"]
+    ty: Optional[Type] = None
+
+
 # Variables and Identifiers
 @dataclass
 class Variable(ASTNode):
@@ -276,6 +282,12 @@ class GroupedType(ASTNode):
     ty: Optional[Type] = None
 
 
+@dataclass
+class TupleType(ASTNode):
+    element_types: List["TypeExpression"]
+    ty: Optional[Type] = None
+
+
 # Patterns
 @dataclass
 class ConstructorPattern(ASTNode):
@@ -312,6 +324,18 @@ class NegativeIntPattern(ASTNode):
 @dataclass
 class NegativeFloatPattern(ASTNode):
     value: float
+    ty: Optional[Type] = None
+
+
+@dataclass
+class TuplePattern(ASTNode):
+    patterns: List["Pattern"]
+    ty: Optional[Type] = None
+
+
+@dataclass
+class ListPattern(ASTNode):
+    patterns: List["Pattern"]
     ty: Optional[Type] = None
 
 
@@ -415,6 +439,8 @@ type Pattern = Union[
     LiteralPattern,
     NegativeIntPattern,
     NegativeFloatPattern,
+    TuplePattern,
+    ListPattern,
 ]
 
 type Statement = Union[

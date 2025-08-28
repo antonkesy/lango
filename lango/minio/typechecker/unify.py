@@ -1,6 +1,7 @@
 from lango.minio.typechecker.minio_types import (
     DataType,
     FunctionType,
+    TupleType,
     Type,
     TypeApp,
     TypeCon,
@@ -26,6 +27,8 @@ def occurs_check(var: str, typ: Type) -> bool:
             return occurs_check(var, constructor) or occurs_check(var, argument)
         case DataType(type_args=type_args):
             return any(occurs_check(var, arg) for arg in type_args)
+        case TupleType(element_types=element_types):
+            return any(occurs_check(var, elem) for elem in element_types)
         case _:
             raise UnificationError(f"Unknown type in occurs check: {type(typ)}")
 
@@ -87,6 +90,20 @@ def unify_one(t1: Type, t2: Type) -> TypeSubstitution:
             subst = TypeSubstitution()
             for arg1, arg2 in zip(type_args1, type_args2):
                 s = unify_one(subst.apply(arg1), subst.apply(arg2))
+                subst = s.compose(subst)
+            return subst
+        case (
+            TupleType(element_types=elem_types1),
+            TupleType(element_types=elem_types2),
+        ):
+            if len(elem_types1) != len(elem_types2):
+                raise UnificationError(
+                    f"Cannot unify tuples of different lengths: {t1} and {t2}",
+                )
+
+            subst = TypeSubstitution()
+            for elem1, elem2 in zip(elem_types1, elem_types2):
+                s = unify_one(subst.apply(elem1), subst.apply(elem2))
                 subst = s.compose(subst)
             return subst
         case _:

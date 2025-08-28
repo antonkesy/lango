@@ -31,6 +31,7 @@ from lango.minio.ast.nodes import (
     LessThanOperation,
     LetStatement,
     ListLiteral,
+    ListPattern,
     LiteralPattern,
     MulOperation,
     NegativeFloat,
@@ -46,6 +47,9 @@ from lango.minio.ast.nodes import (
     Statement,
     StringLiteral,
     SubOperation,
+    TupleLiteral,
+    TuplePattern,
+    TupleType,
     TypeApplication,
     TypeConstructor,
     TypeExpression,
@@ -62,6 +66,7 @@ from lango.minio.typechecker.minio_types import (
     DataType,
     FreshVarGenerator,
     FunctionType,
+    TupleType,
     Type,
     TypeApp,
     TypeCon,
@@ -240,6 +245,11 @@ class TypeInferrer:
                         return TypeApp(constructor_type, argument_type)
             case GroupedType(type_expr=type_expr):
                 return self.parse_type_expr(type_expr)
+            case TupleType(element_types=element_types):
+                parsed_element_types = [
+                    self.parse_type_expr(elem) for elem in element_types
+                ]
+                return TupleType(parsed_element_types)
             case _:
                 raise TypeInferenceError(
                     f"Cannot parse type expression: {type(node).__name__}",
@@ -298,6 +308,29 @@ class TypeInferrer:
                 )
                 expr.ty = list_type
                 return list_type, current_subst
+
+            case TupleLiteral(elements=elements):
+                if not elements:
+                    # Empty tuple: unit type
+                    tuple_type = TupleType([])
+                    expr.ty = tuple_type
+                    return tuple_type, TypeSubstitution()
+
+                # Non-empty tuple: infer type of each element
+                element_types = []
+                current_subst = TypeSubstitution()
+
+                for element in elements:
+                    elem_type, elem_subst = self.infer_expr(
+                        element,
+                        env.apply_substitution(current_subst),
+                    )
+                    current_subst = current_subst.compose(elem_subst)
+                    element_types.append(elem_type.apply_substitution(current_subst))
+
+                tuple_type = TupleType(element_types)
+                expr.ty = tuple_type
+                return tuple_type, current_subst
 
             # Variables and constructors
             case Variable(name=var_name):
@@ -955,6 +988,7 @@ class TypeInferrer:
                     | StringLiteral()
                     | BoolLiteral()
                     | ListLiteral()
+                    | TupleLiteral()
                     | Variable()
                     | Constructor()
                     | AddOperation()
@@ -1015,6 +1049,7 @@ class TypeInferrer:
                 | StringLiteral()
                 | BoolLiteral()
                 | ListLiteral()
+                | TupleLiteral()
                 | Variable()
                 | Constructor()
                 | AddOperation()
@@ -1191,6 +1226,69 @@ class TypeInferrer:
                 current_subst = current_subst.compose(tail_subst)
 
                 return tail_env, current_subst
+
+            case TuplePattern(patterns=patterns):
+                # Tuple pattern - patterns must match corresponding tuple elements
+                current_subst = TypeSubstitution()
+                current_env = env
+
+                # Infer types for each sub-pattern
+                pattern_types = []
+                for i, sub_pattern in enumerate(patterns):
+                    sub_pattern_type = self.fresh_type_var()
+                    pattern_types.append(sub_pattern_type)
+
+                    sub_env, sub_subst = self.infer_pattern(
+                        sub_pattern,
+                        sub_pattern_type.apply_substitution(current_subst),
+                        current_env.apply_substitution(current_subst),
+                    )
+                    current_subst = current_subst.compose(sub_subst)
+                    current_env = (
+                        sub_env  # This accumulates bindings from each sub-pattern
+                    )
+
+                # Create tuple type from pattern types
+                tuple_type = TupleType(
+                    [pt.apply_substitution(current_subst) for pt in pattern_types],
+                )
+
+                # Unify pattern type with tuple type
+                unify_subst = unify_one(pattern_type, tuple_type)
+                current_subst = current_subst.compose(unify_subst)
+
+                return current_env, current_subst
+
+            case ListPattern(patterns=patterns):
+                # List pattern - patterns must match corresponding list elements
+                current_subst = TypeSubstitution()
+                current_env = env
+
+                # Pattern type should be List of some type
+                elem_type = self.fresh_type_var()
+                list_type = TypeApp(TypeCon("List"), elem_type)
+
+                # Unify pattern type with list type
+                unify_subst = unify_one(pattern_type, list_type)
+                current_subst = current_subst.compose(unify_subst)
+
+                # If empty list pattern, we're done
+                if not patterns:
+                    return current_env, current_subst
+
+                # For non-empty list patterns, all elements should have the same type
+                for sub_pattern in patterns:
+                    sub_env, sub_subst = self.infer_pattern(
+                        sub_pattern,
+                        elem_type.apply_substitution(current_subst),
+                        current_env.apply_substitution(current_subst),
+                    )
+                    current_subst = current_subst.compose(sub_subst)
+                    current_env = (
+                        sub_env  # This accumulates bindings from each sub-pattern
+                    )
+
+                return current_env, current_subst
 
             case LiteralPattern(value=value):
                 # Literal patterns constrain the pattern type to the literal's type

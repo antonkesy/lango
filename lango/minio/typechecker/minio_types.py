@@ -122,6 +122,30 @@ class DataType(Type):
         return f"{self.name} {args_str}"
 
 
+@dataclass(frozen=True)
+class TupleType(Type):
+    """Tuple type (e.g., (Int, String), (a, b, c))"""
+
+    element_types: List[Type]
+
+    def free_vars(self) -> Set[str]:
+        result = set()
+        for elem_type in self.element_types:
+            result |= elem_type.free_vars()
+        return result
+
+    def substitute(self, subst: Dict[str, Type]) -> Type:
+        return TupleType(
+            [elem_type.substitute(subst) for elem_type in self.element_types],
+        )
+
+    def __str__(self) -> str:
+        if len(self.element_types) == 0:
+            return "()"
+        elem_strs = [str(elem) for elem in self.element_types]
+        return f"({', '.join(elem_strs)})"
+
+
 # Built-in types
 INT_TYPE = TypeCon("Int")
 STRING_TYPE = TypeCon("String")

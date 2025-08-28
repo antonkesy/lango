@@ -1,0 +1,9 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42"
+
+test [x] = x;
+
+main = do {
+  putStr (show (test [42]));
+};

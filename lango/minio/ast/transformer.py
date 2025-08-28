@@ -34,6 +34,7 @@ from lango.minio.ast.nodes import (
     LessThanOperation,
     LetStatement,
     ListLiteral,
+    ListPattern,
     LiteralPattern,
     MulOperation,
     NegativeFloat,
@@ -50,6 +51,9 @@ from lango.minio.ast.nodes import (
     Statement,
     StringLiteral,
     SubOperation,
+    TupleLiteral,
+    TuplePattern,
+    TupleType,
     TypeApplication,
     TypeConstructor,
     TypeParameter,
@@ -292,6 +296,10 @@ class ASTTransformer(Transformer):
     def grouped(self, items: List[Any]) -> GroupedExpression:
         return GroupedExpression(items[0])
 
+    # Tuples
+    def tuple_literal(self, items: List[Any]) -> TupleLiteral:
+        return TupleLiteral(items)
+
     # Type System
     def type_constructor(self, items: List[Any]) -> TypeConstructor:
         match items[0]:
@@ -317,6 +325,9 @@ class ASTTransformer(Transformer):
 
     def grouped_type(self, items: List[Any]) -> GroupedType:
         return GroupedType(items[0])
+
+    def tuple_type(self, items: List[Any]) -> TupleType:
+        return TupleType(items)
 
     # Patterns
     def constructor_pattern(self, items: List[Any]) -> ConstructorPattern:
@@ -394,6 +405,30 @@ class ASTTransformer(Transformer):
 
         return ConsPattern(head, tail)
 
+    def tuple_pattern(self, items: List[Any]) -> TuplePattern:
+        # Convert tokens and expressions to patterns
+        converted_patterns: List[Pattern] = []
+        for pattern in items:
+            match pattern:
+                case Token(type=token_type, value=token_value):
+                    if token_type == "ID":
+                        converted_patterns.append(VariablePattern(token_value))
+                    else:
+                        converted_patterns.append(LiteralPattern(token_value))
+                case (
+                    IntLiteral(value=value)
+                    | FloatLiteral(value=value)
+                    | StringLiteral(value=value)
+                    | BoolLiteral(value=value)
+                ):
+                    # Convert literals to literal patterns
+                    converted_patterns.append(LiteralPattern(value))
+                case _:
+                    # Already a pattern object
+                    converted_patterns.append(pattern)
+
+        return TuplePattern(converted_patterns)
+
     # Top-level Declarations
     def type_param(self, items: List[Any]) -> TypeParameter:
         match items[0]:
@@ -466,7 +501,20 @@ class ASTTransformer(Transformer):
                 ):
                     converted_patterns.append(LiteralPattern(v))
                 case ListLiteral(elements):
-                    converted_patterns.append(LiteralPattern(elements))
+                    # Convert ListLiteral to ListPattern in pattern context
+                    list_patterns = []
+                    for element in elements:
+                        if isinstance(element, Variable):
+                            list_patterns.append(VariablePattern(element.name))
+                        elif isinstance(
+                            element,
+                            (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
+                        ):
+                            list_patterns.append(LiteralPattern(element.value))
+                        else:
+                            # Other pattern types, assume they're already patterns
+                            list_patterns.append(element)
+                    converted_patterns.append(ListPattern(list_patterns))
                 case _:
                     converted_patterns.append(pattern)
 

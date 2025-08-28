@@ -30,6 +30,7 @@ from lango.minio.ast.nodes import (
     LessThanOperation,
     LetStatement,
     ListLiteral,
+    ListPattern,
     LiteralPattern,
     MulOperation,
     NegativeFloat,
@@ -45,6 +46,8 @@ from lango.minio.ast.nodes import (
     Statement,
     StringLiteral,
     SubOperation,
+    TupleLiteral,
+    TuplePattern,
     Variable,
     VariablePattern,
 )
@@ -228,6 +231,9 @@ class Interpreter:
                 return value
             case ListLiteral(elements=elements):
                 return [self.eval(elem) for elem in elements]
+
+            case TupleLiteral(elements=elements):
+                return tuple(self.eval(elem) for elem in elements)
 
             # Variables and constructors
             case Variable(name=name):
@@ -629,6 +635,34 @@ class Interpreter:
                     tail,
                     tail_val,
                 )
+
+            case ListPattern(patterns=patterns):
+                # Match list pattern
+                match value:
+                    case list() if len(value) == len(patterns):
+                        pass  # Valid list with matching length
+                    case _:
+                        return False
+
+                # Match each element with corresponding pattern
+                for pattern, element in zip(patterns, value):
+                    if not self._match_pattern(pattern, element):
+                        return False
+                return True
+
+            case TuplePattern(patterns=patterns):
+                # Match tuple pattern
+                match value:
+                    case tuple() if len(value) == len(patterns):
+                        pass  # Valid tuple with matching length
+                    case _:
+                        return False
+
+                # Match each element with corresponding pattern
+                for pattern, element in zip(patterns, value):
+                    if not self._match_pattern(pattern, element):
+                        return False
+                return True
 
             case _:
                 raise NotImplementedError(
