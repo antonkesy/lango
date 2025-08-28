@@ -22,8 +22,11 @@ inst (++) :: [a] -> [a] -> [a] {
 };
 
 inst (==) :: [a] -> [a] -> Bool {
-  (==) x y = primListEq x y;
+  (==) x y = listEq x y;
 };
+
+listEq [] [] = True;
+listEq (x:xs) (y:ys) = x == y && listEq xs ys;
 
 inst (!!) :: [a] -> Int -> a {
   (!!) l i = primListIndex l i;
