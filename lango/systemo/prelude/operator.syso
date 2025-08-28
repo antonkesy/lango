@@ -90,3 +90,7 @@ inst (&&) :: Bool -> Bool -> Bool {
 inst (||) :: Bool -> Bool -> Bool {
   (||) x y = primBoolOr x y;
 };
+
+inst (++) :: String -> String -> String {
+  (++) x y = primStringConcat x y;
+};
