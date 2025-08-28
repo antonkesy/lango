@@ -6,6 +6,7 @@ postlude: COMMENT*
 ?stmt: data_decl
      | inst_decl
      | func_def
+     | precedence_decl
 
 // --- Data Declarations ---
 data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)* ";"
@@ -20,6 +21,11 @@ field: ID "::" type_expr
 
 // --- Instance Declarations ---
 inst_decl: "inst" operator_name "::" type_expr "{" func_def "}" ";"
+
+// --- Precedence Declarations ---
+precedence_decl: "infixl" INT symbolic_operator ";"  -> infixl_decl
+               | "infixr" INT symbolic_operator ";"  -> infixr_decl
+               | "infix" INT symbolic_operator ";"   -> infix_decl
 
 // --- Function Signatures and Definitions ---
 

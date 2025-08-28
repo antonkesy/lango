@@ -3,6 +3,7 @@ from typing import Any, List, Union
 from lark import Token, Transformer, Tree
 
 from lango.systemo.ast.nodes import (
+    Associativity,
     ArrowType,
     BoolLiteral,
     ConsPattern,
@@ -30,6 +31,7 @@ from lango.systemo.ast.nodes import (
     NegativeFloat,
     NegativeInt,
     Pattern,
+    PrecedenceDeclaration,
     Program,
     RecordConstructor,
     Statement,
@@ -509,6 +511,21 @@ class ASTTransformer(Transformer):
         function_definition = items[2]  # This should be a FunctionDefinition
 
         return InstanceDeclaration(instance_name, type_signature, function_definition)
+
+    def infixl_decl(self, items: List[Any]) -> PrecedenceDeclaration:
+        precedence = int(items[0].value if hasattr(items[0], 'value') else items[0])
+        operator = str(items[1].value if hasattr(items[1], 'value') else items[1])
+        return PrecedenceDeclaration(precedence, Associativity.LEFT, operator)
+
+    def infixr_decl(self, items: List[Any]) -> PrecedenceDeclaration:
+        precedence = int(items[0].value if hasattr(items[0], 'value') else items[0])
+        operator = str(items[1].value if hasattr(items[1], 'value') else items[1])
+        return PrecedenceDeclaration(precedence, Associativity.RIGHT, operator)
+
+    def infix_decl(self, items: List[Any]) -> PrecedenceDeclaration:
+        precedence = int(items[0].value if hasattr(items[0], 'value') else items[0])
+        operator = str(items[1].value if hasattr(items[1], 'value') else items[1])
+        return PrecedenceDeclaration(precedence, Associativity.NONE, operator)
 
     # Root
     def start(self, items: List[Any]) -> Program:

@@ -1,8 +1,15 @@
 from abc import ABC
 from dataclasses import dataclass
 from typing import Any, List, Optional, Union
+from enum import Enum
 
 from lango.systemo.typechecker.systemo_types import Type
+
+
+class Associativity(Enum):
+    LEFT = "left"
+    RIGHT = "right" 
+    NONE = "none"
 
 
 @dataclass
@@ -257,6 +264,14 @@ class InstanceDeclaration(ASTNode):
 
 
 @dataclass
+class PrecedenceDeclaration(ASTNode):
+    precedence: int
+    associativity: Associativity
+    operator: str
+    ty: Optional[Type] = None
+
+
+@dataclass
 class Program(ASTNode):
     statements: List["Statement"]
     ty: Optional[Type] = None
@@ -302,6 +317,7 @@ type Statement = Union[
     DataDeclaration,
     FunctionDefinition,
     InstanceDeclaration,
+    PrecedenceDeclaration,
     LetStatement,
     Expression,
 ]

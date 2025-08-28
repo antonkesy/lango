@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
 from lango.systemo.ast.nodes import (
+    Associativity,
     ArrowType,
     ASTNode,
     BoolLiteral,
@@ -27,6 +28,7 @@ from lango.systemo.ast.nodes import (
     NegativeFloat,
     NegativeInt,
     Pattern,
+    PrecedenceDeclaration,
     Program,
     Statement,
     StringLiteral,
@@ -119,10 +121,17 @@ class TypeInferrer:
         self.instances: Dict[str, List[Tuple[Type, FunctionDefinition]]] = (
             {}
         )  # instance_name -> [(type, func_def)]
+        self.precedences: Dict[str, Tuple[int, Associativity]] = (
+            {}
+        )  # operator -> (precedence, associativity)
 
     def fresh_type_var(self) -> TypeVar:
         var_name = self.fresh_var_gen.fresh()
         return TypeVar(var_name)
+
+    def handle_precedence_decl(self, decl: PrecedenceDeclaration) -> None:
+        """Store precedence declaration for an operator."""
+        self.precedences[decl.operator] = (decl.precedence, decl.associativity)
 
     def infer_data_decl(self, node: DataDeclaration) -> TypeEnvironment:
         type_name = node.type_name
@@ -1619,12 +1628,14 @@ class TypeInferrer:
             ),
         )
 
-        # First pass: collect data declarations
+        # First pass: collect data declarations and precedence declarations
         for stmt in ast.statements:
             match stmt:
                 case DataDeclaration() as data_decl:
                     data_env = self.infer_data_decl(data_decl)
                     env = env.extend_many(data_env.bindings)
+                case PrecedenceDeclaration() as prec_decl:
+                    self.handle_precedence_decl(prec_decl)
                 case _:
                     continue
 
