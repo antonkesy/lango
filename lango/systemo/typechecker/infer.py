@@ -376,13 +376,55 @@ class TypeInferrer:
         name: str,
         arg_type: Type,
         env: TypeEnvironment,
+        expected_arity: Optional[int] = None,
     ) -> Optional[TypeScheme]:
-        """Try to resolve an overloaded function based on argument type"""
+        """Try to resolve an overloaded function based on argument type and expected arity"""
         if name not in self.instances:
             return None
 
-        # For unary operations, prefer exact arity matches
-        # First pass: look for exact arity matches (single parameter functions)
+        def count_function_arity(func_type: Type) -> int:
+            """Count how many parameters a function type takes"""
+            arity = 0
+            current_type = func_type
+            while isinstance(current_type, FunctionType):
+                arity += 1
+                current_type = current_type.result
+            return arity
+
+        # If we have an expected arity, prioritize functions matching that arity
+        if expected_arity is not None:
+            for instance_type, func_def in self.instances[name]:
+                match instance_type:
+                    case FunctionType(param=param_type, result=result_type):
+                        # Check if arity matches expected
+                        if count_function_arity(instance_type) == expected_arity:
+                            try:
+                                # Try to unify the parameter type with the argument type
+                                unify_one(param_type, arg_type)
+                                # If unification succeeds, return this instance's type
+                                return TypeScheme(set(), instance_type)
+                            except UnificationError:
+                                continue
+                    case _:
+                        continue
+
+        # Fallback: First pass - prefer multi-parameter functions that can be partially applied
+        for instance_type, func_def in self.instances[name]:
+            match instance_type:
+                case FunctionType(param=param_type, result=result_type):
+                    # Only consider multi-parameter functions in first pass
+                    if isinstance(result_type, FunctionType):
+                        try:
+                            # Try to unify the parameter type with the argument type
+                            unify_one(param_type, arg_type)
+                            # If unification succeeds, return this instance's type
+                            return TypeScheme(set(), instance_type)
+                        except UnificationError:
+                            continue
+                case _:
+                    continue
+
+        # Second pass: if no multi-parameter function found, try unary functions
         for instance_type, func_def in self.instances[name]:
             match instance_type:
                 case FunctionType(param=param_type, result=result_type):
@@ -398,23 +440,67 @@ class TypeInferrer:
                 case _:
                     continue
 
-        # Second pass: if no unary function found, try binary/multi-parameter functions
-        for instance_type, func_def in self.instances[name]:
-            match instance_type:
-                case FunctionType(param=param_type, result=result_type):
-                    # Only consider multi-parameter functions in second pass
-                    if isinstance(result_type, FunctionType):
-                        try:
-                            # Try to unify the parameter type with the argument type
-                            unify_one(param_type, arg_type)
-                            # If unification succeeds, return this instance's type
-                            return TypeScheme(set(), instance_type)
-                        except UnificationError:
-                            continue
-                case _:
-                    continue
-
         return None
+
+    def _infer_operator_application(self, func_app: FunctionApplication, env: TypeEnvironment, expected_arity: int) -> InferenceResult:
+        """Helper method to infer operator applications with expected arity"""
+        # First, infer the argument type
+        arg_type, arg_subst = self.infer_expr(func_app.argument, env)
+
+        # Initialize combined_subst and func_type
+        combined_subst = arg_subst
+        func_type = None
+
+        # Check if this is potentially an overloaded function
+        match func_app.function:
+            case Variable(name=func_name) if func_name in self.instances:
+                # Try to resolve overloaded function based on argument type and expected arity
+                resolved_scheme = self.resolve_overloaded_function(
+                    func_name,
+                    arg_type.apply_substitution(arg_subst),
+                    env,
+                    expected_arity=expected_arity,
+                )
+                if resolved_scheme is not None:
+                    func_type = resolved_scheme.instantiate(self.fresh_var_gen)
+                else:
+                    # Fallback to normal resolution
+                    func_type, func_subst = self.infer_expr(func_app.function, env)
+                    combined_subst = func_subst.compose(arg_subst)
+            case _:
+                # Normal function application
+                func_type, func_subst = self.infer_expr(func_app.function, env)
+                combined_subst = func_subst.compose(arg_subst)
+
+        if func_type is None:
+            raise TypeInferenceError(
+                f"Could not resolve function type for {func_app.function}",
+            )
+
+        # Create fresh return type
+        return_type = self.fresh_type_var()
+        expected_func_type = FunctionType(
+            arg_type.apply_substitution(combined_subst),
+            return_type,
+        )
+
+        # Unify the function type with the expected function type
+        try:
+            func_unify = unify_one(
+                func_type.apply_substitution(combined_subst),
+                expected_func_type,
+            )
+            final_subst = combined_subst.compose(func_unify)
+            final_return_type = return_type.apply_substitution(final_subst)
+
+            # Set the expression type and return
+            func_app.ty = final_return_type
+            return final_return_type, final_subst
+
+        except UnificationError as e:
+            raise TypeInferenceError(
+                f"Function application type mismatch: expected {expected_func_type}, got {func_type.apply_substitution(combined_subst)}",
+            ) from e
 
     def infer_expr(self, expr: Expression, env: TypeEnvironment) -> InferenceResult:
         match expr:
@@ -494,12 +580,13 @@ class TypeInferrer:
                 if len(operands) == 1:
                     # Unary operation: f x
                     func_app = FunctionApplication(operator_var, operands[0])
-                    return self.infer_expr(func_app, env)
+                    # Pass expected arity through a custom inference
+                    return self._infer_operator_application(func_app, env, expected_arity=1)
                 elif len(operands) == 2:
                     # Binary operation: ((f x) y)
                     partial_app = FunctionApplication(operator_var, operands[0])
                     full_app = FunctionApplication(partial_app, operands[1])
-                    return self.infer_expr(full_app, env)
+                    return self._infer_operator_application(full_app, env, expected_arity=2)
                 else:
                     raise TypeInferenceError(
                         f"Unsupported arity for operator {operator}: {len(operands)}"
@@ -802,6 +889,20 @@ class TypeInferrer:
                     f"Function {function_name} has clauses with different arities",
                 )
 
+        # Create a fresh type variable for the function to support recursion
+        # This will be unified with the inferred type later
+        func_type_var = self.fresh_type_var()
+        if first_arity == 0:
+            # For nullary functions, the type variable is directly the result type
+            recursive_env = env.extend(function_name, TypeScheme(set(), func_type_var))
+        else:
+            # For functions with parameters, create a function type with fresh parameter types
+            param_types = [self.fresh_type_var() for _ in range(first_arity)]
+            recursive_func_type = func_type_var
+            for param_type in reversed(param_types):
+                recursive_func_type = FunctionType(param_type, recursive_func_type)
+            recursive_env = env.extend(function_name, TypeScheme(set(), recursive_func_type))
+
         if first_arity == 0:
             # Nullary functions - all clauses should return the same type
             clause_types = []
@@ -810,7 +911,7 @@ class TypeInferrer:
             for func_def in func_defs:
                 body_type, body_subst = self.infer_expr(
                     func_def.body,
-                    env.apply_substitution(final_subst),
+                    recursive_env.apply_substitution(final_subst),
                 )
                 final_subst = final_subst.compose(body_subst)
                 clause_types.append(body_type.apply_substitution(final_subst))
@@ -829,6 +930,18 @@ class TypeInferrer:
                     raise TypeInferenceError(
                         f"Function {function_name} clauses have incompatible return types: {e}",
                     )
+
+            # Unify the assumed function type with the inferred type
+            try:
+                unify_subst = unify_one(
+                    func_type_var.apply_substitution(final_subst),
+                    unified_type.apply_substitution(final_subst),
+                )
+                final_subst = final_subst.compose(unify_subst)
+            except UnificationError as e:
+                raise TypeInferenceError(
+                    f"Function {function_name} recursive type mismatch: {e}",
+                )
 
             final_type = unified_type.apply_substitution(final_subst)
             scheme = generalize(
@@ -849,7 +962,7 @@ class TypeInferrer:
 
         for func_def in func_defs:
             # Extend environment with pattern bindings for this clause
-            clause_env = env
+            clause_env = recursive_env
             clause_subst = final_subst
 
             for pattern, param_type in zip(func_def.patterns, param_types):
@@ -895,6 +1008,21 @@ class TypeInferrer:
                 param_type.apply_substitution(final_subst),
                 func_type,
             )
+
+        # Unify the assumed recursive function type with the inferred type
+        assumed_recursive_type = recursive_env[function_name].instantiate(self.fresh_var_gen)
+        try:
+            unify_subst = unify_one(
+                assumed_recursive_type.apply_substitution(final_subst),
+                func_type.apply_substitution(final_subst),
+            )
+            final_subst = final_subst.compose(unify_subst)
+        except UnificationError as e:
+            raise TypeInferenceError(
+                f"Function {function_name} recursive type mismatch: {e}",
+            )
+
+        func_type = func_type.apply_substitution(final_subst)
 
         # Generalize
         scheme = generalize(

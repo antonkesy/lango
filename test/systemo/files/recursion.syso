@@ -1,0 +1,6 @@
+rec 0 = 0;
+rec n = rec (n - 1);
+
+main = do {
+  putStr (show (rec (5)));
+};
