@@ -25,6 +25,10 @@ install-dev:
 	.venv/bin/pip install -e .[dev]
 
 # MiniO
+minio-parse: install
+	. .venv/bin/activate && \
+	lango parse minio examples/minio/example.minio
+
 minio-run: install
 	. .venv/bin/activate && \
 	lango run minio examples/minio/example.minio
@@ -48,6 +52,10 @@ minio-typecheck: install
 	lango typecheck minio examples/minio/example.minio
 
 # SystemO
+systemo-parse: install
+	. .venv/bin/activate && \
+	lango parse systemo examples/systemo/example.syso
+
 systemo-run: install
 	. .venv/bin/activate && \
 	lango run systemo examples/systemo/example.syso

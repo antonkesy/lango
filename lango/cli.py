@@ -1,4 +1,5 @@
 from pathlib import Path
+import pprint
 from typing import Any
 
 import typer
@@ -17,6 +18,24 @@ from lango.systemo.typechecker.typecheck import type_check as systemo_type_check
 
 app = typer.Typer()
 console = Console()
+
+
+@app.command()
+def parse(
+    lang: str = typer.Argument(..., help="systemo|minio"),
+    input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
+) -> int:
+    match lang:
+        case "systemo":
+            ast = systemo_parse(input_file)
+        case "minio":
+            ast = minio_parse(input_file)
+            return minio_interpret(ast).exit_code
+        case _:
+            console.print(f"Unknown language: {lang}", style="bold red")
+            return 1
+    pprint.pprint(ast, width=120, depth=10)
+    return 0
 
 
 @app.command()
