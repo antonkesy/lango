@@ -19,11 +19,34 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Instance Declarations ---
-inst_decl: "inst" ID "::" type_expr ";" func_def
+inst_decl: "inst" operator_name "::" type_expr ";" func_def
 
 // --- Function Signatures and Definitions ---
 
-func_def: ID pattern* "=" expr ";"
+operator_name: ID
+             | "(" symbolic_operator ")"
+
+symbolic_operator: QMARK
+                 | "+"
+                 | "-"
+                 | "*"
+                 | "/"
+                 | "^"
+                 | "^^"
+                 | "**"
+                 | "=="
+                 | "/="
+                 | "<"
+                 | "<="
+                 | ">"
+                 | ">="
+                 | "&&"
+                 | "||"
+                 | "!!"
+                 | AT
+                 | COLON
+
+func_def: operator_name pattern* "=" expr ";"
 
 // --- Expressions ---
 // Arithmetic
@@ -71,8 +94,11 @@ stmt_list: (do_stmt ";")+
           | comp_expr GTEQ concat_expr -> gteq
           | concat_expr
 
-?concat_expr: concat_expr "++" add_expr -> concat
-            | add_expr
+?concat_expr: concat_expr "++" cons_expr -> concat
+            | cons_expr
+
+?cons_expr: cons_expr COLON add_expr   -> cons_op
+          | add_expr
 
 ?add_expr: add_expr PLUS mul_expr      -> add
          | add_expr MINUS mul_expr     -> sub
@@ -88,7 +114,11 @@ stmt_list: (do_stmt ";")+
 
 ?unary_expr: NOT unary_expr            -> not
            | MINUS unary_expr           -> neg
-           | index_expr
+           | QMARK unary_expr           -> prefix_qmark
+           | postfix_expr
+
+?postfix_expr: postfix_expr AT         -> postfix_at
+             | index_expr
 
 ?index_expr: index_expr "!!" app_expr  -> index
            | app_expr
@@ -101,7 +131,7 @@ stmt_list: (do_stmt ";")+
           | "(" MINUS FLOAT ")"    -> neg_float
           | constructor_expr
           | UIDENT                 -> constructor
-          | ID                     -> var
+          | operator_name          -> var
           | literal
 
 constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
@@ -122,6 +152,7 @@ field_assign: ID "=" expr
 ?pattern: constructor_pattern
         | cons_pattern
         | UIDENT                 -> constructor_pattern_bare
+        | "(" symbolic_operator ")" -> symbolic_operator_pattern
         | ID
         | literal
         | "(" MINUS INT ")"      -> neg_int
@@ -147,6 +178,8 @@ UIDENT: TYPE
 STRING: /"[^"]*"/
 INT: /[0-9]+/
 FLOAT: /[0-9]+\.[0-9]+/
+QMARK: "?"
+AT: "@"
 
 COMMENT: /--.*/
 %ignore COMMENT

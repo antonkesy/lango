@@ -146,6 +146,46 @@ class ASTTransformer(Transformer):
             case value:
                 return Variable(str(value))
 
+    def operator_name(self, items: List[Any]) -> str:
+        """Transform operator name (either ID or symbolic operator in parens)."""
+        match items[0]:
+            case Token(value=value):
+                return value
+            case value:
+                return str(value)
+
+    def symbolic_operator(self, items: List[Any]) -> str:
+        """Transform symbolic operator token."""
+        match items[0]:
+            case Token(value=value):
+                return f"({value})"  # Wrap in parentheses for symbolic operators
+            case value:
+                return f"({str(value)})"
+
+    def prefix_qmark(self, items: List[Any]) -> FunctionApplication:
+        """Transform prefix ? operator into function application."""
+        # items[0] is the QMARK token, items[1] is the operand
+        qmark_var = Variable("(?)")  # Reference to the (?) function
+        operand = items[1]
+        return FunctionApplication(qmark_var, operand)
+
+    def postfix_at(self, items: List[Any]) -> FunctionApplication:
+        """Transform postfix @ operator into function application."""
+        # items[0] is the operand, items[1] is the AT token
+        at_var = Variable("(@)")  # Reference to the (@) function
+        operand = items[0]
+        return FunctionApplication(at_var, operand)
+
+    def cons_op(self, items: List[Any]) -> FunctionApplication:
+        """Transform binary : operator into function application."""
+        # items[0] is the left operand, items[1] is the COLON token, items[2] is the right operand
+        colon_var = Variable("(:)")  # Reference to the (:) function
+        left_operand = items[0]
+        right_operand = items[2]
+        # Create nested function application: ((:) left) right
+        partial_app = FunctionApplication(colon_var, left_operand)
+        return FunctionApplication(partial_app, right_operand)
+
     def constructor(self, items: List[Any]) -> Union[Constructor, DataConstructor]:
         """Transform constructor - either reference or definition based on context."""
         # For constructor references (UIDENT -> constructor), we get just a token
@@ -358,6 +398,23 @@ class ASTTransformer(Transformer):
                 constructor_name = str(value)
         # Bare constructor pattern has no sub-patterns
         return ConstructorPattern(constructor_name, [])
+
+    def operator_pattern(self, items: List[Any]) -> VariablePattern:
+        """Transform operator pattern into variable pattern."""
+        # items[0] should be the operator name string
+        operator_name = items[0]
+        return VariablePattern(operator_name)
+
+    def symbolic_operator_pattern(self, items: List[Any]) -> VariablePattern:
+        """Transform symbolic operator pattern into variable pattern."""
+        # items[0] should be the symbolic operator string
+        symbolic_op = items[0]
+        # Wrap in parentheses to match the operator name format
+        if isinstance(symbolic_op, str):
+            operator_name = f"({symbolic_op})"
+        else:
+            operator_name = f"({str(symbolic_op)})"
+        return VariablePattern(operator_name)
 
     def cons_pattern(self, items: List[Any]) -> ConsPattern:
         # items = [head_pattern, COLON_token, tail_pattern]

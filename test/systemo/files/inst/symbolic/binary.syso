@@ -1,0 +1,10 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "3"
+
+inst (:) :: Int -> Int -> Int;
+  a (:) b = a + b;
+
+main = do {
+  putStr (show (1 : 2));
+};
