@@ -1,0 +1,92 @@
+-- Basic arithmetic operators
+inst (+) :: Int -> Int -> Int {
+  (+) x y = primIntAdd x y;
+};
+
+inst (+) :: Float -> Float -> Float {
+  (+) x y = primFloatAdd x y;
+};
+
+inst (-) :: Int -> Int -> Int {
+  (-) x y = primIntSub x y;
+};
+
+inst (-) :: Float -> Float -> Float {
+  (-) x y = primFloatSub x y;
+};
+
+inst (*) :: Int -> Int -> Int {
+  (*) x y = primIntMul x y;
+};
+
+inst (*) :: Float -> Float -> Float {
+  (*) x y = primFloatMul x y;
+};
+
+inst (/) :: Float -> Float -> Float {
+  (/) x y = primFloatDiv x y;
+};
+
+inst (<) :: Int -> Int -> Bool {
+  (<) x y = primIntLt x y;
+};
+
+inst (<) :: Float -> Float -> Bool {
+  (<) x y = primFloatLt x y;
+};
+
+inst (<=) :: Int -> Int -> Bool {
+  (<=) x y = primIntLe x y;
+};
+
+inst (<=) :: Float -> Float -> Bool {
+  (<=) x y = primFloatLe x y;
+};
+
+inst (>) :: Int -> Int -> Bool {
+  (>) x y = primIntGt x y;
+};
+
+inst (>) :: Float -> Float -> Bool {
+  (>) x y = primFloatGt x y;
+};
+
+inst (>=) :: Int -> Int -> Bool {
+  (>=) x y = primIntGe x y;
+};
+
+inst (>=) :: Float -> Float -> Bool {
+  (>=) x y = primFloatGe x y;
+};
+
+inst (==) :: Int -> Int -> Bool {
+  (==) x y = primIntEq x y;
+};
+
+inst (==) :: Float -> Float -> Bool {
+  (==) x y = primFloatEq x y;
+};
+
+inst (==) :: Bool -> Bool -> Bool {
+  (==) x y = primBoolEq x y;
+};
+
+inst (/=) :: Int -> Int -> Bool {
+  (/=) x y = primIntNe x y;
+};
+
+inst (/=) :: Float -> Float -> Bool {
+  (/=) x y = primFloatNe x y;
+};
+
+inst (/=) :: Bool -> Bool -> Bool {
+  (/=) x y = primBoolNe x y;
+};
+
+inst (&&) :: Bool -> Bool -> Bool {
+  (&&) x y = primBoolAnd x y;
+};
+
+inst (||) :: Bool -> Bool -> Bool {
+  (||) x y = primBoolOr x y;
+};

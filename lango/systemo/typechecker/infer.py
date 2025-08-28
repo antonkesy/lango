@@ -1428,13 +1428,261 @@ class TypeInferrer:
         error_type = FunctionType(STRING_TYPE, TypeVar("a"))
         env = env.extend("error", TypeScheme({"a"}, error_type))
 
-        # Comparison operators
-        # (==) :: a -> a -> Bool
-        eq_type = FunctionType(
-            TypeVar("a"),
-            FunctionType(TypeVar("a"), TypeCon("Bool")),
+        # builinPrimities to fix chicken and egg problem
+        env = env.extend(
+            "primIntAdd",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, INT_TYPE),
+                ),
+            ),
         )
-        env = env.extend("==", TypeScheme({"a"}, eq_type))
+
+        env = env.extend(
+            "primFloatAdd",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, FLOAT_TYPE),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntSub",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, INT_TYPE),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatSub",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, FLOAT_TYPE),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntMul",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, INT_TYPE),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatMul",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, FLOAT_TYPE),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatDiv",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, FLOAT_TYPE),
+                ),
+            ),
+        )
+
+        # Comparison primitives
+        env = env.extend(
+            "primIntLt",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatLt",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntLe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatLe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntGt",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatGt",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntGe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatGe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntEq",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatEq",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primBoolEq",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primIntNe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    INT_TYPE,
+                    FunctionType(INT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatNe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    FLOAT_TYPE,
+                    FunctionType(FLOAT_TYPE, TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primBoolNe",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        # Logical primitives
+        env = env.extend(
+            "primBoolAnd",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+            ),
+        )
+
+        env = env.extend(
+            "primBoolOr",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    TypeCon("Bool"),
+                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
+                ),
+            ),
+        )
 
         # First pass: collect data declarations
         for stmt in ast.statements:
