@@ -416,6 +416,11 @@ class TypeInferrer:
         if name not in self.instances:
             return None
 
+        # If the argument type is a type variable, we don't have enough information to resolve overloading
+        # Let the normal type inference handle it and constrain the type variable later
+        if isinstance(arg_type, TypeVar):
+            return None
+
         def count_function_arity(func_type: Type) -> int:
             """Count how many parameters a function type takes"""
             arity = 0
@@ -597,17 +602,16 @@ class TypeInferrer:
 
             # Variables and constructors
             case Variable(name=var_name):
-                # Check if this is an overloaded function first
-                if var_name in self.instances:
-                    # For overloaded functions, we can't resolve the type without context,
-                    # so we'll let the function application handler deal with it
-                    # Return a placeholder type that will be resolved during function application
-                    placeholder_type = self.fresh_type_var()
-                    expr.ty = placeholder_type
-                    return placeholder_type, TypeSubstitution()
-
                 scheme = env.lookup(var_name)
                 if scheme is None:
+                    # Check if this is an overloaded function as fallback
+                    if var_name in self.instances:
+                        # For overloaded functions, we can't resolve the type without context,
+                        # so we'll let the function application handler deal with it
+                        # Return a placeholder type that will be resolved during function application
+                        placeholder_type = self.fresh_type_var()
+                        expr.ty = placeholder_type
+                        return placeholder_type, TypeSubstitution()
                     raise TypeInferenceError(f"Unknown variable: {var_name}")
                 inferred_type = scheme.instantiate(self.fresh_var_gen)
                 expr.ty = inferred_type
@@ -1718,205 +1722,10 @@ class TypeInferrer:
         # Create dummy function definition for built-in operators
         from lango.systemo.ast.nodes import FunctionDefinition, IntLiteral
 
-        dummy_func_def = FunctionDefinition("dummy", [], IntLiteral(0))
-
-        # Add built-in operator instances
-        # Arithmetic operators for Int
-        self.instances["+"] = [
-            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
-        ]
-        self.instances["-"] = [
-            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
-        ]
-        self.instances["*"] = [
-            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
-        ]
-        self.instances["/"] = [
-            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
-        ]
-        self.instances["^"] = [
-            (FunctionType(INT_TYPE, FunctionType(INT_TYPE, INT_TYPE)), dummy_func_def),
-        ]
-
-        # Arithmetic operators for Float
-        self.instances["+"].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
-                dummy_func_def,
-            ),
-        )
-        self.instances["-"].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
-                dummy_func_def,
-            ),
-        )
-        self.instances["*"].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
-                dummy_func_def,
-            ),
-        )
-        self.instances["/"].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
-                dummy_func_def,
-            ),
-        )
-        self.instances["^^"] = [
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, FLOAT_TYPE)),
-                dummy_func_def,
-            ),
-        ]
-
-        # Comparison operators for Int
-        self.instances["<"] = [
-            (
-                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        ]
-        self.instances["<="] = [
-            (
-                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        ]
-        self.instances[">"] = [
-            (
-                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        ]
-        self.instances[">="] = [
-            (
-                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        ]
-        self.instances["=="] = [
-            (
-                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        ]
-        self.instances["/="] = [
-            (
-                FunctionType(INT_TYPE, FunctionType(INT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        ]
-
-        # Comparison operators for Float
-        self.instances["<"].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        )
-        self.instances["<="].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        )
-        self.instances[">"].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        )
-        self.instances[">="].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        )
-        self.instances["=="].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        )
-        self.instances["/="].append(
-            (
-                FunctionType(FLOAT_TYPE, FunctionType(FLOAT_TYPE, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
-        )
-
-        # Comparison operators for Bool
-        self.instances["=="].append(
-            (
-                FunctionType(
-                    TypeCon("Bool"),
-                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
-                ),
-                dummy_func_def,
-            ),
-        )
-        self.instances["/="].append(
-            (
-                FunctionType(
-                    TypeCon("Bool"),
-                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
-                ),
-                dummy_func_def,
-            ),
-        )
-
-        # Logical operators
-        self.instances["&&"] = [
-            (
-                FunctionType(
-                    TypeCon("Bool"),
-                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
-                ),
-                dummy_func_def,
-            ),
-        ]
-        self.instances["||"] = [
-            (
-                FunctionType(
-                    TypeCon("Bool"),
-                    FunctionType(TypeCon("Bool"), TypeCon("Bool")),
-                ),
-                dummy_func_def,
-            ),
-        ]
-
-        # String concatenation
-        self.instances["++"] = [
-            (
-                FunctionType(
-                    TypeCon("String"),
-                    FunctionType(TypeCon("String"), TypeCon("String")),
-                ),
-                dummy_func_def,
-            ),
-        ]
-
-        # List operations
-        list_elem_type = TypeVar("a")
-        list_type = TypeApp(TypeCon("List"), list_elem_type)
-        self.instances["!!"] = [
-            (
-                FunctionType(list_type, FunctionType(INT_TYPE, list_elem_type)),
-                dummy_func_def,
-            ),
-        ]
-        self.instances["++"].append(
-            (
-                FunctionType(list_type, FunctionType(list_type, list_type)),
-                dummy_func_def,
-            ),
-        )
-        self.instances["=="].append(
-            (
-                FunctionType(list_type, FunctionType(list_type, TypeCon("Bool"))),
-                dummy_func_def,
-            ),
+        dummy_func_def = FunctionDefinition(
+            function_name="_dummy",
+            patterns=[],
+            body=IntLiteral(0),
         )
 
         # Show function instances for different types
@@ -1987,6 +1796,12 @@ class TypeInferrer:
                     env = env.extend(function_name, scheme)
             except TypeInferenceError as e:
                 # Continue with other functions even if one fails
+                # Debug: print available instances for < operator
+                if function_name == "abs":
+                    print(
+                        f"DEBUG: Available instances for '<': {self.instances.get('<', 'NOT FOUND')}",
+                    )
+                    print(f"DEBUG: All instance keys: {list(self.instances.keys())}")
                 raise TypeInferenceError(
                     f"Failed to infer type for function {function_name}: {e}",
                 ) from e

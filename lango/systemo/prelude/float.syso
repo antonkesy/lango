@@ -1,0 +1,51 @@
+inst (-) :: Float -> Float {
+  (-) x = primFloatNeg x;
+};
+
+inst (+) :: Float -> Float -> Float {
+  (+) x y = primFloatAdd x y;
+};
+
+inst (-) :: Float -> Float -> Float {
+  (-) x y = primFloatSub x y;
+};
+
+inst (*) :: Float -> Float -> Float {
+  (*) x y = primFloatMul x y;
+};
+
+inst (/) :: Float -> Float -> Float {
+  (/) x y = primFloatDiv x y;
+};
+
+inst (<) :: Float -> Float -> Bool {
+  (<) x y = primFloatLt x y;
+};
+
+inst (<=) :: Float -> Float -> Bool {
+  (<=) x y = primFloatLe x y;
+};
+
+inst (>) :: Float -> Float -> Bool {
+  (>) x y = primFloatGt x y;
+};
+
+inst (>=) :: Float -> Float -> Bool {
+  (>=) x y = primFloatGe x y;
+};
+
+inst (==) :: Float -> Float -> Bool {
+  (==) x y = primFloatEq x y;
+};
+
+inst (/=) :: Float -> Float -> Bool {
+  (/=) x y = not (x == y);
+};
+
+inst (^^) :: Float -> Float -> Float {
+  (^) x y = TODO;
+};
+
+inst (**) :: Float -> Float -> Float {
+  (^) x y = TODO;
+};

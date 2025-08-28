@@ -1,2 +1,18 @@
 not True  = False;
 not False = True;
+
+inst (==) :: Bool -> Bool -> Bool {
+  (==) x y = primBoolEq x y;
+};
+
+inst (/=) :: Bool -> Bool -> Bool {
+  (/=) x y = not (x == y);
+};
+
+inst (&&) :: Bool -> Bool -> Bool {
+  (&&) x y = primBoolAnd x y;
+};
+
+inst (||) :: Bool -> Bool -> Bool {
+  (||) x y = primBoolOr x y;
+};

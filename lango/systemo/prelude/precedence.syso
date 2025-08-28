@@ -1,0 +1,16 @@
+infixl 6 +;
+infixl 6 -;
+infixl 7 *;
+infixl 7 /;
+infixr 8 **;
+infixr 8 ^^;
+infixr 8 ^;
+infix  4 ==;
+infix  4 /=;
+infix  4 <;
+infix  4 <=;
+infix  4 >;
+infix  4 >=;
+infixr 3 &&;
+infixr 2 ||;
+infixr 5 ++;

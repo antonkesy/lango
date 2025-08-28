@@ -12,3 +12,19 @@ tail (x:xs) = xs;
 
 map x [] = [];
 map f (x:xs) = [f x] ++ map f xs;
+
+inst (/=) :: [a] -> [a] -> Bool {
+  (/=) x y = not (x == y);
+};
+
+inst (++) :: [a] -> [a] -> [a] {
+  (++) x y = primListConcat x y;
+};
+
+inst (==) :: [a] -> [a] -> Bool {
+  (==) x y = primListEq x y;
+};
+
+inst (!!) :: [a] -> Int -> a {
+  (!!) l i = primListIndex l i;
+};

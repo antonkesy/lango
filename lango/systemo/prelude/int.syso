@@ -1,0 +1,47 @@
+inst (-) :: Int -> Int {
+  (-) x = primIntNeg x;
+};
+
+inst (+) :: Int -> Int -> Int {
+  (+) x y = primIntAdd x y;
+};
+
+inst (-) :: Int -> Int -> Int {
+  (-) x y = primIntSub x y;
+};
+
+inst (*) :: Int -> Int -> Int {
+  (*) x y = primIntMul x y;
+};
+
+inst (/) :: Int -> Int -> Float {
+  (/) x y = primIntDiv x y;
+};
+
+inst (<) :: Int -> Int -> Bool {
+  (<) x y = primIntLt x y;
+};
+
+inst (<=) :: Int -> Int -> Bool {
+  (<=) x y = primIntLe x y;
+};
+
+inst (>) :: Int -> Int -> Bool {
+  (>) x y = primIntGt x y;
+};
+
+inst (>=) :: Int -> Int -> Bool {
+  (>=) x y = primIntGe x y;
+};
+
+inst (==) :: Int -> Int -> Bool {
+  (==) x y = primIntEq x y;
+};
+
+inst (/=) :: Int -> Int -> Bool {
+  (/=) x y = not (x == y);
+};
+
+inst (^) :: Int -> Int -> Int {
+  (^) x y = TODO;
+};
