@@ -156,25 +156,13 @@ class ASTTransformer(Transformer):
 
     def symbolic_operator(self, items: List[Any]) -> str:
         """Transform symbolic operator token."""
+        if not items:
+            return ""  # Handle empty symbolic_operator rules
         match items[0]:
             case Token(value=value):
                 return f"({value})"  # Wrap in parentheses for symbolic operators
             case value:
                 return f"({str(value)})"
-
-    def prefix_qmark(self, items: List[Any]) -> FunctionApplication:
-        """Transform prefix ? operator into function application."""
-        # items[0] is the QMARK token, items[1] is the operand
-        qmark_var = Variable("(?)")  # Reference to the (?) function
-        operand = items[1]
-        return FunctionApplication(qmark_var, operand)
-
-    def postfix_at(self, items: List[Any]) -> FunctionApplication:
-        """Transform postfix @ operator into function application."""
-        # items[0] is the operand, items[1] is the AT token
-        at_var = Variable("(@)")  # Reference to the (@) function
-        operand = items[0]
-        return FunctionApplication(at_var, operand)
 
     def cons_op(self, items: List[Any]) -> FunctionApplication:
         """Transform binary : operator into function application."""
