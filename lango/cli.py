@@ -59,7 +59,7 @@ def run(
 def types(
     lang: str = typer.Argument(..., help="systemo|minio"),
     input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
-) -> None:
+) -> int:
     match lang:
         case "systemo":
             print(systemo_get_type_str(systemo_parse(input_file)))
@@ -67,7 +67,8 @@ def types(
             print(minio_get_type_str(minio_parse(input_file)))
         case _:
             console.print(f"Unknown language: {lang}", style="bold red")
-            return
+            return -1
+    return 0
 
 
 @app.command()
