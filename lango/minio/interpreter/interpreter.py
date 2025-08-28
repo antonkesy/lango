@@ -34,6 +34,7 @@ from lango.minio.ast.nodes import (
     MulOperation,
     NegativeFloat,
     NegativeInt,
+    NegOperation,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -323,6 +324,8 @@ class Interpreter:
                 return self.eval(left) or self.eval(right)
             case NotOperation(operand=operand):
                 return not self.eval(operand)
+            case NegOperation(operand=operand):
+                return -self.eval(operand)
 
             # String/List operations
             case ConcatOperation(left=left, right=right):
@@ -427,6 +430,7 @@ class Interpreter:
                     | AndOperation()
                     | OrOperation()
                     | NotOperation()
+                    | NegOperation()
                     | ConcatOperation()
                     | IndexOperation()
                     | IfElse()

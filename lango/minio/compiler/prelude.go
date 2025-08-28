@@ -41,6 +41,16 @@ func minioSub(a, b any) any {
 	return nil
 }
 
+func minioNeg(a any) any {
+	switch av := a.(type) {
+	case int:
+		return -av
+	case float64:
+		return -av
+	}
+	return nil
+}
+
 func minioMul(a, b any) any {
 	switch av := a.(type) {
 	case int:

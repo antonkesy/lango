@@ -35,6 +35,7 @@ from lango.minio.ast.nodes import (
     MulOperation,
     NegativeFloat,
     NegativeInt,
+    NegOperation,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -451,6 +452,29 @@ class TypeInferrer:
                     raise TypeInferenceError(
                         f"NOT operation requires Bool operand, got {operand_type}",
                     )
+
+            case NegOperation(operand=operand_expr):
+                operand_type, subst = self.infer_expr(operand_expr, env)
+                # Unary negation works on Int or Float types
+                int_var = self.fresh_type_var()
+                float_var = self.fresh_type_var()
+                try:
+                    # Try Int first
+                    int_unify = unify_one(operand_type, INT_TYPE)
+                    final_subst = subst.compose(int_unify)
+                    expr.ty = INT_TYPE
+                    return INT_TYPE, final_subst
+                except UnificationError:
+                    try:
+                        # Try Float second
+                        float_unify = unify_one(operand_type, FLOAT_TYPE)
+                        final_subst = subst.compose(float_unify)
+                        expr.ty = FLOAT_TYPE
+                        return FLOAT_TYPE, final_subst
+                    except UnificationError:
+                        raise TypeInferenceError(
+                            f"Negation requires numeric operand (Int or Float), got {operand_type}",
+                        )
 
             # String/List operations
             case ConcatOperation(left=left_expr, right=right_expr):
@@ -948,6 +972,7 @@ class TypeInferrer:
                     | AndOperation()
                     | OrOperation()
                     | NotOperation()
+                    | NegOperation()
                     | ConcatOperation()
                     | IndexOperation()
                     | IfElse()
@@ -1007,6 +1032,7 @@ class TypeInferrer:
                 | AndOperation()
                 | OrOperation()
                 | NotOperation()
+                | NegOperation()
                 | ConcatOperation()
                 | IndexOperation()
                 | IfElse()

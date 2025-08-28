@@ -1,0 +1,8 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "5,5"
+main = do {
+  putStr (show (abs (-5)));
+  putStr ",";
+  putStr (show (abs 5));
+};

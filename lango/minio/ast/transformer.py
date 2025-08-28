@@ -38,6 +38,7 @@ from lango.minio.ast.nodes import (
     MulOperation,
     NegativeFloat,
     NegativeInt,
+    NegOperation,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -74,6 +75,9 @@ class ASTTransformer(Transformer):
 
     def _not(self, items: List[Any]) -> NotOperation:
         return NotOperation(items[1])
+
+    def neg(self, items: List[Any]) -> NegOperation:
+        return NegOperation(items[1])
 
     # Literals
     def int(self, items: List[Any]) -> IntLiteral:

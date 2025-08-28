@@ -33,6 +33,7 @@ from lango.minio.ast.nodes import (
     MulOperation,
     NegativeFloat,
     NegativeInt,
+    NegOperation,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -176,6 +177,8 @@ class MinioGoCompiler:
                 referenced.update(self._find_referenced_variables(left))
                 referenced.update(self._find_referenced_variables(right))
             case NotOperation(operand=operand):
+                referenced.update(self._find_referenced_variables(operand))
+            case NegOperation(operand=operand):
                 referenced.update(self._find_referenced_variables(operand))
             case (
                 ConstructorExpression()
@@ -987,6 +990,8 @@ class MinioGoCompiler:
             # Unary operations
             case NotOperation(operand=operand):
                 return f"(!{self._compile_expression(operand)})"
+            case NegOperation(operand=operand):
+                return f"minioNeg({self._compile_expression(operand)})"
 
             # Other operations
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):

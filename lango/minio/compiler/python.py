@@ -32,6 +32,7 @@ from lango.minio.ast.nodes import (
     MulOperation,
     NegativeFloat,
     NegativeInt,
+    NegOperation,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -930,6 +931,8 @@ class MinioCompiler:
             # Unary operations
             case NotOperation(operand=operand):
                 return f"(not {self._compile_expression(operand)})"
+            case NegOperation(operand=operand):
+                return f"(-{self._compile_expression(operand)})"
 
             # Other operations
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):
