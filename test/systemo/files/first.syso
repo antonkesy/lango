@@ -13,9 +13,8 @@ inst second :: (a,b,c) -> b;
 inst third :: (a,b,c) -> c;
   third (x,y,z) = c;
 
-data Point = MkPoint Float Float;
-data CPoint = MkCPoint Float Float Colour;
-
 main = do {
-  putStr (show p);
+  let { pair = (42, "hello"), triple = (True, 100, 'A') };
+  putStr (show (first pair) ++ " " ++ show (second pair));
+  putStr (" " ++ show (first triple) ++ " " ++ show (second triple) ++ " " ++ show (third triple));
 };

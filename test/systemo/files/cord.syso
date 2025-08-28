@@ -13,7 +13,7 @@ inst xcoord :: CPoint -> Float;
 inst ycoord :: CPoint -> Float;
   ycoord (MkCPoint x y c) = y;
 
-distance p = sqrt (sqr (xcoord p) + sqr (ycoord p));
+demo p = (xcoord p) + (ycoord p);
 
 main = do {
   putStr (show p);

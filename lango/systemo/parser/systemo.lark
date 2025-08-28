@@ -87,6 +87,7 @@ stmt_list: (do_stmt ";")+
          | unary_expr
 
 ?unary_expr: NOT unary_expr            -> not
+           | MINUS unary_expr           -> neg
            | index_expr
 
 ?index_expr: index_expr "!!" app_expr  -> index
