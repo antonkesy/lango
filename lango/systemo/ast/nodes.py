@@ -50,131 +50,13 @@ class Constructor(ASTNode):
     ty: Optional[Type] = None
 
 
-# Arithmetic Operations
+# Generic Symbolic Operations
 @dataclass
-class AddOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
+class SymbolicOperation(ASTNode):
+    """Generic symbolic operation node for all operators (binary, unary prefix, unary postfix)."""
 
-
-@dataclass
-class SubOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class MulOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class DivOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class PowIntOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class PowFloatOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-# Comparison Operations
-@dataclass
-class EqualOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class NotEqualOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class LessThanOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class LessEqualOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class GreaterThanOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class GreaterEqualOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-# Logical Operations
-@dataclass
-class AndOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class OrOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class NotOperation(ASTNode):
-    operand: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class NegOperation(ASTNode):
-    operand: "Expression"
-    ty: Optional[Type] = None
-
-
-# String/List Operations
-@dataclass
-class ConcatOperation(ASTNode):
-    left: "Expression"
-    right: "Expression"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class IndexOperation(ASTNode):
-    list_expr: "Expression"
-    index_expr: "Expression"
+    operator: str  # The operator symbol, e.g., "+", "(@)", "(?)", etc.
+    operands: List["Expression"]  # List of operands (1 for unary, 2 for binary)
     ty: Optional[Type] = None
 
 
@@ -382,23 +264,7 @@ type Expression = Union[
     ListLiteral,
     Variable,
     Constructor,
-    AddOperation,
-    SubOperation,
-    MulOperation,
-    DivOperation,
-    PowIntOperation,
-    PowFloatOperation,
-    EqualOperation,
-    NotEqualOperation,
-    LessThanOperation,
-    LessEqualOperation,
-    GreaterThanOperation,
-    GreaterEqualOperation,
-    AndOperation,
-    OrOperation,
-    NotOperation,
-    ConcatOperation,
-    IndexOperation,
+    SymbolicOperation,
     IfElse,
     DoBlock,
     FunctionApplication,

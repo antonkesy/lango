@@ -2,51 +2,34 @@ from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
 from lango.systemo.ast.nodes import (
-    AddOperation,
-    AndOperation,
     ArrowType,
     ASTNode,
     BoolLiteral,
-    ConcatOperation,
     ConsPattern,
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
     DataDeclaration,
-    DivOperation,
     DoBlock,
-    EqualOperation,
     Expression,
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
-    GreaterEqualOperation,
-    GreaterThanOperation,
     GroupedExpression,
     GroupedType,
     IfElse,
-    IndexOperation,
     InstanceDeclaration,
     IntLiteral,
-    LessEqualOperation,
-    LessThanOperation,
     LetStatement,
     ListLiteral,
     LiteralPattern,
-    MulOperation,
     NegativeFloat,
     NegativeInt,
-    NegOperation,
-    NotEqualOperation,
-    NotOperation,
-    OrOperation,
     Pattern,
-    PowFloatOperation,
-    PowIntOperation,
     Program,
     Statement,
     StringLiteral,
-    SubOperation,
+    SymbolicOperation,
     TypeApplication,
     TypeConstructor,
     TypeExpression,
@@ -481,229 +464,22 @@ class TypeInferrer:
                 expr.ty = inferred_type
                 return inferred_type, TypeSubstitution()
 
-            # Arithmetic operations
-            case AddOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case SubOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case MulOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case DivOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case PowIntOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case PowFloatOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            # Comparison operations
-            case EqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case NotEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case LessThanOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case LessEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case GreaterThanOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case GreaterEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            # Logical operations
-            case AndOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_logical_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case OrOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_logical_op(left_expr, right_expr, env)
-                expr.ty = result[0]
-                return result
-
-            case NotOperation(operand=operand_expr):
-                operand_type, subst = self.infer_expr(operand_expr, env)
-                try:
-                    bool_unify = unify_one(operand_type, BOOL_TYPE)
-                    final_subst = subst.compose(bool_unify)
-                    expr.ty = BOOL_TYPE
-                    return BOOL_TYPE, final_subst
-                except UnificationError:
+            # Generic symbolic operations - convert to function application
+            case SymbolicOperation(operator=operator, operands=operands):
+                # Transform symbolic operation into function application for type checking
+                operator_var = Variable(operator)
+                if len(operands) == 1:
+                    # Unary operation: f x
+                    func_app = FunctionApplication(operator_var, operands[0])
+                    return self.infer_expr(func_app, env)
+                elif len(operands) == 2:
+                    # Binary operation: ((f x) y)
+                    partial_app = FunctionApplication(operator_var, operands[0])
+                    full_app = FunctionApplication(partial_app, operands[1])
+                    return self.infer_expr(full_app, env)
+                else:
                     raise TypeInferenceError(
-                        f"NOT operation requires Bool operand, got {operand_type}",
-                    )
-
-            case NegOperation(operand=operand_expr):
-                operand_type, subst = self.infer_expr(operand_expr, env)
-                # Unary negation works on Int or Float types
-                int_var = self.fresh_type_var()
-                float_var = self.fresh_type_var()
-                try:
-                    # Try Int first
-                    int_unify = unify_one(operand_type, INT_TYPE)
-                    final_subst = subst.compose(int_unify)
-                    expr.ty = INT_TYPE
-                    return INT_TYPE, final_subst
-                except UnificationError:
-                    try:
-                        # Try Float second
-                        float_unify = unify_one(operand_type, FLOAT_TYPE)
-                        final_subst = subst.compose(float_unify)
-                        expr.ty = FLOAT_TYPE
-                        return FLOAT_TYPE, final_subst
-                    except UnificationError:
-                        raise TypeInferenceError(
-                            f"Negation requires numeric operand (Int or Float), got {operand_type}",
-                        )
-
-            # String/List operations
-            case ConcatOperation(left=left_expr, right=right_expr):
-                left_type, left_subst = self.infer_expr(left_expr, env)
-                right_type, right_subst = self.infer_expr(
-                    right_expr,
-                    env.apply_substitution(left_subst),
-                )
-
-                combined_subst = left_subst.compose(right_subst)
-
-                # Try to unify both operands
-                try:
-                    unify_subst = unify_one(
-                        left_type.apply_substitution(combined_subst),
-                        right_type.apply_substitution(combined_subst),
-                    )
-                    final_subst = combined_subst.compose(unify_subst)
-                    final_type = left_type.apply_substitution(final_subst)
-                    expr.ty = final_type
-                    return final_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"Concatenation operands must have same type",
-                    )
-
-            case IndexOperation(list_expr=list_expr, index_expr=idx_expr):
-                indexed_list_type: Type
-                indexed_list_type, list_subst = self.infer_expr(
-                    list_expr,
-                    env,
-                )
-                index_type, index_subst = self.infer_expr(
-                    idx_expr,
-                    env.apply_substitution(list_subst),
-                )
-
-                combined_subst = list_subst.compose(index_subst)
-
-                # Index must be Int
-                try:
-                    int_unify = unify_one(index_type, INT_TYPE)
-                    subst_with_int = combined_subst.compose(int_unify)
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"List index must be Int, got {index_type}",
-                    )
-
-                # List must be List[T] for some T
-                element_type = self.fresh_type_var()
-                expected_list_type = TypeApp(TypeCon("List"), element_type)
-
-                try:
-                    list_unify = unify_one(
-                        indexed_list_type.apply_substitution(subst_with_int),
-                        expected_list_type,
-                    )
-                    final_subst = subst_with_int.compose(list_unify)
-                    result_type = element_type.apply_substitution(final_subst)
-                    expr.ty = result_type
-                    return result_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"Index operation requires a List, got {indexed_list_type}",
+                        f"Unsupported arity for operator {operator}: {len(operands)}"
                     )
 
             # Control flow
@@ -1209,24 +985,6 @@ class TypeInferrer:
                 | ListLiteral()
                 | Variable()
                 | Constructor()
-                | AddOperation()
-                | SubOperation()
-                | MulOperation()
-                | DivOperation()
-                | PowIntOperation()
-                | PowFloatOperation()
-                | EqualOperation()
-                | NotEqualOperation()
-                | LessThanOperation()
-                | LessEqualOperation()
-                | GreaterThanOperation()
-                | GreaterEqualOperation()
-                | AndOperation()
-                | OrOperation()
-                | NotOperation()
-                | NegOperation()
-                | ConcatOperation()
-                | IndexOperation()
                 | IfElse()
                 | DoBlock()
                 | FunctionApplication()

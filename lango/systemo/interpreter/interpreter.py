@@ -4,46 +4,30 @@ from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from lango.systemo.ast.nodes import (
-    AddOperation,
-    AndOperation,
     BoolLiteral,
-    ConcatOperation,
     ConsPattern,
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
     DataDeclaration,
-    DivOperation,
     DoBlock,
-    EqualOperation,
     Expression,
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
-    GreaterEqualOperation,
-    GreaterThanOperation,
     GroupedExpression,
     IfElse,
-    IndexOperation,
     IntLiteral,
-    LessEqualOperation,
-    LessThanOperation,
     LetStatement,
     ListLiteral,
     LiteralPattern,
-    MulOperation,
     NegativeFloat,
     NegativeInt,
-    NotEqualOperation,
-    NotOperation,
-    OrOperation,
     Pattern,
-    PowFloatOperation,
-    PowIntOperation,
     Program,
     Statement,
     StringLiteral,
-    SubOperation,
+    SymbolicOperation,
     Variable,
     VariablePattern,
 )
@@ -286,59 +270,19 @@ class Interpreter:
                             f"Unknown constructor or variable: {constructor_name}",
                         )
 
-            # Arithmetic operations
-            case AddOperation(left=left, right=right):
-                return self.eval(left) + self.eval(right)
-            case SubOperation(left=left, right=right):
-                return self.eval(left) - self.eval(right)
-            case MulOperation(left=left, right=right):
-                return self.eval(left) * self.eval(right)
-            case DivOperation(left=left, right=right):
-                if self.eval(right) == 0:
-                    return float("inf")  # special case because haskell does this
-                return self.eval(left) / self.eval(right)
-            case PowIntOperation(left=left, right=right):
-                return int(self.eval(left) ** self.eval(right))
-            case PowFloatOperation(left=left, right=right):
-                return float(self.eval(left) ** self.eval(right))
-
-            # Comparison operations
-            case EqualOperation(left=left, right=right):
-                return self.eval(left) == self.eval(right)
-            case NotEqualOperation(left=left, right=right):
-                return self.eval(left) != self.eval(right)
-            case LessThanOperation(left=left, right=right):
-                return self.eval(left) < self.eval(right)
-            case LessEqualOperation(left=left, right=right):
-                return self.eval(left) <= self.eval(right)
-            case GreaterThanOperation(left=left, right=right):
-                return self.eval(left) > self.eval(right)
-            case GreaterEqualOperation(left=left, right=right):
-                return self.eval(left) >= self.eval(right)
-
-            # Logical operations
-            case AndOperation(left=left, right=right):
-                return self.eval(left) and self.eval(right)
-            case OrOperation(left=left, right=right):
-                return self.eval(left) or self.eval(right)
-            case NotOperation(operand=operand):
-                return not self.eval(operand)
-
-            # String/List operations
-            case ConcatOperation(left=left, right=right):
-                left_val = self.eval(left)
-                right_val = self.eval(right)
-                match (left_val, right_val):
-                    case (list(), list()):
-                        # List concatenation
-                        return left_val + right_val
-                    case _:
-                        # String concatenation
-                        return str(left_val) + str(right_val)
-
-            case IndexOperation(list_expr=list_expr, index_expr=index_expr):
-                list_val = self.eval(list_expr)
-                index_val = self.eval(index_expr)
+            # Generic symbolic operations - convert to function application
+            case SymbolicOperation(operator=operator, operands=operands):
+                # Transform symbolic operation into function application
+                operator_var = Variable(operator)
+                if len(operands) == 1:
+                    # Unary operation: f x
+                    return self.eval(FunctionApplication(operator_var, operands[0]))
+                elif len(operands) == 2:
+                    # Binary operation: ((f x) y)
+                    partial_app = FunctionApplication(operator_var, operands[0])
+                    return self.eval(FunctionApplication(partial_app, operands[1]))
+                else:
+                    raise RuntimeError(f"Unsupported arity for operator {operator}: {len(operands)}")
                 match list_val:
                     case list():
                         pass  # Valid list
@@ -412,23 +356,7 @@ class Interpreter:
                     | ListLiteral()
                     | Variable()
                     | Constructor()
-                    | AddOperation()
-                    | SubOperation()
-                    | MulOperation()
-                    | DivOperation()
-                    | PowIntOperation()
-                    | PowFloatOperation()
-                    | EqualOperation()
-                    | NotEqualOperation()
-                    | LessThanOperation()
-                    | LessEqualOperation()
-                    | GreaterThanOperation()
-                    | GreaterEqualOperation()
-                    | AndOperation()
-                    | OrOperation()
-                    | NotOperation()
-                    | ConcatOperation()
-                    | IndexOperation()
+                    | SymbolicOperation()
                     | IfElse()
                     | DoBlock()
                     | FunctionApplication()

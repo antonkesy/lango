@@ -3,54 +3,37 @@ from typing import Any, List, Union
 from lark import Token, Transformer, Tree
 
 from lango.systemo.ast.nodes import (
-    AddOperation,
-    AndOperation,
     ArrowType,
     BoolLiteral,
-    ConcatOperation,
     ConsPattern,
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
     DataConstructor,
     DataDeclaration,
-    DivOperation,
     DoBlock,
-    EqualOperation,
     Expression,
     Field,
     FieldAssignment,
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
-    GreaterEqualOperation,
-    GreaterThanOperation,
     GroupedExpression,
     GroupedType,
     IfElse,
-    IndexOperation,
     InstanceDeclaration,
     IntLiteral,
-    LessEqualOperation,
-    LessThanOperation,
     LetStatement,
     ListLiteral,
     LiteralPattern,
-    MulOperation,
     NegativeFloat,
     NegativeInt,
-    NegOperation,
-    NotEqualOperation,
-    NotOperation,
-    OrOperation,
     Pattern,
-    PowFloatOperation,
-    PowIntOperation,
     Program,
     RecordConstructor,
     Statement,
     StringLiteral,
-    SubOperation,
+    SymbolicOperation,
     TypeApplication,
     TypeConstructor,
     TypeParameter,
@@ -68,17 +51,48 @@ class ASTTransformer(Transformer):
         setattr(self, "or", self._or)
         setattr(self, "not", self._not)
 
-    def _and(self, items: List[Any]) -> AndOperation:
-        return AndOperation(items[0], items[2])
+        # Operator symbol mappings for generic transformations
+        self.infix_op_symbols = {
+            "infix_op_add": "(+)",
+            "infix_op_sub": "(-)",
+            "infix_op_mul": "(*)",
+            "infix_op_div": "(/)",
+            "infix_op_pow_int": "(^)",
+            "infix_op_pow_float": "(^^)",
+            "infix_op_eq": "(==)",
+            "infix_op_neq": "(/=)",
+            "infix_op_lt": "(<)",
+            "infix_op_lteq": "(<=)",
+            "infix_op_gt": "(>)",
+            "infix_op_gteq": "(>=)",
+            "infix_op_and": "(&&)",
+            "infix_op_or": "(||)",
+            "infix_op_concat": "(++)",
+            "infix_op_cons": "(:)",
+            "infix_op_index": "(!!)",
+        }
 
-    def _or(self, items: List[Any]) -> OrOperation:
-        return OrOperation(items[0], items[2])
+        self.prefix_op_symbols = {
+            "prefix_op_not": "(not)",
+            "prefix_op_neg": "(-)",
+            "prefix_op_qmark": "(?)",
+        }
 
-    def _not(self, items: List[Any]) -> NotOperation:
-        return NotOperation(items[1])
+        self.postfix_op_symbols = {
+            "postfix_op_at": "(@)",
+        }
 
-    def neg(self, items: List[Any]) -> NegOperation:
-        return NegOperation(items[1])
+    def _and(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(&&)", [items[0], items[2]])
+
+    def _or(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(||)", [items[0], items[2]])
+
+    def _not(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(not)", [items[1]])
+
+    def neg(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(-)", [items[1]])
 
     # Literals
     def int(self, items: List[Any]) -> IntLiteral:
@@ -203,49 +217,73 @@ class ASTTransformer(Transformer):
                 raise ValueError(f"Invalid constructor items: {items}")
 
     # Arithmetic Operations
-    def add(self, items: List[Any]) -> AddOperation:
-        return AddOperation(items[0], items[2])
+    def add(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(+)", [items[0], items[2]])
 
-    def sub(self, items: List[Any]) -> SubOperation:
-        return SubOperation(items[0], items[2])
+    def sub(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(-)", [items[0], items[2]])
 
-    def mul(self, items: List[Any]) -> MulOperation:
-        return MulOperation(items[0], items[2])
+    def mul(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(*)", [items[0], items[2]])
 
-    def div(self, items: List[Any]) -> DivOperation:
-        return DivOperation(items[0], items[2])
+    def div(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(/)", [items[0], items[2]])
 
-    def pow_int(self, items: List[Any]) -> PowIntOperation:
-        return PowIntOperation(items[0], items[2])
+    def pow_int(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(^)", [items[0], items[2]])
 
-    def pow_float(self, items: List[Any]) -> PowFloatOperation:
-        return PowFloatOperation(items[0], items[2])
+    def pow_float(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(^^)", [items[0], items[2]])
 
     # Comparison Operations
-    def eq(self, items: List[Any]) -> EqualOperation:
-        return EqualOperation(items[0], items[2])
+    def eq(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(==)", [items[0], items[2]])
 
-    def neq(self, items: List[Any]) -> NotEqualOperation:
-        return NotEqualOperation(items[0], items[2])
+    def neq(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(/=)", [items[0], items[2]])
 
-    def lt(self, items: List[Any]) -> LessThanOperation:
-        return LessThanOperation(items[0], items[2])
+    def lt(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(<)", [items[0], items[2]])
 
-    def lteq(self, items: List[Any]) -> LessEqualOperation:
-        return LessEqualOperation(items[0], items[2])
+    def lteq(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(<=)", [items[0], items[2]])
 
-    def gt(self, items: List[Any]) -> GreaterThanOperation:
-        return GreaterThanOperation(items[0], items[2])
+    def gt(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(>)", [items[0], items[2]])
 
-    def gteq(self, items: List[Any]) -> GreaterEqualOperation:
-        return GreaterEqualOperation(items[0], items[2])
+    def gteq(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(>=)", [items[0], items[2]])
 
     # String/List Operations
-    def concat(self, items: List[Any]) -> ConcatOperation:
-        return ConcatOperation(items[0], items[1])
+    def concat(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(++)", [items[0], items[1]])
 
-    def index(self, items: List[Any]) -> IndexOperation:
-        return IndexOperation(items[0], items[1])
+    def index(self, items: List[Any]) -> SymbolicOperation:
+        return SymbolicOperation("(!!)", [items[0], items[1]])
+
+    # Generic Operator Transformations
+    def __default__(self, data: str, children: List[Any], meta=None) -> Any:
+        """Handle generic operator transformations."""
+        # Handle infix operators
+        if data in self.infix_op_symbols:
+            if len(children) == 2:
+                operator_symbol = self.infix_op_symbols[data]
+                return SymbolicOperation(operator_symbol, children)
+
+        # Handle prefix operators
+        elif data in self.prefix_op_symbols:
+            if len(children) == 1:
+                operator_symbol = self.prefix_op_symbols[data]
+                return SymbolicOperation(operator_symbol, children)
+
+        # Handle postfix operators
+        elif data in self.postfix_op_symbols:
+            if len(children) == 1:
+                operator_symbol = self.postfix_op_symbols[data]
+                return SymbolicOperation(operator_symbol, children)
+
+        # If not a recognized operator, fall back to default behavior
+        return super().__default__(data, children, meta)
 
     # Control Flow
     def if_else(self, items: List[Any]) -> IfElse:
