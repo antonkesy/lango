@@ -27,6 +27,15 @@ inst (/) :: Float -> Float -> Float {
   (/) x y = primFloatDiv x y;
 };
 
+-- Unary minus operators
+inst (-) :: Int -> Int {
+  (-) x = primIntNeg x;
+};
+
+inst (-) :: Float -> Float {
+  (-) x = primFloatNeg x;
+};
+
 inst (<) :: Int -> Int -> Bool {
   (<) x y = primIntLt x y;
 };

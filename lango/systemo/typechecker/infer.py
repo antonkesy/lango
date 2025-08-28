@@ -381,17 +381,36 @@ class TypeInferrer:
         if name not in self.instances:
             return None
 
+        # For unary operations, prefer exact arity matches
+        # First pass: look for exact arity matches (single parameter functions)
         for instance_type, func_def in self.instances[name]:
-            # Try to unify the instance type with a function type that matches the argument
             match instance_type:
                 case FunctionType(param=param_type, result=result_type):
-                    try:
-                        # Try to unify the parameter type with the argument type
-                        unify_one(param_type, arg_type)
-                        # If unification succeeds, return this instance's type
-                        return TypeScheme(set(), instance_type)
-                    except UnificationError:
-                        continue
+                    # Check if this is a unary function (result is not a function type)
+                    if not isinstance(result_type, FunctionType):
+                        try:
+                            # Try to unify the parameter type with the argument type
+                            unify_one(param_type, arg_type)
+                            # If unification succeeds, return this instance's type
+                            return TypeScheme(set(), instance_type)
+                        except UnificationError:
+                            continue
+                case _:
+                    continue
+
+        # Second pass: if no unary function found, try binary/multi-parameter functions
+        for instance_type, func_def in self.instances[name]:
+            match instance_type:
+                case FunctionType(param=param_type, result=result_type):
+                    # Only consider multi-parameter functions in second pass
+                    if isinstance(result_type, FunctionType):
+                        try:
+                            # Try to unify the parameter type with the argument type
+                            unify_one(param_type, arg_type)
+                            # If unification succeeds, return this instance's type
+                            return TypeScheme(set(), instance_type)
+                        except UnificationError:
+                            continue
                 case _:
                     continue
 
@@ -529,7 +548,7 @@ class TypeInferrer:
                     return final_type, final_subst
                 except UnificationError:
                     raise TypeInferenceError(
-                        f"If branches have incompatible types: {then_type} vs {else_type}",
+                        f"If branches have incompatible types: {then_type.apply_substitution(subst_after_else)} vs {else_type}",
                     )
 
             # Function application
@@ -929,24 +948,6 @@ class TypeInferrer:
                     | ListLiteral()
                     | Variable()
                     | Constructor()
-                    | AddOperation()
-                    | SubOperation()
-                    | MulOperation()
-                    | DivOperation()
-                    | PowIntOperation()
-                    | PowFloatOperation()
-                    | EqualOperation()
-                    | NotEqualOperation()
-                    | LessThanOperation()
-                    | LessEqualOperation()
-                    | GreaterThanOperation()
-                    | GreaterEqualOperation()
-                    | AndOperation()
-                    | OrOperation()
-                    | NotOperation()
-                    | NegOperation()
-                    | ConcatOperation()
-                    | IndexOperation()
                     | IfElse()
                     | DoBlock()
                     | FunctionApplication()
