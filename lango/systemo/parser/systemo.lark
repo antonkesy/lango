@@ -26,25 +26,25 @@ inst_decl: "inst" operator_name "::" type_expr "{" func_def "}" ";"
 operator_name: ID
              | "(" symbolic_operator ")"
 
-symbolic_operator: QMARK
-                  | PLUS
-                  | DOUBLE_PLUS
-                  | MINUS
-                  | MUL
-                  | DOUBLE_MUL
-                  | DIV
-                  | CARET
-                  | DOUBLE_CARET
-                  | EQ
-                  | NEQ
-                  | LT
-                  | LTEQ
-                  | GT
-                  | GTEQ
-                  | AND
-                  | OR
-                  | COLON
-                  | AT
+symbolic_operator: "?"
+                  | "+"
+                  | "++"
+                  | "-"
+                  | "*"
+                  | "**"
+                  | "/"
+                  | "^"
+                  | "^^"
+                  | "=="
+                  | "/="
+                  | "<"
+                  | "<="
+                  | ">"
+                  | ">="
+                  | "&&"
+                  | "||"
+                  | ":"
+                  | "@"
 
 func_def: operator_name pattern* "=" expr ";"
 
@@ -57,35 +57,16 @@ stmt_list: (do_stmt ";")+
      | "if" expr "then" expr "else" expr -> if_else
      | infix_expr
 
-// Generic infix expression with any symbolic operator
-?infix_expr: infix_expr "+" prefix_expr -> infix_op_add
-           | infix_expr "-" prefix_expr -> infix_op_sub
-           | infix_expr "*" prefix_expr -> infix_op_mul
-           | infix_expr "/" prefix_expr -> infix_op_div
-           | infix_expr "^" prefix_expr -> infix_op_pow_int
-           | infix_expr "^^" prefix_expr -> infix_op_pow_float
-           | infix_expr "**" prefix_expr -> infix_op_pow_float
-           | infix_expr "==" prefix_expr -> infix_op_eq
-           | infix_expr "/=" prefix_expr -> infix_op_neq
-           | infix_expr "<" prefix_expr -> infix_op_lt
-           | infix_expr "<=" prefix_expr -> infix_op_lteq
-           | infix_expr ">" prefix_expr -> infix_op_gt
-           | infix_expr ">=" prefix_expr -> infix_op_gteq
-           | infix_expr "&&" prefix_expr -> infix_op_and
-           | infix_expr "||" prefix_expr -> infix_op_or
-           | infix_expr "++" prefix_expr -> infix_op_concat
-           | infix_expr ":" prefix_expr -> infix_op_cons
-           | infix_expr "!!" prefix_expr -> infix_op_index
+// Infix expressions - any symbolic operator can be used as infix
+?infix_expr: infix_expr symbolic_operator prefix_expr -> infix_op
            | prefix_expr
 
-// Generic prefix expression with any symbolic operator
-?prefix_expr: "not" prefix_expr -> prefix_op_not
-            | "-" prefix_expr -> prefix_op_neg
-            | "?" prefix_expr -> prefix_op_qmark
+// Prefix expressions - any symbolic operator can be used as prefix
+?prefix_expr: symbolic_operator postfix_expr -> prefix_op
             | postfix_expr
 
-// Generic postfix expression with any symbolic operator
-?postfix_expr: postfix_expr "@" -> postfix_op_at
+// Postfix expressions - any symbolic operator can be used as postfix
+?postfix_expr: app_expr symbolic_operator -> postfix_op
              | app_expr
 
 ?app_expr: app_expr atom_expr      -> app
@@ -143,29 +124,7 @@ UIDENT: TYPE
 STRING: /"[^"]*"/
 INT: /[0-9]+/
 FLOAT: /[0-9]+\.[0-9]+/
-
-// Symbolic operators
-PLUS: "+"
-DOUBLE_PLUS: "++"
-MINUS: "-"
-MUL: "*"
-DOUBLE_MUL: "**"
-DIV: "/"
-CARET: "^"
-DOUBLE_CARET: "^^"
-EQ: "=="
-NEQ: "/="
-LT: "<"
-LTEQ: "<="
-GT: ">"
-GTEQ: ">="
-// Logical
-AND: "&&"
-OR: "||"
-NOT: "not"
 COLON: ":"
-AT: "@"
-QMARK: "?"
 
 COMMENT: /--.*/
 %ignore COMMENT

@@ -46,53 +46,6 @@ from lango.systemo.ast.nodes import (
 class ASTTransformer(Transformer):
     def __init__(self) -> None:
         super().__init__()
-        # Add methods for keywords that can't be used as method names
-        setattr(self, "and", self._and)
-        setattr(self, "or", self._or)
-        setattr(self, "not", self._not)
-
-        # Operator symbol mappings for generic transformations
-        self.infix_op_symbols = {
-            "infix_op_add": "(+)",
-            "infix_op_sub": "(-)",
-            "infix_op_mul": "(*)",
-            "infix_op_div": "(/)",
-            "infix_op_pow_int": "(^)",
-            "infix_op_pow_float": "(^^)",
-            "infix_op_eq": "(==)",
-            "infix_op_neq": "(/=)",
-            "infix_op_lt": "(<)",
-            "infix_op_lteq": "(<=)",
-            "infix_op_gt": "(>)",
-            "infix_op_gteq": "(>=)",
-            "infix_op_and": "(&&)",
-            "infix_op_or": "(||)",
-            "infix_op_concat": "(++)",
-            "infix_op_cons": "(:)",
-            "infix_op_index": "(!!)",
-        }
-
-        self.prefix_op_symbols = {
-            "prefix_op_not": "(not)",
-            "prefix_op_neg": "(-)",
-            "prefix_op_qmark": "(?)",
-        }
-
-        self.postfix_op_symbols = {
-            "postfix_op_at": "(@)",
-        }
-
-    def _and(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(&&)", [items[0], items[2]])
-
-    def _or(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(||)", [items[0], items[2]])
-
-    def _not(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(not)", [items[1]])
-
-    def neg(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(-)", [items[1]])
 
     # Literals
     def int(self, items: List[Any]) -> IntLiteral:
@@ -216,76 +169,18 @@ class ASTTransformer(Transformer):
                 # Default case - empty list should never happen in valid input
                 raise ValueError(f"Invalid constructor items: {items}")
 
-    # Arithmetic Operations
-    def add(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(+)", [items[0], items[2]])
-
-    def sub(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(-)", [items[0], items[2]])
-
-    def mul(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(*)", [items[0], items[2]])
-
-    def div(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(/)", [items[0], items[2]])
-
-    def pow_int(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(^)", [items[0], items[2]])
-
-    def pow_float(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(^^)", [items[0], items[2]])
-
-    # Comparison Operations
-    def eq(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(==)", [items[0], items[2]])
-
-    def neq(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(/=)", [items[0], items[2]])
-
-    def lt(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(<)", [items[0], items[2]])
-
-    def lteq(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(<=)", [items[0], items[2]])
-
-    def gt(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(>)", [items[0], items[2]])
-
-    def gteq(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(>=)", [items[0], items[2]])
-
-    # String/List Operations
-    def concat(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(++)", [items[0], items[1]])
-
-    def index(self, items: List[Any]) -> SymbolicOperation:
-        return SymbolicOperation("(!!)", [items[0], items[1]])
-
-    # Generic Operator Transformations
+    # Generic Operator Transformations  
     def __default__(self, data: str, children: List[Any], meta=None) -> Any:
         """Handle generic operator transformations."""
-        # Handle infix operators
-        if data in self.infix_op_symbols:
-            if len(children) == 2:
-                operator_symbol = self.infix_op_symbols[data]
-                return SymbolicOperation(operator_symbol, children)
-
-        # Handle prefix operators
-        elif data in self.prefix_op_symbols:
-            if len(children) == 1:
-                operator_symbol = self.prefix_op_symbols[data]
-                return SymbolicOperation(operator_symbol, children)
-
-        # Handle postfix operators
-        elif data in self.postfix_op_symbols:
-            if len(children) == 1:
-                operator_symbol = self.postfix_op_symbols[data]
-                return SymbolicOperation(operator_symbol, children)
+        # Check if this is an operator rule
+        if data.startswith(("infix_op_", "prefix_op_", "postfix_op_")):
+            # Instead of trying to reverse-engineer the operator, let's just use 
+            # the rule name directly as a unique identifier for the operation
+            # The actual operator symbol doesn't matter for the AST representation
+            return SymbolicOperation(data, children)
 
         # If not a recognized operator, fall back to default behavior
-        return super().__default__(data, children, meta)
-
-    # Control Flow
+        return super().__default__(data, children, meta)    # Control Flow
     def if_else(self, items: List[Any]) -> IfElse:
         return IfElse(items[0], items[1], items[2])
 
