@@ -5,6 +5,7 @@ from pathlib import Path
 from lark import Lark, ParseTree
 
 from lango.systemo.ast.nodes import FunctionDefinition, Program
+from lango.systemo.ast.precedence_rewriter import rewrite_precedence
 from lango.systemo.ast.transformer import transform_parse_tree
 
 
@@ -35,6 +36,7 @@ def _parse_lark(path: Path) -> ParseTree:
 
 def parse(path: Path) -> Program:
     program = transform_parse_tree(_parse_lark(path))
+    program = rewrite_precedence(program)
 
     _validate_program(program)
 
