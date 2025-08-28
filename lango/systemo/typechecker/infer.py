@@ -355,13 +355,31 @@ class TypeInferrer:
             case _:
                 return func_type
 
+    def _extract_operator_name(self, instance_name: str) -> str:
+        """Extract operator name from Tree structure like "Tree(Token('RULE', 'inst_operator_name'), ['?'])" or "Tree(Token('RULE', 'inst_operator_name'), [Token('ID', 'xcoord')])" """
+        import re
+        # Look for pattern Tree(Token('RULE', 'inst_operator_name'), ['<operator>'])
+        match = re.search(r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']*)'\]\)", instance_name)
+        if match:
+            return match.group(1)
+        
+        # Look for pattern Tree(Token('RULE', 'inst_operator_name'), [Token('ID', '<operator>')])
+        match = re.search(r"Tree\(Token\('RULE', 'inst_operator_name'\), \[Token\('ID', '([^']*)'\)\]\)", instance_name)
+        if match:
+            return match.group(1)
+        
+        # Fallback: return the instance_name as is
+        return instance_name
+
     def handle_instance_decl_with_env(
         self,
         inst_decl: InstanceDeclaration,
         env: TypeEnvironment,
     ) -> None:
         """Store instance declaration and validate it against implementation with full environment"""
-        instance_name = inst_decl.instance_name
+        raw_instance_name = inst_decl.instance_name
+        # Extract the actual operator name from the Tree structure
+        instance_name = self._extract_operator_name(raw_instance_name)
         declared_type = self.parse_type_expr(inst_decl.type_signature)
         function_definition = inst_decl.function_definition
 
@@ -1421,6 +1439,23 @@ class TypeInferrer:
                     FLOAT_TYPE,
                     FunctionType(FLOAT_TYPE, FLOAT_TYPE),
                 ),
+            ),
+        )
+
+        # Unary negation primitives
+        env = env.extend(
+            "primIntNeg",
+            TypeScheme(
+                set(),
+                FunctionType(INT_TYPE, INT_TYPE),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatNeg",
+            TypeScheme(
+                set(),
+                FunctionType(FLOAT_TYPE, FLOAT_TYPE),
             ),
         )
 
