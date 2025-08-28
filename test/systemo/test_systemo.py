@@ -11,6 +11,7 @@ from ..utility.file_tester import file_test_output, file_test_type, get_all_test
 
 MINIO_BASE_TEST_FILES_PATH = Path("./test/minio/files/")
 SYSO_BASE_TEST_FILES_PATH = Path("./test/systemo/files/")
+EXAMPLE = Path("./examples/systemo/example.syso")
 
 
 # @pytest.mark.parametrize(
@@ -43,9 +44,8 @@ def test_interpreter(file_name: Path) -> None:
     "file_name",
     list(get_all_test_files(MINIO_BASE_TEST_FILES_PATH, "minio")),
     ids=lambda p: str(p),
-    # TODO: check example files
 )
-def test_is_superset_of_minio(file_name: Path) -> None:
+def test_types_is_superset_of_minio(file_name: Path) -> None:
     def run_type_check(f: Path) -> Any:
         return type_check(parse(f))
 
@@ -54,9 +54,8 @@ def test_is_superset_of_minio(file_name: Path) -> None:
 
 @pytest.mark.parametrize(
     "file_name",
-    list(get_all_test_files(SYSO_BASE_TEST_FILES_PATH, "syso")),
+    list(get_all_test_files(SYSO_BASE_TEST_FILES_PATH, "syso")) + [EXAMPLE],
     ids=lambda p: str(p),
-    # TODO: check example files
 )
 def test_is_type_valid(file_name: Path) -> None:
     def run_type_check(f: Path) -> Any:
