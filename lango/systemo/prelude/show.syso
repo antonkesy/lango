@@ -1,1 +1,15 @@
--- TODO
+inst show :: Bool -> String {
+  show x = TODO;
+};
+
+inst show :: Int -> String {
+  show x = TODO;
+};
+
+inst show :: Float -> String {
+  show x = TODO;
+};
+
+inst show :: String -> String {
+  show x = x;
+};

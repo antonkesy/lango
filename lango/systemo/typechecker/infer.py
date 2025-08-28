@@ -1788,23 +1788,6 @@ class TypeInferrer:
             ),
         )
 
-        # Create dummy function definition for built-in operators
-        from lango.systemo.ast.nodes import FunctionDefinition, IntLiteral
-
-        dummy_func_def = FunctionDefinition(
-            function_name="_dummy",
-            patterns=[],
-            body=IntLiteral(0),
-        )
-
-        # Show function instances for different types
-        self.instances["show"] = [
-            (FunctionType(INT_TYPE, TypeCon("String")), dummy_func_def),
-            (FunctionType(FLOAT_TYPE, TypeCon("String")), dummy_func_def),
-            (FunctionType(TypeCon("Bool"), TypeCon("String")), dummy_func_def),
-            (FunctionType(TypeCon("String"), TypeCon("String")), dummy_func_def),
-        ]
-
         # First pass: collect data declarations and precedence declarations
         for stmt in ast.statements:
             match stmt:
