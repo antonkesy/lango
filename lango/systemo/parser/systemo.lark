@@ -20,7 +20,7 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Instance Declarations ---
-inst_decl: "inst" operator_name "::" type_expr "{" func_def "}" ";"
+inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_func_def "}" ";"
 
 // --- Precedence Declarations ---
 precedence_decl: "infixl" INT symbolic_operator ";"  -> infixl_decl
@@ -29,8 +29,10 @@ precedence_decl: "infixl" INT symbolic_operator ";"  -> infixl_decl
 
 // --- Function Signatures and Definitions ---
 
+inst_operator_name: ID
+                  | "(" symbolic_operator ")"
+
 operator_name: ID
-             | "(" symbolic_operator ")"
 
 symbolic_operator: SYMBOLIC_OP
 
@@ -54,6 +56,7 @@ SYMBOLIC_OP: "?"
            | "@"
 
 func_def: operator_name pattern* "=" expr ";"
+inst_func_def: inst_operator_name pattern* "=" expr ";"
 
 do_stmt: "let" "{" (ID "=" expr ";")* ID "=" expr "}"
         | expr
@@ -84,6 +87,7 @@ elsif_clauses: ("else" "if" expr "then" expr)+
           | constructor_expr
           | UIDENT                 -> constructor
           | operator_name          -> var
+          | symbolic_operator      -> symbolic_var
           | literal
 
 constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"

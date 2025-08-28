@@ -116,6 +116,14 @@ class ASTTransformer(Transformer):
             case value:
                 return Variable(str(value))
 
+    def symbolic_var(self, items: List[Any]) -> Variable:
+        """Transform symbolic operator used as variable."""
+        match items[0]:
+            case Token(value=value):
+                return Variable(value)
+            case value:
+                return Variable(str(value))
+
     def operator_name(self, items: List[Any]) -> str:
         """Transform operator name (either ID or symbolic operator in parens)."""
         match items[0]:
@@ -191,12 +199,11 @@ class ASTTransformer(Transformer):
         operand = items[1] if len(items) > 1 else None
         return SymbolicOperation(operator, [operand] if operand is not None else [])
 
-    def postfix_op(self, items: List[Any]) -> SymbolicOperation:
-        """Transform postfix operator expressions."""
-        # items = [operand, symbolic_operator_string]
+    def unary_minus(self, items: List[Any]) -> SymbolicOperation:
+        """Transform unary minus expressions."""
+        # items = [operand] (the "-" is already parsed as part of the rule)
         operand = items[0] if len(items) > 0 else None
-        operator = items[1] if len(items) > 1 else "UNKNOWN_OP"
-        return SymbolicOperation(operator, [operand] if operand is not None else [])
+        return SymbolicOperation("-", [operand] if operand is not None else [])
 
     def __default__(self, data: str, children: List[Any], meta=None) -> Any:
         """Handle any remaining transformations."""
@@ -468,6 +475,39 @@ class ASTTransformer(Transformer):
         return DataDeclaration(type_name, type_params, constructors)
 
     def func_def(self, items: List[Any]) -> FunctionDefinition:
+        match items[0]:
+            case Token(value=func_name):
+                pass
+            case value:
+                func_name = str(value)
+        patterns = items[1:-1]  # Everything between name and expression
+        body = items[-1]
+
+        # Convert tokens and expressions to patterns if needed
+        converted_patterns: List[Pattern] = []
+        for pattern in patterns:
+            match pattern:
+                case Token(type=token_type, value=token_value):
+                    if token_type == "ID":
+                        converted_patterns.append(VariablePattern(token_value))
+                    else:
+                        converted_patterns.append(LiteralPattern(token_value))
+                case (
+                    IntLiteral(value=v)
+                    | FloatLiteral(value=v)
+                    | StringLiteral(value=v)
+                    | BoolLiteral(value=v)
+                ):
+                    converted_patterns.append(LiteralPattern(v))
+                case ListLiteral(elements):
+                    converted_patterns.append(LiteralPattern(elements))
+                case _:
+                    converted_patterns.append(pattern)
+
+        return FunctionDefinition(func_name, converted_patterns, body)
+
+    def inst_func_def(self, items: List[Any]) -> FunctionDefinition:
+        """Transform instance function definitions - same as func_def but allows parenthesized operators."""
         match items[0]:
             case Token(value=func_name):
                 pass

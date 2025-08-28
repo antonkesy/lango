@@ -60,7 +60,7 @@ class Constructor(ASTNode):
 # Generic Symbolic Operations
 @dataclass
 class SymbolicOperation(ASTNode):
-    """Generic symbolic operation node for all operators (binary, unary prefix, unary postfix)."""
+    """Generic symbolic operation node for all operators (binary, unary prefix)."""
 
     operator: str  # The operator symbol, e.g., "+", "(@)", "(?)", etc.
     operands: List["Expression"]  # List of operands (1 for unary, 2 for binary)
