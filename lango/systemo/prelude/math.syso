@@ -1,7 +1,0 @@
-mod x 0 = error "Exception: divide by zero";
-mod x y = if y == 0 then error "division by zero"
-    else if x < 0 && y > 0 then mod (x + y) y
-    else if x > 0 && y < 0 then mod (x + y) y
-    else if x >= y && y > 0 then mod (x - y) y
-    else if x <= y && y < 0 then mod (x - y) y
-    else x;

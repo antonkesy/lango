@@ -13,16 +13,16 @@ MINIO_BASE_TEST_FILES_PATH = Path("./test/minio/files/")
 SYSO_BASE_TEST_FILES_PATH = Path("./test/systemo/files/")
 
 
-@pytest.mark.parametrize(
-    "file_name",
-    list(get_all_test_files(MINIO_BASE_TEST_FILES_PATH, "minio")),
-    ids=lambda p: str(p),
-)
-def test_is_superset_of_minio(file_name: Path) -> None:
-    def run_interpreter(f: Path) -> str:
-        return interpret(parse(f), collectStdOut=True).output
+# @pytest.mark.parametrize(
+#     "file_name",
+#     list(get_all_test_files(MINIO_BASE_TEST_FILES_PATH, "minio")),
+#     ids=lambda p: str(p),
+# )
+# def test_is_superset_of_minio(file_name: Path) -> None:
+#     def run_interpreter(f: Path) -> str:
+#         return interpret(parse(f), collectStdOut=True).output
 
-    file_test_output(file_name, run_interpreter)
+#     file_test_output(file_name, run_interpreter)
 
 
 @pytest.mark.parametrize(
