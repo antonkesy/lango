@@ -1,4 +1,4 @@
-from lango.minio.typechecker.minio_types import (
+from lango.shared.typechecker.lango_types import (
     DataType,
     FunctionType,
     TupleType,

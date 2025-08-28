@@ -1,6 +1,6 @@
 from lango.minio.ast.nodes import Program
 from lango.minio.typechecker.infer import type_check_ast as type_check_ast_impl
-from lango.minio.typechecker.minio_types import normalize_type_scheme
+from lango.shared.typechecker.lango_types import normalize_type_scheme
 
 
 def get_type_str(ast: Program) -> str:

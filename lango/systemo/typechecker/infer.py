@@ -1,6 +1,25 @@
 from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
+from lango.shared.typechecker.lango_types import (
+    BOOL_TYPE,
+    FLOAT_TYPE,
+    INT_TYPE,
+    STRING_TYPE,
+    UNIT_TYPE,
+    DataType,
+    FreshVarGenerator,
+    FunctionType,
+    TupleType,
+    Type,
+    TypeApp,
+    TypeCon,
+    TypeScheme,
+    TypeSubstitution,
+    TypeVar,
+    generalize,
+)
+from lango.shared.typechecker.unify import UnificationError, unify_one
 from lango.systemo.ast.nodes import (
     ArrowType,
     Associativity,
@@ -47,25 +66,6 @@ from lango.systemo.ast.nodes import (
     Variable,
     VariablePattern,
 )
-from lango.systemo.typechecker.systemo_types import (
-    BOOL_TYPE,
-    FLOAT_TYPE,
-    INT_TYPE,
-    STRING_TYPE,
-    UNIT_TYPE,
-    DataType,
-    FreshVarGenerator,
-    FunctionType,
-    TupleType,
-    Type,
-    TypeApp,
-    TypeCon,
-    TypeScheme,
-    TypeSubstitution,
-    TypeVar,
-    generalize,
-)
-from lango.systemo.typechecker.unify import UnificationError, unify_one
 
 TypeBindings = Dict[str, TypeScheme]
 InferenceResult = Tuple[Type, TypeSubstitution]

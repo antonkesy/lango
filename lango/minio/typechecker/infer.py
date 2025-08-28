@@ -57,7 +57,7 @@ from lango.minio.ast.nodes import (
     Variable,
     VariablePattern,
 )
-from lango.minio.typechecker.minio_types import (
+from lango.shared.typechecker.lango_types import (
     BOOL_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
@@ -75,7 +75,7 @@ from lango.minio.typechecker.minio_types import (
     TypeVar,
     generalize,
 )
-from lango.minio.typechecker.unify import UnificationError, unify_one
+from lango.shared.typechecker.unify import UnificationError, unify_one
 
 TypeBindings = Dict[str, TypeScheme]
 InferenceResult = Tuple[Type, TypeSubstitution]
