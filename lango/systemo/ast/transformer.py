@@ -29,6 +29,7 @@ from lango.systemo.ast.nodes import (
     GroupedType,
     IfElse,
     IndexOperation,
+    InstanceDeclaration,
     IntLiteral,
     LessEqualOperation,
     LessThanOperation,
@@ -471,6 +472,19 @@ class ASTTransformer(Transformer):
                     converted_patterns.append(pattern)
 
         return FunctionDefinition(func_name, converted_patterns, body)
+
+    def inst_decl(self, items: List[Any]) -> InstanceDeclaration:
+        # items should be: [instance_name, type_signature, function_definition]
+        match items[0]:
+            case Token(value=instance_name):
+                pass
+            case value:
+                instance_name = str(value)
+
+        type_signature = items[1]  # This should be a TypeExpression
+        function_definition = items[2]  # This should be a FunctionDefinition
+
+        return InstanceDeclaration(instance_name, type_signature, function_definition)
 
     # Root
     def start(self, items: List[Any]) -> Program:

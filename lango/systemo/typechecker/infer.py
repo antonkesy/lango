@@ -26,6 +26,7 @@ from lango.systemo.ast.nodes import (
     GroupedType,
     IfElse,
     IndexOperation,
+    InstanceDeclaration,
     IntLiteral,
     LessEqualOperation,
     LessThanOperation,
@@ -131,6 +132,9 @@ class TypeInferrer:
         self.data_constructors: Dict[str, Tuple[str, List[Type]]] = (
             {}
         )  # constructor -> (type_name, field_types)
+        self.instances: Dict[str, List[Tuple[Type, FunctionDefinition]]] = (
+            {}
+        )  # instance_name -> [(type, func_def)]
 
     def fresh_type_var(self) -> TypeVar:
         var_name = self.fresh_var_gen.fresh()
@@ -244,6 +248,43 @@ class TypeInferrer:
                 raise TypeInferenceError(
                     f"Cannot parse type expression: {type(node).__name__}",
                 )
+
+    def handle_instance_decl(self, inst_decl: InstanceDeclaration) -> None:
+        """Store instance declaration for later resolution"""
+        instance_name = inst_decl.instance_name
+        type_signature = self.parse_type_expr(inst_decl.type_signature)
+        function_definition = inst_decl.function_definition
+
+        if instance_name not in self.instances:
+            self.instances[instance_name] = []
+
+        self.instances[instance_name].append((type_signature, function_definition))
+
+    def resolve_overloaded_function(
+        self,
+        name: str,
+        arg_type: Type,
+        env: TypeEnvironment,
+    ) -> Optional[TypeScheme]:
+        """Try to resolve an overloaded function based on argument type"""
+        if name not in self.instances:
+            return None
+
+        for instance_type, func_def in self.instances[name]:
+            # Try to unify the instance type with a function type that matches the argument
+            match instance_type:
+                case FunctionType(param=param_type, result=result_type):
+                    try:
+                        # Try to unify the parameter type with the argument type
+                        unify_one(param_type, arg_type)
+                        # If unification succeeds, return this instance's type
+                        return TypeScheme(set(), instance_type)
+                    except UnificationError:
+                        continue
+                case _:
+                    continue
+
+        return None
 
     def infer_expr(self, expr: Expression, env: TypeEnvironment) -> InferenceResult:
         match expr:
@@ -589,17 +630,44 @@ class TypeInferrer:
 
             # Function application
             case FunctionApplication(function=func_expr, argument=arg_expr):
-                func_type, func_subst = self.infer_expr(func_expr, env)
-                arg_type, arg_subst = self.infer_expr(
-                    arg_expr,
-                    env.apply_substitution(func_subst),
-                )
+                # First, infer the argument type
+                arg_type, arg_subst = self.infer_expr(arg_expr, env)
 
-                combined_subst = func_subst.compose(arg_subst)
+                # Initialize combined_subst and func_type
+                combined_subst = arg_subst
+                func_type = None
+
+                # Check if this is potentially an overloaded function
+                match func_expr:
+                    case Variable(name=func_name) if func_name in self.instances:
+                        # Try to resolve overloaded function based on argument type
+                        resolved_scheme = self.resolve_overloaded_function(
+                            func_name,
+                            arg_type.apply_substitution(arg_subst),
+                            env,
+                        )
+                        if resolved_scheme is not None:
+                            func_type = resolved_scheme.instantiate(self.fresh_var_gen)
+                        else:
+                            # Fallback to normal resolution
+                            func_type, func_subst = self.infer_expr(func_expr, env)
+                            combined_subst = func_subst.compose(arg_subst)
+                    case _:
+                        # Normal function application
+                        func_type, func_subst = self.infer_expr(func_expr, env)
+                        combined_subst = func_subst.compose(arg_subst)
+
+                if func_type is None:
+                    raise TypeInferenceError(
+                        f"Could not resolve function type for {func_expr}",
+                    )
 
                 # Create fresh return type
                 return_type = self.fresh_type_var()
-                expected_func_type = FunctionType(arg_type, return_type)
+                expected_func_type = FunctionType(
+                    arg_type.apply_substitution(combined_subst),
+                    return_type,
+                )
 
                 try:
                     func_unify = unify_one(
@@ -1250,6 +1318,9 @@ class TypeInferrer:
                 case DataDeclaration() as data_decl:
                     data_env = self.infer_data_decl(data_decl)
                     env = env.extend_many(data_env.bindings)
+                case InstanceDeclaration() as inst_decl:
+                    # Store instance declaration for later resolution
+                    self.handle_instance_decl(inst_decl)
                 case _:
                     continue
 

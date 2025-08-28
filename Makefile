@@ -50,15 +50,15 @@ minio-typecheck: install
 # SystemO
 systemo-run: install
 	. .venv/bin/activate && \
-	lango run systemo examples/minio/example.minio
+	lango run systemo examples/systemo/example.syso
 
 systemo-types: install
 	. .venv/bin/activate && \
-	lango types systemo examples/minio/example.minio
+	lango types systemo examples/systemo/example.syso
 
 systemo-typecheck: install
 	. .venv/bin/activate && \
-	lango typecheck systemo examples/minio/example.minio
+	lango typecheck systemo examples/systemo/example.syso
 
 # Quality
 test: install

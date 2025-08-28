@@ -1,0 +1,17 @@
+data Point = MkPoint Float Float;
+data CPoint = MkCPoint Float Float String;
+
+inst xcoord :: Point -> Float;
+  xcoord (MkPoint x y) = x;
+
+inst xcoord :: CPoint -> Float;
+  xcoord (MkCPoint x y c) = x;
+
+test_both = do {
+  let { point = MkPoint 1.0 2.0 };
+  let { cpoint = MkCPoint 3.0 4.0 "red" };
+  putStr (show (xcoord point));
+  putStr (show (xcoord cpoint));
+};
+
+main = test_both;
