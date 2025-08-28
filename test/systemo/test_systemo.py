@@ -46,8 +46,7 @@ def test_interpreter(file_name: Path) -> None:
     # TODO: check example files
 )
 def test_is_type_valid(file_name: Path) -> None:
-    pass
-    # def run_type_check(f: Path) -> Any:
-    #     return type_check(parse(f))
+    def run_type_check(f: Path) -> Any:
+        return type_check(parse(f))
 
-    # file_test_type(file_name, run_type_check)
+    file_test_type(file_name, run_type_check)
