@@ -25,6 +25,7 @@ from lango.systemo.ast.nodes import (
     MulOperation,
     NegativeFloat,
     NegativeInt,
+    NegOperation,
     NotEqualOperation,
     NotOperation,
     OrOperation,
@@ -230,6 +231,14 @@ class TypeChecker:
                         f"NOT operation requires Bool operand, got {operand_type}",
                     )
                 return "Bool"
+
+            case NegOperation(operand=operand_expr):
+                operand_type = self.infer_expression(operand_expr)
+                if operand_type not in ["Int", "Float"]:
+                    raise TypeError(
+                        f"Negation requires numeric operand (Int or Float), got {operand_type}",
+                    )
+                return operand_type
 
             # String/List operations
             case ConcatOperation(left=left_expr, right=right_expr):

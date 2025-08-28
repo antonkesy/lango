@@ -157,6 +157,12 @@ class NotOperation(ASTNode):
     ty: Optional[Type] = None
 
 
+@dataclass
+class NegOperation(ASTNode):
+    operand: "Expression"
+    ty: Optional[Type] = None
+
+
 # String/List Operations
 @dataclass
 class ConcatOperation(ASTNode):
