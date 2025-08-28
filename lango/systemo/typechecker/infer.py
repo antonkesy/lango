@@ -275,7 +275,7 @@ class TypeInferrer:
             inferred_type = inferred_scheme.type
 
             # Try to unify the declared type with the inferred type
-            from lango.systemo.typechecker.unify import unify_one
+            from lango.shared.typechecker.unify import unify_one
 
             unify_one(declared_type, inferred_type)
 
@@ -997,7 +997,7 @@ class TypeInferrer:
         else:
             # For functions with parameters, create a function type with fresh parameter types
             param_types = [self.fresh_type_var() for _ in range(first_arity)]
-            recursive_func_type = func_type_var
+            recursive_func_type: Type = func_type_var
             for param_type in reversed(param_types):
                 recursive_func_type = FunctionType(param_type, recursive_func_type)
             recursive_env = env.extend(
@@ -1455,10 +1455,12 @@ class TypeInferrer:
 
                 # Infer each sub-pattern with its corresponding element type
                 for i, sub_pattern in enumerate(patterns):
-                    elem_type = element_types[i].apply_substitution(current_subst)
+                    element_type: Type = element_types[i].apply_substitution(
+                        current_subst,
+                    )
                     sub_env, sub_subst = self.infer_pattern(
                         sub_pattern,
-                        elem_type,
+                        element_type,
                         extended_env.apply_substitution(current_subst),
                     )
                     extended_env = sub_env

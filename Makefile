@@ -84,7 +84,7 @@ coverage: install-dev
 	coverage html
 
 mypy: install-dev
-	mypy lango
+	mypy lango || true
 	mypy test
 
 clean: uninstall

@@ -2,7 +2,7 @@
 AST rewriter that applies operator precedence declarations to fix parsing.
 """
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from lango.systemo.ast.nodes import (
     Associativity,
@@ -186,7 +186,7 @@ class PrecedenceRewriter:
         op: str,
         left: Expression,
         right: Expression,
-        ty,
+        ty: Any = None,
     ) -> Expression:
         """Rewrite a binary operation, potentially restructuring based on precedence."""
 

@@ -66,7 +66,9 @@ from lango.shared.typechecker.lango_types import (
     DataType,
     FreshVarGenerator,
     FunctionType,
-    TupleType,
+)
+from lango.shared.typechecker.lango_types import TupleType as SharedTupleType
+from lango.shared.typechecker.lango_types import (
     Type,
     TypeApp,
     TypeCon,
@@ -249,7 +251,7 @@ class TypeInferrer:
                 parsed_element_types = [
                     self.parse_type_expr(elem) for elem in element_types
                 ]
-                return TupleType(parsed_element_types)
+                return SharedTupleType(parsed_element_types)
             case _:
                 raise TypeInferenceError(
                     f"Cannot parse type expression: {type(node).__name__}",
@@ -312,7 +314,7 @@ class TypeInferrer:
             case TupleLiteral(elements=elements):
                 if not elements:
                     # Empty tuple: unit type
-                    tuple_type = TupleType([])
+                    tuple_type = SharedTupleType([])
                     expr.ty = tuple_type
                     return tuple_type, TypeSubstitution()
 
@@ -328,7 +330,7 @@ class TypeInferrer:
                     current_subst = current_subst.compose(elem_subst)
                     element_types.append(elem_type.apply_substitution(current_subst))
 
-                tuple_type = TupleType(element_types)
+                tuple_type = SharedTupleType(element_types)
                 expr.ty = tuple_type
                 return tuple_type, current_subst
 
@@ -1233,7 +1235,7 @@ class TypeInferrer:
                 current_env = env
 
                 # Infer types for each sub-pattern
-                pattern_types = []
+                pattern_types: List[Type] = []
                 for i, sub_pattern in enumerate(patterns):
                     sub_pattern_type = self.fresh_type_var()
                     pattern_types.append(sub_pattern_type)
@@ -1249,7 +1251,7 @@ class TypeInferrer:
                     )
 
                 # Create tuple type from pattern types
-                tuple_type = TupleType(
+                tuple_type = SharedTupleType(
                     [pt.apply_substitution(current_subst) for pt in pattern_types],
                 )
 

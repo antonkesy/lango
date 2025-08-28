@@ -285,25 +285,6 @@ class Interpreter:
                     raise RuntimeError(
                         f"Unsupported arity for operator {operator}: {len(operands)}",
                     )
-                match list_val:
-                    case list():
-                        pass  # Valid list
-                    case _:
-                        raise RuntimeError(
-                            f"Cannot index non-list value: {type(list_val)}",
-                        )
-                match index_val:
-                    case int():
-                        pass  # Valid index
-                    case _:
-                        raise RuntimeError(
-                            f"List index must be an integer, got: {type(index_val)}",
-                        )
-                if index_val < 0 or index_val >= len(list_val):
-                    raise RuntimeError(
-                        f"List index {index_val} out of bounds for list of length {len(list_val)}",
-                    )
-                return list_val[index_val]
 
             # Control flow
             case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):

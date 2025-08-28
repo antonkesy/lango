@@ -31,7 +31,9 @@ from lango.systemo.ast.nodes import (
     ListType,
     LiteralPattern,
     NegativeFloat,
+    NegativeFloatPattern,
     NegativeInt,
+    NegativeIntPattern,
     Pattern,
     PrecedenceDeclaration,
     Program,
@@ -229,7 +231,7 @@ class ASTTransformer(Transformer):
         operand = items[0] if len(items) > 0 else None
         return SymbolicOperation("-", [operand] if operand is not None else [])
 
-    def __default__(self, data: str, children: List[Any], meta=None) -> Any:
+    def __default__(self, data: str, children: List[Any], meta: Any = None) -> Any:
         """Handle any remaining transformations."""
         # If not a recognized rule, fall back to default behavior
         return super().__default__(data, children, meta)  # Control Flow
@@ -557,7 +559,7 @@ class ASTTransformer(Transformer):
                     converted_patterns.append(LiteralPattern(v))
                 case ListLiteral(elements):
                     # Convert ListLiteral to ListPattern in pattern context
-                    list_patterns = []
+                    list_patterns: List[Pattern] = []
                     for element in elements:
                         if isinstance(element, Variable):
                             list_patterns.append(VariablePattern(element.name))
@@ -566,9 +568,39 @@ class ASTTransformer(Transformer):
                             (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
                         ):
                             list_patterns.append(LiteralPattern(element.value))
-                        else:
-                            # Other pattern types, assume they're already patterns
+                        elif isinstance(element, CharLiteral):
+                            list_patterns.append(LiteralPattern(element.value))
+                        elif isinstance(
+                            element,
+                            (
+                                VariablePattern,
+                                LiteralPattern,
+                                ConstructorPattern,
+                                ConsPattern,
+                                TuplePattern,
+                                ListPattern,
+                                NegativeIntPattern,
+                                NegativeFloatPattern,
+                            ),
+                        ):
+                            # Already a pattern, append directly
                             list_patterns.append(element)
+                        else:
+                            # For other expression types, try to convert to appropriate pattern
+                            if isinstance(element, (NegativeInt, NegativeFloat)):
+                                if isinstance(element, NegativeInt):
+                                    list_patterns.append(
+                                        NegativeIntPattern(element.value),
+                                    )
+                                else:
+                                    list_patterns.append(
+                                        NegativeFloatPattern(element.value),
+                                    )
+                            else:
+                                # Create a variable pattern as a fallback for complex expressions
+                                list_patterns.append(
+                                    VariablePattern(f"_var_{len(list_patterns)}"),
+                                )
                     converted_patterns.append(ListPattern(list_patterns))
                 case _:
                     converted_patterns.append(pattern)
@@ -603,7 +635,7 @@ class ASTTransformer(Transformer):
                     converted_patterns.append(LiteralPattern(v))
                 case ListLiteral(elements):
                     # Convert ListLiteral to ListPattern in pattern context
-                    list_patterns = []
+                    list_patterns: List[Pattern] = []
                     for element in elements:
                         if isinstance(element, Variable):
                             list_patterns.append(VariablePattern(element.name))
@@ -612,9 +644,39 @@ class ASTTransformer(Transformer):
                             (IntLiteral, FloatLiteral, StringLiteral, BoolLiteral),
                         ):
                             list_patterns.append(LiteralPattern(element.value))
-                        else:
-                            # Other pattern types, assume they're already patterns
+                        elif isinstance(element, CharLiteral):
+                            list_patterns.append(LiteralPattern(element.value))
+                        elif isinstance(
+                            element,
+                            (
+                                VariablePattern,
+                                LiteralPattern,
+                                ConstructorPattern,
+                                ConsPattern,
+                                TuplePattern,
+                                ListPattern,
+                                NegativeIntPattern,
+                                NegativeFloatPattern,
+                            ),
+                        ):
+                            # Already a pattern, append directly
                             list_patterns.append(element)
+                        else:
+                            # For other expression types, try to convert to appropriate pattern
+                            if isinstance(element, (NegativeInt, NegativeFloat)):
+                                if isinstance(element, NegativeInt):
+                                    list_patterns.append(
+                                        NegativeIntPattern(element.value),
+                                    )
+                                else:
+                                    list_patterns.append(
+                                        NegativeFloatPattern(element.value),
+                                    )
+                            else:
+                                # Create a variable pattern as a fallback for complex expressions
+                                list_patterns.append(
+                                    VariablePattern(f"_var_{len(list_patterns)}"),
+                                )
                     converted_patterns.append(ListPattern(list_patterns))
                 case _:
                     converted_patterns.append(pattern)
