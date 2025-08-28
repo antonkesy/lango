@@ -25,6 +25,7 @@ from lango.systemo.ast.nodes import (
     IntLiteral,
     LetStatement,
     ListLiteral,
+    ListType,
     LiteralPattern,
     NegativeFloat,
     NegativeInt,
@@ -297,6 +298,9 @@ class ASTTransformer(Transformer):
 
     def grouped_type(self, items: List[Any]) -> GroupedType:
         return GroupedType(items[0])
+
+    def list_type(self, items: List[Any]) -> ListType:
+        return ListType(items[0])
 
     # Patterns
     def constructor_pattern(self, items: List[Any]) -> ConstructorPattern:

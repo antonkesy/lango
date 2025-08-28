@@ -94,6 +94,7 @@ field_assign: ID "=" expr
 
 ?type_atom: TYPE                      -> type_constructor
           | ID                        -> type_var
+          | "[" type_expr "]"         -> list_type
           | "(" type_expr ")"         -> grouped_type
 
 // --- Patterns ---

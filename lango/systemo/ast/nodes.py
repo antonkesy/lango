@@ -158,6 +158,12 @@ class GroupedType(ASTNode):
     ty: Optional[Type] = None
 
 
+@dataclass
+class ListType(ASTNode):
+    element_type: "TypeExpression"
+    ty: Optional[Type] = None
+
+
 # Patterns
 @dataclass
 class ConstructorPattern(ASTNode):
@@ -280,6 +286,7 @@ type TypeExpression = Union[
     ArrowType,
     TypeApplication,
     GroupedType,
+    ListType,
 ]
 
 type Pattern = Union[

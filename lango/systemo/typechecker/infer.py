@@ -22,6 +22,7 @@ from lango.systemo.ast.nodes import (
     IntLiteral,
     LetStatement,
     ListLiteral,
+    ListType,
     LiteralPattern,
     NegativeFloat,
     NegativeInt,
@@ -225,6 +226,9 @@ class TypeInferrer:
                         return DataType(name, new_args)
                     case _:
                         return TypeApp(constructor_type, argument_type)
+            case ListType(element_type=element_type):
+                element_type_parsed = self.parse_type_expr(element_type)
+                return TypeApp(TypeCon("List"), element_type_parsed)
             case GroupedType(type_expr=type_expr):
                 return self.parse_type_expr(type_expr)
             case _:
@@ -1449,6 +1453,21 @@ class TypeInferrer:
                 FunctionType(
                     TypeCon("String"),
                     FunctionType(TypeCon("String"), TypeCon("String")),
+                ),
+            ),
+        )
+
+        # List concatenation primitive
+        env = env.extend(
+            "primListConcat",
+            TypeScheme(
+                {"a"},
+                FunctionType(
+                    TypeApp(TypeCon("List"), TypeVar("a")),
+                    FunctionType(
+                        TypeApp(TypeCon("List"), TypeVar("a")),
+                        TypeApp(TypeCon("List"), TypeVar("a")),
+                    ),
                 ),
             ),
         )
