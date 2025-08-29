@@ -290,17 +290,20 @@ def _show(value: Value) -> str:
 
 
 # Built-in functions available in the language
-builtins: Dict[str, Callable[..., Any]] = {
+builtins: Dict[str, Any] = {
     "putStr": flexible_putStr,
     "primPutStr": flexible_putStr,  # Alias for putStr
     "show": lambda x: _show(x),
     "error": lambda x: _error(x),
     "mod": lambda x: lambda y: x % y,
+    # Mathematical constants
+    "Infinity": float("inf"),
+    "NaN": float("nan"),
     # Primitive arithmetic operations for Int
     "primIntAdd": lambda x: lambda y: x + y,
     "primIntSub": lambda x: lambda y: x - y,
     "primIntMul": lambda x: lambda y: x * y,
-    "primIntDiv": lambda x: lambda y: float(x) / float(y),  # Int division returns Float
+    "primIntDiv": lambda x: lambda y: float(x) / float(y),
     "primIntMod": lambda x: lambda y: x % y,
     "primIntPow": lambda x: lambda y: x**y,
     "primIntNeg": lambda x: -x,
@@ -338,11 +341,10 @@ builtins: Dict[str, Callable[..., Any]] = {
     "primFloatShow": lambda x: (
         "Infinity"
         if x == float("inf")
-        else "-Infinity" if x == float("-inf") else str(x)
+        else "-Infinity" if x == float("-inf") else "NaN" if x != x else str(x)
     ),
     "primBoolShow": lambda x: "True" if x else "False",
     "primStringShow": lambda x: f'"{x}"',
-    "primCharShow": lambda x: f"'{x}'" if len(str(x)) == 1 else f'"{x}"',
     "primListShow": lambda x: str(x),  # Basic list show
     # Primitive list operations
     "primListIndex": lambda lst: lambda idx: (
@@ -453,13 +455,15 @@ class Interpreter:
                     # Apply the operator function with both arguments at once
                     if operator in self.env:
                         _, clauses = self.env[operator]
-                        return self._apply_function_with_patterns(
+                        result = self._apply_function_with_patterns(
                             clauses,
                             [left_val, right_val],
                         )
+                        return result
                     elif operator in self.variables:
                         op_func = self.variables[operator]
-                        return op_func(left_val)(right_val)
+                        result = op_func(left_val)(right_val)
+                        return result
                     else:
                         raise RuntimeError(f"Unknown operator: {operator}")
 
