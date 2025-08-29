@@ -4,6 +4,7 @@ from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from lango.systemo.ast.nodes import (
+    ArrowType,
     BoolLiteral,
     CharLiteral,
     ConsPattern,
@@ -17,12 +18,14 @@ from lango.systemo.ast.nodes import (
     FunctionApplication,
     FunctionDefinition,
     GroupedExpression,
+    GroupedType,
     IfElse,
     InstanceDeclaration,
     IntLiteral,
     LetStatement,
     ListLiteral,
     ListPattern,
+    ListType,
     LiteralPattern,
     NegativeFloat,
     NegativeInt,
@@ -31,8 +34,13 @@ from lango.systemo.ast.nodes import (
     Statement,
     StringLiteral,
     SymbolicOperation,
+    TupleType,
     TupleLiteral,
     TuplePattern,
+    TypeApplication,
+    TypeConstructor,
+    TypeExpression,
+    TypeVariable,
     Variable,
     VariablePattern,
 )
@@ -44,7 +52,9 @@ Value = Any  # Any runtime value
 Record = Dict[str, Any]  # Dictionary representing a record/object
 FunctionClause = Tuple[List[Pattern], Expression]
 FunctionValue = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
-Environment = Dict[str, FunctionValue]
+# New environment structure: function_name -> type_signature -> implementation
+TypedEnvironment = Dict[str, Dict[str, FunctionValue]]
+Environment = Dict[str, FunctionValue]  # Keep for backward compatibility
 ConstructorInfo = Tuple[int, str]  # (arity, data_type_name)
 ConstructorEnvironment = Dict[str, ConstructorInfo]
 # For monomorphization: map from (function_name, type_signature) to implementation
@@ -65,8 +75,8 @@ def interpret(
         print("Type checking failed, cannot interpret.")
         return RunReturn("", 1)
 
-    env, constructors = build_environment(ast)
-    interp = Interpreter(env, constructors)
+    env, typed_env, constructors = build_environment(ast)
+    interp = Interpreter(env, typed_env, constructors)
 
     if "main" not in env:
         raise RuntimeError("No main function defined")
@@ -137,8 +147,33 @@ def extract_function_name(name_tree: Any) -> str:
     return name_str
 
 
-def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment]:
+def type_expression_to_string(type_expr: TypeExpression) -> str:
+    """Convert a TypeExpression AST node to a string representation."""
+    match type_expr:
+        case TypeConstructor(name=name):
+            return name
+        case TypeVariable(name=name):
+            return name
+        case ArrowType(from_type=from_type, to_type=to_type):
+            return f"{type_expression_to_string(from_type)} -> {type_expression_to_string(to_type)}"
+        case TypeApplication(constructor=constructor, argument=argument):
+            return f"{type_expression_to_string(constructor)} {type_expression_to_string(argument)}"
+        case GroupedType(type_expr=inner_type):
+            return f"({type_expression_to_string(inner_type)})"
+        case ListType(element_type=element_type):
+            return f"[{type_expression_to_string(element_type)}]"
+        case TupleType(element_types=element_types):
+            type_strs = [type_expression_to_string(t) for t in element_types]
+            return f"({', '.join(type_strs)})"
+        case _:
+            return str(type_expr)
+
+
+def build_environment(
+    ast: Program,
+) -> Tuple[Environment, TypedEnvironment, ConstructorEnvironment]:
     env: Environment = {}
+    typed_env: TypedEnvironment = {}
     constructors: ConstructorEnvironment = {}
     monomorphic_env: MonomorphicEnvironment = {}
 
@@ -165,12 +200,16 @@ def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment
                 # Extract the actual function name from the instance declaration
                 func_name = extract_function_name(instance_name)
 
-                # Convert type signature to string for lookup (simplified approach)
-                type_key = str(type_sig)
+                # Convert type signature to string for lookup
+                type_key = type_expression_to_string(type_sig)
 
-                # Store the monomorphic implementation
-                if func_name not in env:
-                    env[func_name] = ("pattern_match", [])
+                # Initialize typed environment for this function if not exists
+                if func_name not in typed_env:
+                    typed_env[func_name] = {}
+
+                # Initialize the type signature if not exists
+                if type_key not in typed_env[func_name]:
+                    typed_env[func_name][type_key] = ("pattern_match", [])
 
                 # Fix infix operator patterns that have been parsed incorrectly
                 # For infix operators like (?), the parser creates patterns like:
@@ -192,7 +231,14 @@ def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment
                         func_def.patterns[1],  # Second argument (already correct)
                     ]
 
-                # Add this clause to the function's clauses list
+                # Append to typed environment with type signature
+                typed_env[func_name][type_key][1].append(
+                    (fixed_patterns, func_def.body)
+                )
+
+                # Also add to regular environment for backward compatibility (all clauses together)
+                if func_name not in env:
+                    env[func_name] = ("pattern_match", [])
                 env[func_name][1].append((fixed_patterns, func_def.body))
 
                 # Also store in monomorphic environment for potential future type-based dispatch
@@ -220,7 +266,7 @@ def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment
             case _:
                 pass
 
-    return env, constructors
+    return env, typed_env, constructors
 
 
 def flexible_putStr(
@@ -291,7 +337,6 @@ def _show(value: Value) -> str:
 
 # Built-in functions available in the language
 builtins: Dict[str, Any] = {
-    "putStr": flexible_putStr,
     "primPutStr": flexible_putStr,  # Alias for putStr
     "show": lambda x: _show(x),
     "error": lambda x: _error(x),
@@ -352,10 +397,82 @@ builtins: Dict[str, Any] = {
 
 
 class Interpreter:
-    def __init__(self, env: Environment, constructors: ConstructorEnvironment) -> None:
+    def __init__(
+        self,
+        env: Environment,
+        typed_env: TypedEnvironment,
+        constructors: ConstructorEnvironment,
+    ) -> None:
         self.env = env
+        self.typed_env = typed_env
         self.constructors = constructors
         self.variables: Dict[str, Value] = {}
+
+    def _find_matching_implementation(
+        self, func_name: str, args: List[Value]
+    ) -> Optional[FunctionValue]:
+        """Find the best matching implementation for a function call based on argument types."""
+        if func_name not in self.typed_env:
+            return None
+
+        # Get argument types
+        arg_types = [self._infer_runtime_type(arg) for arg in args]
+
+        # Try to find exact type match
+        for type_sig, implementation in self.typed_env[func_name].items():
+            # Parse the type signature to extract input types
+            if " -> " in type_sig:
+                parts = type_sig.split(" -> ")
+                if len(parts) >= 2:
+                    # Extract all input types (everything except the last part which is the return type)
+                    input_types = [part.strip() for part in parts[:-1]]
+                    
+                    # Check if the number of arguments matches the number of input types
+                    if len(arg_types) == len(input_types):
+                        # Check if all argument types match the input types
+                        if all(arg_type == input_type for arg_type, input_type in zip(arg_types, input_types)):
+                            return implementation
+
+        return None
+
+    def _infer_runtime_type(self, value: Value) -> str:
+        """Infer the type of a runtime value using constructor environment."""
+        match value:
+            case int():
+                return "Int"
+            case float():
+                return "Float"
+            case str():
+                if len(value) == 1:
+                    return "Char"
+                else:
+                    return "String"
+            case bool():
+                return "Bool"
+            case list():
+                if len(value) == 0:
+                    return "[a]"  # Generic empty list
+                else:
+                    # Infer element type from first element
+                    elem_type = self._infer_runtime_type(value[0])
+                    return f"[{elem_type}]"
+            case tuple():
+                if len(value) == 0:
+                    return "()"
+                else:
+                    elem_types = [self._infer_runtime_type(elem) for elem in value]
+                    return f"({', '.join(elem_types)})"
+            case dict() if "_constructor" in value:
+                # Constructor value - map constructor to data type using constructor environment
+                constructor_name = value["_constructor"]
+                if constructor_name in self.constructors:
+                    _, data_type = self.constructors[constructor_name]
+                    return data_type
+                else:
+                    # Fall back to constructor name as type name
+                    return constructor_name
+            case _:
+                return "Unknown"
 
     def eval(self, node: Expression) -> Value:
         match node:
@@ -445,15 +562,14 @@ class Interpreter:
             case SymbolicOperation(operator=operator, operands=operands):
                 # Handle symbolic operations like +, -, *, etc.
                 if len(operands) == 2:
-                    # Binary operation - evaluate both operands and pass them to pattern matching
+                    # Binary operation - evaluate both operands and pass them to type-based dispatch
                     left_val = self.eval(operands[0])
                     right_val = self.eval(operands[1])
 
-                    # Apply the operator function with both arguments at once
+                    # Apply the operator function with type-based dispatch
                     if operator in self.env:
-                        _, clauses = self.env[operator]
-                        result = self._apply_function_with_patterns(
-                            clauses,
+                        result = self._apply_function_with_typed_dispatch(
+                            operator,
                             [left_val, right_val],
                         )
                         return result
@@ -472,8 +588,9 @@ class Interpreter:
                         op_func = self.variables[operator]
                         return op_func(operand_val)
                     elif operator in self.env:
-                        op_func = self.eval_func(operator)
-                        return op_func(operand_val)
+                        return self._apply_function_with_typed_dispatch(
+                            operator, [operand_val]
+                        )
                     else:
                         raise RuntimeError(f"Unknown unary operator: {operator}")
                 else:
@@ -564,11 +681,31 @@ class Interpreter:
                 # Nullary function - just evaluate the body
                 return self.eval(body)
 
-        # If no nullary clause found, return a curried function
+        # If no nullary clause found, return a curried function with type-based dispatch
         def curried_function(*args: Any) -> Value:
-            return self._apply_function_with_patterns(clauses, list(args))
+            return self._apply_function_with_typed_dispatch(func_name, list(args))
 
         return curried_function
+
+    def _apply_function_with_typed_dispatch(
+        self,
+        func_name: str,
+        args: List[Value],
+    ) -> Value:
+        """Apply a function with type-based dispatch, falling back to pattern matching."""
+
+        # Try type-based dispatch first if available
+        typed_implementation = self._find_matching_implementation(func_name, args)
+        if typed_implementation is not None:
+            func_type, clauses = typed_implementation
+            return self._apply_function_with_patterns(clauses, args)
+
+        # Fall back to regular pattern matching with all clauses
+        if func_name in self.env:
+            func_type, clauses = self.env[func_name]
+            return self._apply_function_with_patterns(clauses, args)
+
+        raise RuntimeError(f"Unknown function: {func_name}")
 
     def _apply_function_with_patterns(
         self,

@@ -20,7 +20,38 @@ inst ycoord :: CPoint -> Float {
 
 demo p = (xcoord p) + (ycoord p);
 
+-- ------------------------------
+-- Polymorphic Tuples
+
+inst first :: (a,b) -> a;
+  first (x,y) = x;
+
+inst first :: (a,b,c) -> a;
+  first (x,y,z) = x;
+
+-- ------------------------------
+-- Overloaded functions
+
+inst overloaded :: Int -> Int {
+  overloaded 0 = 42;
+  overloaded x = x + 1;
+};
+
+inst overloaded :: Float -> Float {
+  overloaded 0.0 = -1.0;
+  overloaded x = x - 1.0;
+};
+
 main = do {
   let { p = MkPoint 3.0 4.0 };
   putStr (show (demo p));
+-- ------------------------------
+  let { pair = (42, "hello"), triple = (True, 100, 'A') };
+  putStr (show (first pair));
+  putStr (show (first triple));
+-- ------------------------------
+  putStr (show (overloaded 0));
+  putStr (show (overloaded 5));
+  putStr (show (overloaded 0.0));
+  putStr (show (overloaded 5.0));
 };
