@@ -1,13 +1,14 @@
 inst show :: Bool -> String {
-  show x = TODO;
+  show True = "True";
+  show False = "False";
 };
 
 inst show :: Int -> String {
-  show x = TODO;
+  show x = primIntShow;
 };
 
 inst show :: Float -> String {
-  show x = TODO;
+  show x = primFloatShow;
 };
 
 inst show :: String -> String {

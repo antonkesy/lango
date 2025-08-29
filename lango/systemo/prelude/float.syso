@@ -43,9 +43,9 @@ inst (/=) :: Float -> Float -> Bool {
 };
 
 inst (^^) :: Float -> Float -> Float {
-  (^) x y = TODO;
+  (^) x y = primFloatPow;
 };
 
 inst (**) :: Float -> Float -> Float {
-  (^) x y = TODO;
+  (^) x y = primFloatPow;
 };

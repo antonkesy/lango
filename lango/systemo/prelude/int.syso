@@ -43,5 +43,5 @@ inst (/=) :: Int -> Int -> Bool {
 };
 
 inst (^) :: Int -> Int -> Int {
-  (^) x y = TODO;
+  (^) x y = primIntPow;
 };
