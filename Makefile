@@ -68,6 +68,13 @@ systemo-typecheck: install
 	. .venv/bin/activate && \
 	lango typecheck systemo examples/systemo/example.syso
 
+systemo-compile-python: install
+	. .venv/bin/activate && \
+	lango compile systemo examples/systemo/example.syso -o build/example.py --target python && \
+	python3.13 build/example.py
+
+
+
 # Quality
 test: install
 	. .venv/bin/activate && \

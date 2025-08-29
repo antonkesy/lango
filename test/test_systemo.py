@@ -3,15 +3,31 @@ from typing import Any
 
 import pytest
 
+from lango.systemo.compiler.python import compile_program as compile_to_python
 from lango.systemo.interpreter.interpreter import interpret
 from lango.systemo.parser.parser import parse
 from lango.systemo.typechecker.typecheck import type_check
 
 from .utility.file_tester import file_test_output, file_test_type, get_all_test_files
+from .utility.runners.external import run_python_code
 
 MINIO_BASE_TEST_FILES_PATH = Path("./test/files/minio/")
 SYSO_BASE_TEST_FILES_PATH = Path("./test/files/systemo/")
 EXAMPLE = Path("./examples/systemo/example.syso")
+
+
+@pytest.mark.parametrize(
+    "file_name",
+    list(get_all_test_files(SYSO_BASE_TEST_FILES_PATH, "syso")),
+    ids=lambda p: str(p),
+)
+def test_python_compiler(file_name: Path) -> None:
+    def run_compiler_and_output(f: Path) -> str:
+        ast = parse(f)
+        type_check(ast)
+        return run_python_code(compile_to_python(ast))
+
+    file_test_output(file_name, run_compiler_and_output)
 
 
 @pytest.mark.parametrize(

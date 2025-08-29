@@ -13,6 +13,9 @@ from lango.minio.parser.parser import parse as minio_parse
 from lango.minio.typechecker.typecheck import get_type_str as minio_get_type_str
 from lango.minio.typechecker.typecheck import type_check as minio_type_check
 from lango.systemo.ast.nodes import Program as SystemoProgram
+from lango.systemo.compiler.python import (
+    compile_program as systemo_python_compile_program,
+)
 from lango.systemo.interpreter.interpreter import interpret as systemo_interpret
 from lango.systemo.parser.parser import parse as systemo_parse
 from lango.systemo.typechecker.typecheck import get_type_str as systemo_get_type_str
@@ -123,7 +126,15 @@ def compile(
         case "systemo":
             systemo_ast = systemo_parse(input_file)
             systemo_type_check(systemo_ast)
-            raise NotImplementedError("Systemo compilation not implemented yet")
+            match target:
+                case "python":
+                    compile_program = systemo_python_compile_program
+                case _:
+                    console.print(
+                        f"[red]Error: Target '{target}' not supported for systemo.[/red]",
+                    )
+                    return 1
+            compiled_code = compile_program(systemo_ast)
         case "minio":
             minio_ast = minio_parse(input_file)
             minio_type_check(minio_ast)

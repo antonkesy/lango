@@ -1,6 +1,6 @@
 -- RUN: FAIL
 -- TYPECHECK: FAIL
--- ""
+-- "1.0"
 data Point = MkPoint Float Float;
 
 inst xcoord :: Point -> Int {
