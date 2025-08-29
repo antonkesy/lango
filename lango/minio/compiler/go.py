@@ -5,6 +5,7 @@ from lango.minio.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
+    CharLiteral,
     ConcatOperation,
     ConsPattern,
     Constructor,
@@ -188,6 +189,7 @@ class MinioGoCompiler:
                 | IntLiteral()
                 | FloatLiteral()
                 | StringLiteral()
+                | CharLiteral()
                 | BoolLiteral()
                 | NegativeInt()
                 | NegativeFloat()
@@ -1026,6 +1028,8 @@ class MinioGoCompiler:
                 return str(value)
             case StringLiteral(value=value):
                 return f'"{value}"'
+            case CharLiteral(value=value):
+                return f'[]any{{"char", "{value}"}}'  # Use slice to distinguish from strings
             case BoolLiteral(value=value):
                 return "true" if value else "false"
             case ListLiteral(elements=elements):
@@ -1318,6 +1322,7 @@ class MinioGoCompiler:
                 IntLiteral()
                 | FloatLiteral()
                 | StringLiteral()
+                | CharLiteral()
                 | BoolLiteral()
                 | ListLiteral()
                 | Variable()

@@ -298,6 +298,21 @@ func minioShow(value any) string {
 	switch v := value.(type) {
 	case MinioInfinity:
 		return "Infinity"
+	case []any:
+		// Check if it's a character representation
+		if len(v) == 2 {
+			if str, ok := v[0].(string); ok && str == "char" {
+				if char, ok := v[1].(string); ok {
+					return "'" + char + "'"
+				}
+			}
+		}
+		// Regular slice
+		elements := make([]string, len(v))
+		for i, elem := range v {
+			elements[i] = minioShow(elem)
+		}
+		return "[" + strings.Join(elements, ",") + "]"
 	case bool:
 		if v {
 			return "True"
@@ -306,12 +321,6 @@ func minioShow(value any) string {
 		}
 	case string:
 		return `"` + v + `"`
-	case []any:
-		elements := make([]string, len(v))
-		for i, elem := range v {
-			elements[i] = minioShow(elem)
-		}
-		return "[" + strings.Join(elements, ",") + "]"
 	case float64:
 		// Format float64 to always show at least one decimal place for whole numbers
 		if v == float64(int(v)) {
@@ -326,9 +335,21 @@ func minioShow(value any) string {
 }
 
 func minioPutStr(s any) any {
-	if str, ok := s.(string); ok {
-		fmt.Print(str)
-	} else {
+	switch v := s.(type) {
+	case []any:
+		// Check if it's a character representation
+		if len(v) == 2 {
+			if str, ok := v[0].(string); ok && str == "char" {
+				if char, ok := v[1].(string); ok {
+					fmt.Print(char)
+					return nil
+				}
+			}
+		}
+		fmt.Print(s)
+	case string:
+		fmt.Print(v)
+	default:
 		fmt.Print(s)
 	}
 	return nil

@@ -7,6 +7,7 @@ from lango.minio.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
+    CharLiteral,
     ConcatOperation,
     ConsPattern,
     Constructor,
@@ -158,9 +159,13 @@ def flexible_putStr(
     else:
         # If given a direct value, print it
         match arg:
+            case ("char", char_value):
+                print(char_value, end="")
             case str():
                 arg = arg.encode().decode("unicode_escape")
-        print(arg, end="")
+                print(arg, end="")
+            case _:
+                print(arg, end="")
         return None
 
 
@@ -170,6 +175,8 @@ def _error(message: str) -> Any:
 
 def _show(value: Value) -> str:
     match value:
+        case ("char", char_value):
+            return f"'{char_value}'"
         case str():
             return f'"{value}"'
         case list():
@@ -223,6 +230,9 @@ class Interpreter:
                 return value
             case StringLiteral(value=value):
                 return value
+            case CharLiteral(value=value):
+                # Mark chars with a special wrapper to distinguish from strings
+                return ("char", value)
             case BoolLiteral(value=value):
                 return value
             case NegativeInt(value=value):
@@ -417,6 +427,7 @@ class Interpreter:
                     IntLiteral()
                     | FloatLiteral()
                     | StringLiteral()
+                    | CharLiteral()
                     | BoolLiteral()
                     | ListLiteral()
                     | Variable()

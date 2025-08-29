@@ -19,6 +19,8 @@ def curry(func: F) -> F:
 
 def minio_show(value: Any) -> str:
     match value:
+        case ("char", char_value):
+            return f"'{char_value}'"
         case bool():
             return "True" if value else "False"
         case str():
@@ -38,9 +40,13 @@ def minio_show(value: Any) -> str:
 
 def minio_put_str(s: Any) -> None:
     match s:
+        case ("char", char_value):
+            print(char_value, end="")
         case str():
             s = s.encode().decode("unicode_escape")
-    print(s, end="")
+            print(s, end="")
+        case _:
+            print(s, end="")
 
 
 def minio_error(message: str) -> Any:

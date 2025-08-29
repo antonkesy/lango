@@ -4,6 +4,7 @@ from lango.minio.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
+    CharLiteral,
     ConcatOperation,
     ConsPattern,
     Constructor,
@@ -968,6 +969,8 @@ class MinioCompiler:
                 return str(value)
             case StringLiteral(value=value):
                 return f'"{value}"'
+            case CharLiteral(value=value):
+                return f"('char', '{value}')"  # Use tuple to distinguish from strings
             case BoolLiteral(value=value):
                 return str(value)
             case ListLiteral(elements=elements):
@@ -1204,6 +1207,7 @@ class MinioCompiler:
                 IntLiteral()
                 | FloatLiteral()
                 | StringLiteral()
+                | CharLiteral()
                 | BoolLiteral()
                 | ListLiteral()
                 | Variable()

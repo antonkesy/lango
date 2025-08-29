@@ -7,6 +7,7 @@ from lango.minio.ast.nodes import (
     AndOperation,
     ArrowType,
     BoolLiteral,
+    CharLiteral,
     ConcatOperation,
     ConsPattern,
     Constructor,
@@ -130,6 +131,19 @@ class ASTTransformer(Transformer):
                 if text.startswith('"') and text.endswith('"'):
                     return StringLiteral(text[1:-1])
                 return StringLiteral(text)
+
+    def char(self, items: List[Any]) -> CharLiteral:
+        value = items[0]
+        match value:
+            case Token():
+                # Remove single quotes
+                return CharLiteral(value.value[1:-1])
+            case _:
+                # Already processed, remove quotes if still present
+                text = str(value)
+                if text.startswith("'") and text.endswith("'"):
+                    return CharLiteral(text[1:-1])
+                return CharLiteral(text)
 
     def true(self, items: List[Any]) -> BoolLiteral:
         return BoolLiteral(True)

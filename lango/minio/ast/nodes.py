@@ -27,6 +27,11 @@ class StringLiteral(ASTNode):
 
 
 @dataclass
+class CharLiteral(ASTNode):
+    value: str
+
+
+@dataclass
 class BoolLiteral(ASTNode):
     value: bool
 

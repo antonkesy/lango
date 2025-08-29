@@ -134,6 +134,7 @@ tuple_pattern: "(" pattern "," pattern ("," pattern)* ")"
 ?literal: INT     -> int
         | FLOAT   -> float
         | STRING  -> string
+        | CHAR    -> char
         | "True"  -> true
         | "False" -> false
         | list
@@ -145,6 +146,7 @@ ID: /[a-z][a-zA-Z0-9_]*/
 TYPE: /[A-Z][a-zA-Z0-9_]*/
 UIDENT: TYPE
 STRING: /"[^"]*"/
+CHAR: /'[^']*'/
 INT: /[0-9]+/
 FLOAT: /[0-9]+\.[0-9]+/
 

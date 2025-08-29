@@ -7,6 +7,7 @@ from lango.minio.ast.nodes import (
     ArrowType,
     ASTNode,
     BoolLiteral,
+    CharLiteral,
     ConcatOperation,
     ConsPattern,
     Constructor,
@@ -59,6 +60,7 @@ from lango.minio.ast.nodes import (
 )
 from lango.shared.typechecker.lango_types import (
     BOOL_TYPE,
+    CHAR_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
     STRING_TYPE,
@@ -268,6 +270,9 @@ class TypeInferrer:
 
             case StringLiteral():
                 return STRING_TYPE, TypeSubstitution()
+
+            case CharLiteral():
+                return CHAR_TYPE, TypeSubstitution()
 
             case BoolLiteral():
                 return BOOL_TYPE, TypeSubstitution()
@@ -988,6 +993,7 @@ class TypeInferrer:
                     IntLiteral()
                     | FloatLiteral()
                     | StringLiteral()
+                    | CharLiteral()
                     | BoolLiteral()
                     | ListLiteral()
                     | TupleLiteral()
@@ -1049,6 +1055,7 @@ class TypeInferrer:
                 IntLiteral()
                 | FloatLiteral()
                 | StringLiteral()
+                | CharLiteral()
                 | BoolLiteral()
                 | ListLiteral()
                 | TupleLiteral()
