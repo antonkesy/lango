@@ -15,8 +15,8 @@ inst (*) :: Float -> Float -> Float {
 };
 
 inst (/) :: Float -> Float -> Float {
-  (/) 0 0 = NaN;
-  (/) x 0 = if x >= 0 then Infinity else -Infinity;
+  (/) 0.0 0.0 = NaN;
+  (/) x 0.0 = if x >= 0.0 then Infinity else -Infinity;
   (/) x y = primFloatDiv x y;
 };
 
