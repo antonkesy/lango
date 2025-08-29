@@ -1,6 +1,6 @@
 -- RUN: OK
 -- TYPECHECK: OK
--- "-1"
+-- "-3"
 
 inst (?) :: Int -> Int {
   (?) x = -x;

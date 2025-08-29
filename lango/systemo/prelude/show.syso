@@ -4,13 +4,21 @@ inst show :: Bool -> String {
 };
 
 inst show :: Int -> String {
-  show x = primIntShow;
+  show x = primIntShow x;
 };
 
 inst show :: Float -> String {
-  show x = primFloatShow;
+  show x = primFloatShow x;
 };
 
 inst show :: String -> String {
   show x = x;
+};
+
+inst show :: Char -> String {
+  show x = primCharShow x;
+};
+
+inst show :: [a] -> String {
+  show x = primListShow x;
 };

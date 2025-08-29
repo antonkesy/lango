@@ -683,8 +683,12 @@ class ASTTransformer(Transformer):
 
         return FunctionDefinition(func_name, converted_patterns, body)
 
-    def inst_decl(self, items: List[Any]) -> InstanceDeclaration:
-        # items should be: [instance_name, type_signature, function_definition]
+    def inst_body(self, items: List[Any]) -> List[Any]:
+        # Just return the list of function definitions
+        return items
+
+    def inst_decl(self, items: List[Any]) -> List[InstanceDeclaration]:
+        # items should be: [instance_name, type_signature, inst_body/function_definition]
         match items[0]:
             case Token(value=instance_name):
                 pass
@@ -692,9 +696,21 @@ class ASTTransformer(Transformer):
                 instance_name = str(value)
 
         type_signature = items[1]  # This should be a TypeExpression
-        function_definition = items[2]  # This should be a FunctionDefinition
 
-        return InstanceDeclaration(instance_name, type_signature, function_definition)
+        # Check if items[2] is a list (from inst_body) or a direct FunctionDefinition
+        third_item = items[2]
+        if isinstance(third_item, list):
+            # It's a list of function definitions from inst_body
+            # Create separate InstanceDeclarations for each function definition
+            declarations = []
+            for func_def in third_item:
+                declarations.append(
+                    InstanceDeclaration(instance_name, type_signature, func_def),
+                )
+            return declarations
+        else:
+            # It's a single function definition - return as a single-item list
+            return [InstanceDeclaration(instance_name, type_signature, third_item)]
 
     def infixl_decl(self, items: List[Any]) -> PrecedenceDeclaration:
         precedence = int(items[0].value if hasattr(items[0], "value") else items[0])

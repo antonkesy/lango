@@ -1,3 +1,5 @@
 inst (++) :: String -> String -> String {
   (++) x y = primStringConcat x y;
 };
+
+putStr x = primPutStr x;

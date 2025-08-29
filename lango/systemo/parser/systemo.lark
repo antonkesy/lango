@@ -20,8 +20,10 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Instance Declarations ---
-inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_func_def+ "}" ";"
+inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_body "}" ";"
          | "inst" inst_operator_name "::" type_expr ";" inst_func_def
+
+inst_body: inst_func_def+
 
 // --- Precedence Declarations ---
 precedence_decl: "infixl" INT symbolic_operator ";"  -> infixl_decl

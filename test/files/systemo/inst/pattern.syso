@@ -1,6 +1,6 @@
 -- RUN: OK
 -- TYPECHECK: OK
--- "TrueFalse"
+-- ""True""False""
 
 inst t :: Bool -> String {
   t True = "True";

@@ -1,3 +1,7 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "7.0"
+
 data Colour = MKColor Int Int Int;
 data Point = MkPoint Float Float;
 data CPoint = MkCPoint Float Float Colour;

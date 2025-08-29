@@ -1476,10 +1476,6 @@ class TypeInferrer:
         env = TypeEnvironment()
 
         # Add built-in functions
-        # putStr :: String -> IO ()
-        putstr_type = FunctionType(TypeCon("String"), TypeApp(TypeCon("IO"), UNIT_TYPE))
-        env = env.extend("putStr", TypeScheme(set(), putstr_type))
-
         # error :: String -> a
         error_type = FunctionType(STRING_TYPE, TypeVar("a"))
         env = env.extend("error", TypeScheme({"a"}, error_type))
@@ -1808,6 +1804,18 @@ class TypeInferrer:
             ),
         )
 
+        #
+        env = env.extend(
+            "primPutStr",
+            TypeScheme(
+                set(),
+                FunctionType(
+                    STRING_TYPE,
+                    TypeApp(TypeCon("IO"), UNIT_TYPE),
+                ),
+            ),
+        )
+
         # List concatenation primitive
         env = env.extend(
             "primListConcat",
@@ -1819,6 +1827,33 @@ class TypeInferrer:
                         TypeApp(TypeCon("List"), TypeVar("a")),
                         TypeApp(TypeCon("List"), TypeVar("a")),
                     ),
+                ),
+            ),
+        )
+
+        # Show
+        env = env.extend(
+            "primIntShow",
+            TypeScheme(
+                set(),
+                FunctionType(INT_TYPE, STRING_TYPE),
+            ),
+        )
+
+        env = env.extend(
+            "primFloatShow",
+            TypeScheme(
+                set(),
+                FunctionType(FLOAT_TYPE, STRING_TYPE),
+            ),
+        )
+        env = env.extend(
+            "primListShow",
+            TypeScheme(
+                {"a"},
+                FunctionType(
+                    TypeApp(TypeCon("List"), TypeVar("a")),
+                    STRING_TYPE,
                 ),
             ),
         )

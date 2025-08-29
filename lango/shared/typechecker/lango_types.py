@@ -148,6 +148,7 @@ class TupleType(Type):
 
 # Built-in types
 INT_TYPE = TypeCon("Int")
+CHAR_TYPE = TypeCon("Char")
 STRING_TYPE = TypeCon("String")
 FLOAT_TYPE = TypeCon("Float")
 BOOL_TYPE = TypeCon("Bool")

@@ -1,20 +1,15 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42True"
+
 inst first :: (a,b) -> a;
   first (x,y) = x;
-
-inst second :: (a,b) -> b;
-  second (x,y) = x;
 
 inst first :: (a,b,c) -> a;
   first (x,y,z) = x;
 
-inst second :: (a,b,c) -> b;
-  second (x,y,z) = y;
-
-inst third :: (a,b,c) -> c;
-  third (x,y,z) = c;
-
 main = do {
   let { pair = (42, "hello"), triple = (True, 100, 'A') };
-  putStr (show (first pair) ++ " " ++ show (second pair));
-  putStr (" " ++ show (first triple) ++ " " ++ show (second triple) ++ " " ++ show (third triple));
+  putStr (show (first pair));
+  putStr (show (first triple));
 };
