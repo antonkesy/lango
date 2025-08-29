@@ -26,4 +26,7 @@ def parse_lark(
     with open(path) as f:
         main_content = f.read()
 
+    with open(f"./build/main.{file_extension}", "w") as f:
+        f.write(main_content + prelude_content)
+
     return parser.parse(main_content + prelude_content)
