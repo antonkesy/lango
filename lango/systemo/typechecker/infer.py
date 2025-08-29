@@ -3,10 +3,10 @@ from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
 from lango.shared.typechecker.lango_types import (
     BOOL_TYPE,
+    CHAR_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
     STRING_TYPE,
-    CHAR_TYPE,
     UNIT_TYPE,
     DataType,
     FreshVarGenerator,
@@ -1602,18 +1602,6 @@ class TypeInferrer:
                 FunctionType(
                     FLOAT_TYPE,
                     FunctionType(FLOAT_TYPE, FLOAT_TYPE),
-                ),
-            ),
-        )
-
-        # List indexing primitive
-        env = env.extend(
-            "primListIndex",
-            TypeScheme(
-                {"a"},
-                FunctionType(
-                    TypeApp(TypeCon("List"), TypeVar("a")),
-                    FunctionType(INT_TYPE, TypeVar("a")),
                 ),
             ),
         )

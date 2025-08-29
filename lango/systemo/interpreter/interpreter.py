@@ -347,9 +347,6 @@ builtins: Dict[str, Any] = {
     "primStringShow": lambda x: f'"{x}"',
     "primListShow": lambda x: str(x),  # Basic list show
     # Primitive list operations
-    "primListIndex": lambda lst: lambda idx: (
-        lst[idx] if 0 <= idx < len(lst) else _error(f"Index {idx} out of bounds")
-    ),
     "primListConcat": lambda x: lambda y: x + y,
 }
 

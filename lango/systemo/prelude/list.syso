@@ -29,5 +29,7 @@ listEq [] [] = True;
 listEq (x:xs) (y:ys) = x == y && listEq xs ys;
 
 inst (!!) :: [a] -> Int -> a {
-  (!!) l i = primListIndex l i;
+  (!!) [] n = error "index too large";
+  (!!) (x:xs) 0 = x;
+  (!!) (x:xs) n = if n < 0 then error "negative index" else xs !! (n - 1);
 };
