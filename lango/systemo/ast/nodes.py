@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, List, Optional, Union
 
-from lango.systemo.typechecker.systemo_types import Type
+from lango.shared.typechecker.lango_types import Type
 
 
 class Associativity(Enum):

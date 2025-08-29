@@ -49,7 +49,7 @@ from lango.minio.ast.nodes import (
     Variable,
     VariablePattern,
 )
-from lango.minio.typechecker.minio_types import (
+from lango.shared.typechecker.lango_types import (
     DataType,
     FunctionType,
     Type,
