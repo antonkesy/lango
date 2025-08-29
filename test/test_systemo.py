@@ -35,6 +35,20 @@ def test_python_compiler(file_name: Path) -> None:
     list(get_all_test_files(MINIO_BASE_TEST_FILES_PATH, "minio")),
     ids=lambda p: str(p),
 )
+def test_python_compiler_is_superset_of_minio(file_name: Path) -> None:
+    def run_compiler_and_output(f: Path) -> str:
+        ast = parse(f)
+        type_check(ast)
+        return run_python_code(compile_to_python(ast))
+
+    file_test_output(file_name, run_compiler_and_output)
+
+
+@pytest.mark.parametrize(
+    "file_name",
+    list(get_all_test_files(MINIO_BASE_TEST_FILES_PATH, "minio")),
+    ids=lambda p: str(p),
+)
 def test_interpreter_is_superset_of_minio(file_name: Path) -> None:
     def run_interpreter(f: Path) -> str:
         return interpret(parse(f), collectStdOut=True).output

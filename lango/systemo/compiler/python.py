@@ -960,6 +960,22 @@ class systemoCompiler:
                     name.startswith("(") and name.endswith(")")
                 ):
                     assignments.append(f"{name} = arg_0")
+            case ListPattern(patterns=patterns):
+                # List pattern - check list length and destructure
+                condition_parts.append(f"len(arg_0) == {len(patterns)}")
+                for i, sub_pattern in enumerate(patterns):
+                    match sub_pattern:
+                        case VariablePattern(name=name):
+                            assignments.append(f"{name} = arg_0[{i}]")
+            case ConsPattern(head=head, tail=tail):
+                # Cons pattern (x:xs) - check if list is non-empty and destructure
+                condition_parts.append("len(arg_0) > 0")
+                match head:
+                    case VariablePattern(name=name):
+                        assignments.append(f"{name} = arg_0[0]")
+                match tail:
+                    case VariablePattern(name=name):
+                        assignments.append(f"{name} = arg_0[1:]")
             case _:
                 # More complex patterns would need additional handling
                 condition_parts.append("True")  # Placeholder
@@ -975,6 +991,22 @@ class systemoCompiler:
                     name.startswith("(") and name.endswith(")")
                 ):
                     assignments.append(f"{name} = arg_1")
+            case ListPattern(patterns=patterns):
+                # List pattern - check list length and destructure
+                condition_parts.append(f"len(arg_1) == {len(patterns)}")
+                for i, sub_pattern in enumerate(patterns):
+                    match sub_pattern:
+                        case VariablePattern(name=name):
+                            assignments.append(f"{name} = arg_1[{i}]")
+            case ConsPattern(head=head, tail=tail):
+                # Cons pattern (x:xs) - check if list is non-empty and destructure
+                condition_parts.append("len(arg_1) > 0")
+                match head:
+                    case VariablePattern(name=name):
+                        assignments.append(f"{name} = arg_1[0]")
+                match tail:
+                    case VariablePattern(name=name):
+                        assignments.append(f"{name} = arg_1[1:]")
             case _:
                 # More complex patterns would need additional handling
                 condition_parts.append("True")  # Placeholder
@@ -1603,6 +1635,7 @@ class systemoCompiler:
                 | ConstructorExpression()
                 | DoBlock()
                 | GroupedExpression()
+                | IfElse()
             ):
                 return True
             case _:

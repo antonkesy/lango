@@ -139,6 +139,23 @@ def primFloatShow(x: float) -> str:
         return str(x)
 
 
+# Primitive boolean functions
+def primBoolAnd(x: bool, y: bool) -> bool:
+    return x and y
+
+
+def primBoolOr(x: bool, y: bool) -> bool:
+    return x or y
+
+
+def primBoolEq(x: bool, y: bool) -> bool:
+    return x == y
+
+
+def primBoolShow(x: bool) -> str:
+    return str(x)
+
+
 # Primitive string functions
 def primStringConcat(x: str, y: str) -> str:
     return x + y
