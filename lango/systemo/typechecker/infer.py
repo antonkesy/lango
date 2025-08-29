@@ -6,6 +6,7 @@ from lango.shared.typechecker.lango_types import (
     FLOAT_TYPE,
     INT_TYPE,
     STRING_TYPE,
+    CHAR_TYPE,
     UNIT_TYPE,
     DataType,
     FreshVarGenerator,
@@ -1855,6 +1856,14 @@ class TypeInferrer:
                     TypeApp(TypeCon("List"), TypeVar("a")),
                     STRING_TYPE,
                 ),
+            ),
+        )
+
+        env = env.extend(
+            "primCharShow",
+            TypeScheme(
+                set(),
+                FunctionType(CHAR_TYPE, STRING_TYPE),
             ),
         )
 
