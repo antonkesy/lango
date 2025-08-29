@@ -9,14 +9,14 @@ from lango.minio.interpreter.interpreter import interpret
 from lango.minio.parser.parser import parse
 from lango.minio.typechecker.typecheck import type_check
 
-from ..utility.file_tester import file_test_output, file_test_type, get_all_test_files
-from ..utility.runners.external import (
+from .utility.file_tester import file_test_output, file_test_type, get_all_test_files
+from .utility.runners.external import (
     run_go_code,
     run_haskell_file,
     run_python_code,
 )
 
-BASE_TEST_FILES_PATH = Path("./test/minio/files/")
+BASE_TEST_FILES_PATH = Path("./test/files/minio/")
 EXAMPLE = Path("./examples/minio/example.minio")
 
 

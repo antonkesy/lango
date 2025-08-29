@@ -7,10 +7,10 @@ import pytest
 from lango.systemo.parser.parser import parse
 from lango.systemo.typechecker.typecheck import type_check
 
-from ..utility.file_tester import file_test_output, file_test_type, get_all_test_files
+from .utility.file_tester import file_test_output, file_test_type, get_all_test_files
 
-MINIO_BASE_TEST_FILES_PATH = Path("./test/minio/files/")
-SYSO_BASE_TEST_FILES_PATH = Path("./test/systemo/files/")
+MINIO_BASE_TEST_FILES_PATH = Path("./test/files/minio/")
+SYSO_BASE_TEST_FILES_PATH = Path("./test/files/systemo/")
 EXAMPLE = Path("./examples/systemo/example.syso")
 
 
