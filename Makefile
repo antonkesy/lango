@@ -75,7 +75,7 @@ test: install
 
 test-systemo: install
 	. .venv/bin/activate && \
-	pytest -vvs test/systemo/test_systemo.py
+	pytest -vvs test/test_systemo.py
 
 coverage: install-dev
 	. .venv/bin/activate && \
