@@ -1,10 +1,14 @@
-from lark import Lark, ParseTree
 import os
 from pathlib import Path
 
+from lark import Lark, ParseTree
+
 
 def parse_lark(
-    path: Path, grammar: Path, prelude_dir: Path, file_extension: str
+    path: Path,
+    grammar: Path,
+    prelude_dir: Path,
+    file_extension: str,
 ) -> ParseTree:
     parser = Lark.open(
         str(grammar),
