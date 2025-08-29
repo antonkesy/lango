@@ -20,7 +20,7 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Instance Declarations ---
-inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_func_def "}" ";"
+inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_func_def+ "}" ";"
          | "inst" inst_operator_name "::" type_expr ";" inst_func_def
 
 // --- Precedence Declarations ---

@@ -1,0 +1,13 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "TrueFalse"
+
+inst t :: Bool -> String {
+  t True = "True";
+  t False = "False";
+};
+
+main = do {
+  putStr (show (t True));
+  putStr (show (t False));
+};
