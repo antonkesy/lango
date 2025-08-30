@@ -110,19 +110,9 @@ def parse_type_expr(node) -> Optional[Type]:
             return None
 
 
-@dataclass
-class TypedFunction:
-    pattern: List[Pattern]
-
-
-@dataclass
-class TopLevelFunction:
-    name: str
-    overloads: dict[str, TypedFunction]  # Use string representation of types as keys
-
-
-def collect_overloaded_functions(program: Program) -> Dict[str, TopLevelFunction]:
-    overloaded_functions: Dict[str, TopLevelFunction] = {}
+def collect_overloaded_functions(program: Program) -> Dict[str, Dict[str, FunctionDefinition]]:
+    """Collect overloaded functions from the program, returning a dict of function names to type-signature-keyed function definitions."""
+    overloaded_functions: Dict[str, Dict[str, FunctionDefinition]] = {}
 
     for stmt in program.statements:
         if isinstance(stmt, FunctionDefinition):
@@ -134,12 +124,10 @@ def collect_overloaded_functions(program: Program) -> Dict[str, TopLevelFunction
             if not isinstance(func_type, FunctionType):
                 raise NotImplementedError("TODO")
                 continue
-            typed_func = TypedFunction(pattern=stmt.patterns)
+            
             if func_name not in overloaded_functions:
-                overloaded_functions[func_name] = TopLevelFunction(
-                    name=func_name, overloads={}
-                )
-            overloaded_functions[func_name].overloads[str(func_type)] = typed_func
+                overloaded_functions[func_name] = {}
+            overloaded_functions[func_name][str(func_type)] = stmt
         elif isinstance(stmt, InstanceDeclaration):
             func_name = stmt.instance_name
             func_type_expr = stmt.type_signature
@@ -152,10 +140,8 @@ def collect_overloaded_functions(program: Program) -> Dict[str, TopLevelFunction
             # Only accept FunctionType objects
             if not isinstance(func_type, FunctionType):
                 continue
-            typed_func = TypedFunction(pattern=stmt.function_definition.patterns)
+            
             if func_name not in overloaded_functions:
-                overloaded_functions[func_name] = TopLevelFunction(
-                    name=func_name, overloads={}
-                )
-            overloaded_functions[func_name].overloads[str(func_type)] = typed_func
+                overloaded_functions[func_name] = {}
+            overloaded_functions[func_name][str(func_type)] = stmt.function_definition
     return overloaded_functions
