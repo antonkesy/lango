@@ -95,37 +95,8 @@ class systemoCompiler:
     def _get_function_arity(self, func_name: str) -> int:
         """Get the number of parameters (arity) of a function."""
         if func_name not in self.function_types:
-            # For built-in functions, we need to hardcode their arities
-            builtin_arities = {
-                "add": 2,
-                "sub": 2,
-                "mul": 2,
-                "div": 2,
-                "mod": 2,
-                "eqeq": 2,
-                "neq": 2,
-                "lt": 2,
-                "le": 2,
-                "gt": 2,
-                "ge": 2,
-                "and": 2,
-                "or": 2,
-                "cons": 2,
-                "map": 2,
-                "filter": 2,
-                "fold": 3,
-                "foldr": 3,
-                "compose": 3,  # compose f g x = f (g x)
-                "show": 1,
-                "putStr": 1,
-                "put_str": 1,
-                "error": 1,
-                "head": 1,
-                "tail": 1,
-                "length": 1,
-                "null": 1,
-            }
-            return builtin_arities.get(func_name, 1)
+            # If function type is not known, assume arity 1 as default
+            return 1
 
         func_type = self.function_types[func_name]
         arity = 0
