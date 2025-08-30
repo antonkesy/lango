@@ -1,25 +1,11 @@
 # NOTE: do not remove any imports, they are used in the generated code
 import math
 import sys
-from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
-
-# Runtime support functions
-F = TypeVar("F", bound=Callable[..., Any])
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 # Mathematical constants used in systemo
 NaN = float("nan")
 Infinity = float("inf")
-
-
-def curry(func: F) -> F:
-    @wraps(func)
-    def curried(*args: Any) -> Any:
-        if len(args) >= func.__code__.co_argcount:
-            return func(*args)
-        return lambda *more_args: curried(*args + more_args)
-
-    return curried  # type: ignore
 
 
 def systemo_error(message: str) -> Any:
@@ -210,5 +196,5 @@ def systemo_show(x: Any) -> str:
 
 
 # Built-in putStr function
-def systemo_put_str(x: str) -> None:
+def systemo_putStr(x: str) -> None:
     primPutStr(x)

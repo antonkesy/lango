@@ -48,6 +48,9 @@ class systemoCompiler:
         self.indent_level = 0
         self.defined_functions: Set[str] = set()
         self.nullary_functions: Set[str] = set()  # Functions with no parameters
+        self.lambda_lifted_functions: Set[str] = (
+            set()
+        )  # Functions that had lambdas lifted to parameters
         self.function_types: Dict[str, Type] = {}  # Track function types
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
@@ -58,9 +61,6 @@ class systemoCompiler:
 
     def _prefix_name(self, name: str) -> str:
         """Add systemo_ prefix to user-defined names, but not built-ins, constructors, or pattern variables."""
-        # Don't prefix built-in functions
-        if name in ["show", "putStr"]:
-            return name
         # Don't prefix local pattern variables
         if name in self.local_variables:
             return name
@@ -91,6 +91,48 @@ class systemoCompiler:
             func_type = func_type.result
 
         return self._systemo_type_to_python_hint(func_type)
+
+    def _get_function_arity(self, func_name: str) -> int:
+        """Get the number of parameters (arity) of a function."""
+        if func_name not in self.function_types:
+            # For built-in functions, we need to hardcode their arities
+            builtin_arities = {
+                "add": 2,
+                "sub": 2,
+                "mul": 2,
+                "div": 2,
+                "mod": 2,
+                "eqeq": 2,
+                "neq": 2,
+                "lt": 2,
+                "le": 2,
+                "gt": 2,
+                "ge": 2,
+                "and": 2,
+                "or": 2,
+                "cons": 2,
+                "map": 2,
+                "filter": 2,
+                "fold": 3,
+                "foldr": 3,
+                "compose": 3,  # compose f g x = f (g x)
+                "show": 1,
+                "putStr": 1,
+                "put_str": 1,
+                "error": 1,
+                "head": 1,
+                "tail": 1,
+                "length": 1,
+                "null": 1,
+            }
+            return builtin_arities.get(func_name, 1)
+
+        func_type = self.function_types[func_name]
+        arity = 0
+        while isinstance(func_type, FunctionType):
+            arity += 1
+            func_type = func_type.result
+        return arity
 
     def _convert_type_expression_to_type(self, type_expr: Any) -> Optional[Type]:
         """Convert a TypeExpression to a Type, using the ty field if available."""
@@ -747,9 +789,9 @@ class systemoCompiler:
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Use @curry decorator for multi-parameter functions
+        # Use standard function signature for multi-parameter functions
         if max_params > 1:
-            # For curried functions, get parameter types from the function type
+            # For multi-parameter functions, get parameter types from the function type
             param_types: List[str] = []
             if definitions and definitions[0].ty:
                 current_type = definitions[0].ty
@@ -769,13 +811,8 @@ class systemoCompiler:
 
             param_list = [f"arg_{i}: {param_types[i]}" for i in range(max_params)]
 
-            curried_return_type = (
-                f"Union[Callable[[Any], {return_type_hint}], {return_type_hint}]"
-            )
-
             lines = [
-                "@curry",
-                f"def {prefixed_func_name}({', '.join(param_list)}) -> {curried_return_type}:",
+                f"def {prefixed_func_name}({', '.join(param_list)}) -> {return_type_hint}:",
             ]
         else:
             # For single parameter functions, try to get the parameter type
@@ -946,8 +983,7 @@ class systemoCompiler:
     ) -> str:
         """Compile a binary function (2 parameters) for instance declarations."""
         lines = [
-            f"@curry",
-            f"def {prefixed_name}(arg_0: Any, arg_1: Any) -> Union[Callable[[Any], Any], Any]:",
+            f"def {prefixed_name}(arg_0: Any, arg_1: Any) -> Any:",
         ]
 
         self.indent_level += 1
@@ -1108,10 +1144,47 @@ class systemoCompiler:
                     lines = [f"def {func_name}() -> {return_type_hint}:"]
                     lines.extend(self._compile_do_block_as_statements(func_def.body))
                 case _:
-                    lines = [
-                        f"def {func_name}() -> {return_type_hint}:",
-                        f"    return {self._compile_expression(func_def.body)}",
-                    ]
+                    # Compile the expression first to see if it's a partial application
+                    compiled_body = self._compile_expression(func_def.body)
+
+                    # Check if the compiled expression is a lambda (partial application)
+                    if compiled_body.startswith("lambda "):
+                        # Extract lambda parameters and body
+                        # Format: "lambda param1, param2: body"
+                        lambda_part = compiled_body[7:]  # Remove "lambda "
+                        colon_index = lambda_part.find(":")
+                        if colon_index != -1:
+                            params_str = lambda_part[:colon_index].strip()
+                            lambda_body = lambda_part[colon_index + 1 :].strip()
+
+                            # Add type hints to parameters
+                            if params_str:
+                                # Mark this function as lambda-lifted (not truly nullary)
+                                self.lambda_lifted_functions.add(func_def.function_name)
+                                params_with_types = ", ".join(
+                                    f"{param}: Any" for param in params_str.split(", ")
+                                )
+                                lines = [
+                                    f"def {func_name}({params_with_types}) -> {return_type_hint}:",
+                                    f"    return {lambda_body}",
+                                ]
+                            else:
+                                # No parameters in lambda
+                                lines = [
+                                    f"def {func_name}() -> {return_type_hint}:",
+                                    f"    return {lambda_body}",
+                                ]
+                        else:
+                            # Fallback to original behavior
+                            lines = [
+                                f"def {func_name}() -> {return_type_hint}:",
+                                f"    return {compiled_body}",
+                            ]
+                    else:
+                        lines = [
+                            f"def {func_name}() -> {return_type_hint}:",
+                            f"    return {compiled_body}",
+                        ]
         else:
             pattern = func_def.patterns[0]
             match pattern:
@@ -1459,13 +1532,19 @@ class systemoCompiler:
             case Variable(name=name):
                 # Primitive functions should not be prefixed
                 if name.startswith("prim"):
-                    if name in self.nullary_functions:
+                    if (
+                        name in self.nullary_functions
+                        and name not in self.lambda_lifted_functions
+                    ):
                         return f"{name}()"
                     else:
                         return name
                 else:
                     prefixed_name = self._prefix_name(name)
-                    if name in self.nullary_functions:
+                    if (
+                        name in self.nullary_functions
+                        and name not in self.lambda_lifted_functions
+                    ):
                         return f"{prefixed_name}()"
                     else:
                         return prefixed_name
@@ -1513,27 +1592,30 @@ class systemoCompiler:
                             arg_exprs = [self._compile_expression(arg) for arg in args]
                             return f"{name}({', '.join(arg_exprs)})"
 
-                        # Check if this is a user-defined function that might be curried
+                        # Check the arity of the function to handle partial application
+                        expected_arity = self._get_function_arity(name)
+                        provided_args = len(args)
                         prefixed_name = self._prefix_name(name)
-                        if len(args) > 1 and name in self.defined_functions:
-                            # Multi-argument call for curried functions
+
+                        if provided_args == expected_arity:
+                            # Exact match - call function directly
                             arg_exprs = [self._compile_expression(arg) for arg in args]
-                            # Use cast with proper return type to resolve Union type issues
-                            return_type = self._get_function_final_return_type(name)
-                            return f"cast({return_type}, {prefixed_name}({', '.join(arg_exprs)}))"
+                            return f"{prefixed_name}({', '.join(arg_exprs)})"
+                        elif provided_args < expected_arity:
+                            # Partial application - generate lambda for remaining arguments
+                            arg_exprs = [self._compile_expression(arg) for arg in args]
+                            remaining_args = expected_arity - provided_args
+
+                            # Generate lambda parameters for remaining arguments
+                            lambda_params = [f"_arg{i}" for i in range(remaining_args)]
+                            all_args = arg_exprs + lambda_params
+
+                            return f"lambda {', '.join(lambda_params)}: {prefixed_name}({', '.join(all_args)})"
                         else:
-                            # Single argument or built-in function
-                            func_expr = self._compile_expression(current)
-                            if len(args) == 1:
-                                arg_expr = self._compile_expression(args[0])
-                                return f"{func_expr}({arg_expr})"
-                            else:
-                                # Multiple args but not a defined function, use nested calls
-                                result = func_expr
-                                for arg in args:
-                                    arg_expr = self._compile_expression(arg)
-                                    result = f"{result}({arg_expr})"
-                                return result
+                            # More arguments than expected - this shouldn't happen in well-typed code
+                            # Fall back to the current behavior
+                            arg_exprs = [self._compile_expression(arg) for arg in args]
+                            return f"{prefixed_name}({', '.join(arg_exprs)})"
                     case _:
                         # Regular curried function application - fall back to nested calls
                         func_expr = self._compile_expression(expr.function)
@@ -1924,8 +2006,7 @@ class systemoCompiler:
         if is_binary:
             # Binary function with multiple patterns
             lines = [
-                f"@curry",
-                f"def {function_name}(arg_0: Any, arg_1: Any) -> Union[Callable[[Any], Any], Any]:",
+                f"def {function_name}(arg_0: Any, arg_1: Any) -> Any:",
             ]
         else:
             # Unary function with multiple patterns
