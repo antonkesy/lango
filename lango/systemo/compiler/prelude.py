@@ -147,10 +147,15 @@ def primStringConcat(x: str, y: str) -> str:
     return x + y
 
 
-def primCharShow(x: tuple) -> str:
+def primStringShow(x: str) -> str:
+    return f'"{x}"'
+
+
+def primCharShow(x) -> str:
     if isinstance(x, tuple) and len(x) == 2 and x[0] == "char":
         return f"'{x[1]}'"
-    return str(x)
+    else:
+        return str(x)
 
 
 def primPutStr(x: str) -> None:
@@ -175,26 +180,3 @@ def primListShow(lst: list) -> str:
 
     elements = [show_element(elem) for elem in lst]
     return f"[{','.join(elements)}]"
-
-
-# Built-in show function that handles type dispatch
-def systemo_show(x: Any) -> str:
-    if isinstance(x, bool):
-        return str(x)
-    elif isinstance(x, int):
-        return primIntShow(x)
-    elif isinstance(x, float):
-        return primFloatShow(x)
-    elif isinstance(x, str):
-        return f'"{x}"'
-    elif isinstance(x, tuple) and len(x) == 2 and x[0] == "char":
-        return primCharShow(x)
-    elif isinstance(x, list):
-        return primListShow(x)
-    else:
-        return str(x)
-
-
-# Built-in putStr function
-def systemo_putStr(x: str) -> None:
-    primPutStr(x)

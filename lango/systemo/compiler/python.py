@@ -354,7 +354,7 @@ class systemoCompiler:
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
             # Skip built-in functions to avoid conflicts
-            if func_name not in ["show", "putStr", "error"]:
+            if func_name not in ["error"]:
                 lines.append(self._compile_function_group(func_name, definitions))
 
         # Generate instance declarations (monomorphized functions)
@@ -461,7 +461,7 @@ class systemoCompiler:
 
         # Skip generating dispatcher for functions already defined in prelude
         # These functions already have proper implementations that handle all cases
-        prelude_functions = {"putStr", "error", "show"}
+        prelude_functions = {"error"}
         if actual_function_name in prelude_functions:
             return []  # Don't generate any instance functions
 
@@ -1463,10 +1463,7 @@ class systemoCompiler:
                     return f"({compiled_elements[0]},)"
                 return f"({', '.join(compiled_elements)})"
 
-            # Variables and constructors
-            case Variable(name="show"):
-                return "systemo_show"
-            case Variable(name="putStr"):
+                # Variables and constructors
                 return "systemo_put_str"
             case Variable(name="error"):
                 return "systemo_error"
@@ -1482,7 +1479,10 @@ class systemoCompiler:
                         return name
                 else:
                     prefixed_name = self._prefix_name(name)
-                    if (
+                    # Pattern variables (local variables) should never be called as functions
+                    if name in self.local_variables:
+                        return prefixed_name
+                    elif (
                         name in self.nullary_functions
                         and name not in self.lambda_lifted_functions
                     ):
@@ -1759,6 +1759,11 @@ class systemoCompiler:
                         for ctor_name in constructor_names
                     ]
                     condition = " or ".join(type_checks)
+                elif arg_type == "Char":
+                    # Special handling for Char - check for char tuples
+                    condition = (
+                        "isinstance(arg, tuple) and len(arg) == 2 and arg[0] == 'char'"
+                    )
                 else:
                     # Unknown type, try by name (but avoid complex expressions)
                     if arg_type in ["Unknown"]:
