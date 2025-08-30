@@ -64,6 +64,10 @@ systemo-types: install
 	. .venv/bin/activate && \
 	lango types systemo examples/systemo/example.syso
 
+systemo-functions: install
+	. .venv/bin/activate && \
+	lango functions examples/systemo/example.syso
+
 systemo-typecheck: install
 	. .venv/bin/activate && \
 	lango typecheck systemo examples/systemo/example.syso
