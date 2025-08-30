@@ -158,6 +158,14 @@ class ASTTransformer(Transformer):
             case value:
                 return str(value)
 
+    def inst_operator_name(self, items: List[Any]) -> str:
+        """Transform instance operator name."""
+        match items[0]:
+            case Token(value=value):
+                return value
+            case value:
+                return str(value)
+
     def symbolic_operator(self, items: List[Any]) -> str:
         """Transform symbolic operator token."""
         if not items:
