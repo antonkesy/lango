@@ -54,33 +54,6 @@ from lango.shared.typechecker.lango_types import (
 from dataclasses import dataclass
 
 
-def extract_function_name(instance_name) -> str:
-    """Extract operator name from Tree structure like "Tree(Token('RULE', 'inst_operator_name'), ['?'])" or "Tree(Token('RULE', 'inst_operator_name'), [Token('ID', 'xcoord')])" """
-    import re
-
-    # Convert to string if it's not already
-    instance_name_str = str(instance_name)
-
-    # Look for pattern Tree(Token('RULE', 'inst_operator_name'), ['<operator>'])
-    match = re.search(
-        r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']*)'\]\)",
-        instance_name_str,
-    )
-    if match:
-        return match.group(1)
-
-    # Look for pattern Tree(Token('RULE', 'inst_operator_name'), [Token('ID', '<operator>')])
-    match = re.search(
-        r"Tree\(Token\('RULE', 'inst_operator_name'\), \[Token\('ID', '([^']*)'\)\]\)",
-        instance_name_str,
-    )
-    if match:
-        return match.group(1)
-
-    # Fallback: return the instance_name as is
-    return instance_name_str
-
-
 def parse_type_expr(node) -> Optional[Type]:
     """Convert a TypeExpression to a Type."""
     if node is None:
@@ -153,12 +126,13 @@ def collect_overloaded_functions(program: Program) -> Dict[str, TopLevelFunction
 
     for stmt in program.statements:
         if isinstance(stmt, FunctionDefinition):
-            func_name = extract_function_name(stmt.function_name)
+            func_name = stmt.function_name
             func_type = stmt.ty
             if func_type is None:
                 continue
             # Only accept FunctionType objects
             if not isinstance(func_type, FunctionType):
+                raise NotImplementedError("TODO")
                 continue
             typed_func = TypedFunction(pattern=stmt.patterns)
             if func_name not in overloaded_functions:
@@ -167,7 +141,7 @@ def collect_overloaded_functions(program: Program) -> Dict[str, TopLevelFunction
                 )
             overloaded_functions[func_name].overloads[str(func_type)] = typed_func
         elif isinstance(stmt, InstanceDeclaration):
-            func_name = extract_function_name(stmt.instance_name)
+            func_name = stmt.instance_name
             func_type_expr = stmt.type_signature
             if func_type_expr is None:
                 continue
