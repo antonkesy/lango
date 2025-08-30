@@ -49,6 +49,19 @@ from lango.minio.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.shared.compiler.python import (
+    build_cons_pattern_match,
+    build_list_pattern_match,
+    build_literal_pattern_match,
+    build_multi_arg_pattern_match,
+    build_positional_pattern_match,
+    build_record_pattern_match,
+    build_simple_pattern_match,
+    build_tuple_pattern_match,
+    compile_expression_safe,
+    compile_literal_value,
+    is_expression_minio,
+)
 from lango.shared.typechecker.lango_types import (
     DataType,
     FunctionType,
@@ -191,15 +204,14 @@ class MinioCompiler:
         body: Expression,
     ) -> str:
         """Build a readable pattern match for record constructors."""
-        lines = [
-            f"match {value_expr}:",
-            f"        case {constructor}() if hasattr({value_expr}, 'fields') and '{field_name}' in {value_expr}.fields:",
-            f"            {var_name} = {value_expr}.fields['{field_name}']",
-            f"            return {self._compile_expression(body)}",
-            "        case _:",
-            "            raise ValueError('Pattern match failed')",
-        ]
-        return "\n".join(lines)
+        return build_record_pattern_match(
+            value_expr,
+            constructor,
+            field_name,
+            var_name,
+            body,
+            self._compile_expression,
+        )
 
     def _build_positional_pattern_match(
         self,
@@ -209,15 +221,14 @@ class MinioCompiler:
         body: Expression,
         arg_index: int = 0,
     ) -> str:
-        lines = [
-            f"match {value_expr}:",
-            f"        case {constructor}():",
-            f"            {var_name} = {value_expr}.arg_{arg_index}",
-            f"            return {self._compile_expression(body)}",
-            "        case _:",
-            "            raise ValueError('Pattern match failed')",
-        ]
-        return "\n".join(lines)
+        return build_positional_pattern_match(
+            value_expr,
+            constructor,
+            var_name,
+            body,
+            self._compile_expression,
+            arg_index,
+        )
 
     def _build_multi_arg_pattern_match(
         self,
@@ -226,17 +237,13 @@ class MinioCompiler:
         assignments: List[str],
         body: Expression,
     ) -> str:
-        lines = [f"match {value_expr}:", f"        case {constructor}():"]
-        for assignment in assignments:
-            lines.append(f"            {assignment}")
-        lines.extend(
-            [
-                f"            return {self._compile_expression(body)}",
-                "        case _:",
-                "            raise ValueError('Pattern match failed')",
-            ],
+        return build_multi_arg_pattern_match(
+            value_expr,
+            constructor,
+            assignments,
+            body,
+            self._compile_expression,
         )
-        return "\n".join(lines)
 
     def _build_literal_pattern_match(
         self,
@@ -244,13 +251,13 @@ class MinioCompiler:
         value: Any,
         body: Expression,
     ) -> str:
-        lines = [
-            f"if {value_expr} == {self._compile_literal_value(value)}:",
-            f"        return {self._compile_expression(body)}",
-            "    else:",
-            "        raise ValueError('Pattern match failed')",
-        ]
-        return "\n".join(lines)
+        return build_literal_pattern_match(
+            value_expr,
+            value,
+            body,
+            self._compile_expression,
+            self._compile_literal_value,
+        )
 
     def _build_cons_pattern_match(
         self,
@@ -260,22 +267,13 @@ class MinioCompiler:
         body: Expression,
     ) -> str:
         """Build a readable pattern match for cons patterns (x:xs)."""
-        assignments = []
-        if head_var:
-            assignments.append(f"        {head_var} = {value_expr}[0]")
-        if tail_var:
-            assignments.append(f"        {tail_var} = {value_expr}[1:]")
-
-        lines = [f"if len({value_expr}) > 0:"]
-        lines.extend(assignments)
-        lines.extend(
-            [
-                f"        return {self._compile_expression(body)}",
-                "    else:",
-                "        raise ValueError('Pattern match failed')",
-            ],
+        return build_cons_pattern_match(
+            value_expr,
+            head_var,
+            tail_var,
+            body,
+            self._compile_expression,
         )
-        return "\n    ".join(lines)
 
     def _build_tuple_pattern_match(
         self,
@@ -284,21 +282,12 @@ class MinioCompiler:
         body: Expression,
     ) -> str:
         """Build a readable pattern match for tuple patterns."""
-        assignments = []
-        for i, var in enumerate(tuple_vars):
-            if not var.startswith("_tuple_elem_"):
-                assignments.append(f"        {var} = {value_expr}[{i}]")
-
-        lines = [f"if len({value_expr}) == {len(tuple_vars)}:"]
-        lines.extend(assignments)
-        lines.extend(
-            [
-                f"        return {self._compile_expression(body)}",
-                "    else:",
-                "        raise ValueError('Pattern match failed')",
-            ],
+        return build_tuple_pattern_match(
+            value_expr,
+            tuple_vars,
+            body,
+            self._compile_expression,
         )
-        return "\n".join(lines)
 
     def _build_list_pattern_match(
         self,
@@ -307,21 +296,12 @@ class MinioCompiler:
         body: Expression,
     ) -> str:
         """Build a readable pattern match for list patterns."""
-        assignments = []
-        for i, var in enumerate(list_vars):
-            if not var.startswith("_list_elem_"):
-                assignments.append(f"        {var} = {value_expr}[{i}]")
-
-        lines = [f"if len({value_expr}) == {len(list_vars)}:"]
-        lines.extend(assignments)
-        lines.extend(
-            [
-                f"        return {self._compile_expression(body)}",
-                "    else:",
-                "        raise ValueError('Pattern match failed')",
-            ],
+        return build_list_pattern_match(
+            value_expr,
+            list_vars,
+            body,
+            self._compile_expression,
         )
-        return "\n".join(lines)
 
     def _build_simple_pattern_match(
         self,
@@ -330,14 +310,12 @@ class MinioCompiler:
         body: Expression,
     ) -> str:
         """Build a readable pattern match for constructors with no arguments."""
-        lines = [
-            f"match {value_expr}:",
-            f"        case {constructor}():",
-            f"            return {self._compile_expression(body)}",
-            "        case _:",
-            "            raise ValueError('Pattern match failed')",
-        ]
-        return "\n".join(lines)
+        return build_simple_pattern_match(
+            value_expr,
+            constructor,
+            body,
+            self._compile_expression,
+        )
 
     def compile(self, program: Program) -> str:
         lines = []
@@ -946,15 +924,7 @@ class MinioCompiler:
                 return f"return {self._compile_expression(body)}"
 
     def _compile_literal_value(self, value: Any) -> str:
-        match value:
-            case str():
-                return f'"{value}"'
-            case bool():
-                return str(value)
-            case list():
-                return "[]"  # Handle empty list explicitly
-            case _:
-                return str(value)
+        return compile_literal_value(value)
 
     def _compile_expression(self, expr: Expression) -> str:
         match expr:
@@ -1202,39 +1172,11 @@ class MinioCompiler:
 
     def _is_expression(self, stmt: Any) -> bool:
         """Check if a statement is an expression."""
-        match stmt:
-            case (
-                IntLiteral()
-                | FloatLiteral()
-                | StringLiteral()
-                | CharLiteral()
-                | BoolLiteral()
-                | ListLiteral()
-                | Variable()
-                | Constructor()
-                | AddOperation()
-                | SubOperation()
-                | MulOperation()
-                | DivOperation()
-                | EqualOperation()
-                | ConcatOperation()
-                | IfElse()
-                | FunctionApplication()
-                | ConstructorExpression()
-                | DoBlock()
-                | GroupedExpression()
-            ):
-                return True
-            case _:
-                return False
+        return is_expression_minio(stmt)
 
     def _compile_expression_safe(self, stmt: Any) -> str:
         """Safely compile a statement as an expression."""
-        match stmt:
-            case _ if self._is_expression(stmt):
-                return self._compile_expression(stmt)  # type: ignore
-            case _:
-                return "None"
+        return compile_expression_safe(stmt, self._compile_expression)
 
 
 def compile_program(program: Program) -> str:
