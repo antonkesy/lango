@@ -20,6 +20,7 @@ from lango.systemo.interpreter.interpreter import interpret as systemo_interpret
 from lango.systemo.parser.parser import parse as systemo_parse
 from lango.systemo.typechecker.typecheck import get_type_str as systemo_get_type_str
 from lango.systemo.typechecker.typecheck import type_check as systemo_type_check
+from lango.systemo.overloaded import collect_overloaded_functions
 
 app = typer.Typer(pretty_exceptions_enable=False)
 console = Console()
@@ -39,7 +40,18 @@ def parse(
         case _:
             console.print(f"Unknown language: {lang}", style="bold red")
             return 1
-    pprint.pprint(ast, width=120, depth=10)
+    console.print(ast)
+    return 0
+
+
+@app.command()
+def functions(
+    input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
+) -> int:
+    ast = systemo_parse(input_file)
+
+    functions = collect_overloaded_functions(ast)
+    pprint.pprint(functions, width=120, depth=10)
     return 0
 
 
