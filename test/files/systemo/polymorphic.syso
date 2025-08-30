@@ -2,20 +2,25 @@
 -- TYPECHECK: OK
 -- "42 "hello" True 100 'A'"
 
-inst first :: (a,b) -> a;
+inst first :: (a,b) -> a {
   first (x,y) = x;
+};
 
-inst second :: (a,b) -> b;
+inst second :: (a,b) -> b {
   second (x,y) = y;
+};
 
-inst first :: (a,b,c) -> a;
+inst first :: (a,b,c) -> a {
   first (x,y,z) = x;
+};
 
-inst second :: (a,b,c) -> b;
+inst second :: (a,b,c) -> b {
   second (x,y,z) = y;
+};
 
-inst third :: (a,b,c) -> c;
+inst third :: (a,b,c) -> c {
   third (x,y,z) = z;
+};
 
 main = do {
   let { pair = (42, "hello"), triple = (True, 100, 'A') };

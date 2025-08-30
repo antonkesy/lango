@@ -23,11 +23,13 @@ demo p = (xcoord p) + (ycoord p);
 -- ------------------------------
 -- Polymorphic Tuples
 
-inst first :: (a,b) -> a;
+inst first :: (a,b) -> a {
   first (x,y) = x;
+};
 
-inst first :: (a,b,c) -> a;
+inst first :: (a,b,c) -> a {
   first (x,y,z) = x;
+};
 
 -- ------------------------------
 -- Overloaded functions
