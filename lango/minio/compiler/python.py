@@ -78,9 +78,22 @@ class MinioCompiler:
         self.defined_functions: Set[str] = set()
         self.nullary_functions: Set[str] = set()  # Functions with no parameters
         self.function_types: Dict[str, Type] = {}  # Track function types
+        self.function_arities: Dict[str, int] = {}  # Track function parameter counts
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
         self.do_block_counter = 0  # Counter for unique do block function names
+
+        # Set up built-in function arities
+        self.function_arities.update(
+            {
+                "show": 1,
+                "putStr": 1,
+                "error": 1,
+                "mod": 2,
+                "elem": 2,
+                "map": 2,
+            },
+        )
 
     def _indent(self) -> str:
         return "    " * self.indent_level
@@ -88,7 +101,7 @@ class MinioCompiler:
     def _prefix_name(self, name: str) -> str:
         """Add minio_ prefix to user-defined names, but not built-ins, constructors, or pattern variables."""
         # Don't prefix built-in functions
-        if name in ["show", "putStr"]:
+        if name in ["show", "putStr", "error", "mod", "elem", "map"]:
             return name
         # Don't prefix local pattern variables
         if name in self.local_variables:
@@ -107,18 +120,6 @@ class MinioCompiler:
                 if constructor.name == constructor_name:
                     return constructor
         return None
-
-    def _get_function_final_return_type(self, func_name: str) -> str:
-        """Get the final return type of a function, unwrapping curried functions."""
-        if func_name not in self.function_types:
-            return "Any"
-
-        func_type = self.function_types[func_name]
-        # Unwrap function types to get the final return type
-        while isinstance(func_type, FunctionType):
-            func_type = func_type.result
-
-        return self._minio_type_to_python_hint(func_type)
 
     def _convert_type_expression_to_type(self, type_expr: Any) -> Optional[Type]:
         """Convert a TypeExpression to a Type, using the ty field if available."""
@@ -350,7 +351,7 @@ class MinioCompiler:
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
             # Skip built-in functions to avoid conflicts
-            if func_name not in ["show", "putStr", "error"]:
+            if func_name not in ["show", "putStr", "error", "mod", "elem", "map"]:
                 lines.append(self._compile_function_group(func_name, definitions))
 
         # Add main execution
@@ -453,6 +454,12 @@ class MinioCompiler:
         if definitions and definitions[0].ty:
             self.function_types[func_name] = definitions[0].ty
 
+        # Track function arity (number of parameters)
+        max_params = (
+            max(len(defn.patterns) for defn in definitions) if definitions else 0
+        )
+        self.function_arities[func_name] = max_params
+
         # Check if any definition is nullary
         if any(len(defn.patterns) == 0 for defn in definitions):
             self.nullary_functions.add(func_name)
@@ -474,9 +481,10 @@ class MinioCompiler:
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Use @curry decorator for multi-parameter functions
+        # Create parameter list with type hints for multi-parameter functions
+        param_list = []
         if max_params > 1:
-            # For curried functions, get parameter types from the function type
+            # For multi-parameter functions, get parameter types from the function type
             param_types: List[str] = []
             if definitions and definitions[0].ty:
                 current_type = definitions[0].ty
@@ -495,15 +503,6 @@ class MinioCompiler:
                 param_types.append("Any")
 
             param_list = [f"arg_{i}: {param_types[i]}" for i in range(max_params)]
-
-            curried_return_type = (
-                f"Union[Callable[[Any], {return_type_hint}], {return_type_hint}]"
-            )
-
-            lines = [
-                "@curry",
-                f"def {prefixed_func_name}({', '.join(param_list)}) -> {curried_return_type}:",
-            ]
         else:
             # For single parameter functions, try to get the parameter type
             param_type = "Any"
@@ -513,9 +512,11 @@ class MinioCompiler:
                 and isinstance(definitions[0].ty, FunctionType)
             ):
                 param_type = self._minio_type_to_python_hint(definitions[0].ty.param)
-            lines = [
-                f"def {prefixed_func_name}(arg_0: {param_type}) -> {return_type_hint}:",
-            ]
+            param_list = [f"arg_0: {param_type}"]
+
+        lines = [
+            f"def {prefixed_func_name}({', '.join(param_list)}) -> {return_type_hint}:",
+        ]
 
         self.indent_level += 1
 
@@ -649,13 +650,16 @@ class MinioCompiler:
 
         # Only add fallback error if patterns are not exhaustive
         if not has_exhaustive_patterns:
-            if max_params > 1:
-                # For curried functions, show the individual arguments
-                arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
-                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{{arg_names}}}')"
-            else:
-                # For single parameter functions, show arg_0
+            # Show all arguments in error message
+            arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
+            if max_params == 0:
+                error_msg = (
+                    f"raise ValueError(f'No matching pattern for {prefixed_func_name}')"
+                )
+            elif max_params == 1:
                 error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{arg_0}}')"
+            else:
+                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{{arg_names}}}')"
 
             lines.append(self._indent() + error_msg)
         self.indent_level -= 1
@@ -965,6 +969,12 @@ class MinioCompiler:
                 return "minio_put_str"
             case Variable(name="error"):
                 return "minio_error"
+            case Variable(name="mod"):
+                return "minio_mod"
+            case Variable(name="elem"):
+                return "minio_elem"
+            case Variable(name="map"):
+                return "minio_map"
             case Variable(name=name):
                 prefixed_name = self._prefix_name(name)
                 if name in self.nullary_functions:
@@ -1051,22 +1061,51 @@ class MinioCompiler:
                         arg_exprs = [self._compile_expression(arg) for arg in args]
                         return f"{name}({', '.join(arg_exprs)})"
                     case Variable(name=name):
-                        # Check if this is a user-defined function that might be curried
+                        # Check if this is a user-defined function
                         prefixed_name = self._prefix_name(name)
-                        if len(args) > 1 and name in self.defined_functions:
-                            # Multi-argument call for curried functions
+
+                        # Get the expected arity for this function
+                        expected_arity = self.function_arities.get(name, 1)
+
+                        if len(args) == expected_arity:
+                            # Full application - call function directly
                             arg_exprs = [self._compile_expression(arg) for arg in args]
-                            # Use cast with proper return type to resolve Union type issues
-                            return_type = self._get_function_final_return_type(name)
-                            return f"cast({return_type}, {prefixed_name}({', '.join(arg_exprs)}))"
+                            return f"{prefixed_name}({', '.join(arg_exprs)})"
+                        elif (
+                            len(args) < expected_arity
+                            and name in self.defined_functions
+                        ):
+                            # Partial application - create lambda for remaining args
+                            arg_exprs = [self._compile_expression(arg) for arg in args]
+                            remaining_params = expected_arity - len(args)
+                            lambda_params = [
+                                f"__arg_{i}" for i in range(remaining_params)
+                            ]
+                            all_args = arg_exprs + lambda_params
+                            return f"lambda {', '.join(lambda_params)}: {prefixed_name}({', '.join(all_args)})"
+                        elif len(args) > expected_arity:
+                            # Over-application - call function with exact args, then apply rest
+                            exact_args = args[:expected_arity]
+                            remaining_args = args[expected_arity:]
+
+                            arg_exprs = [
+                                self._compile_expression(arg) for arg in exact_args
+                            ]
+                            result = f"{prefixed_name}({', '.join(arg_exprs)})"
+
+                            # Apply remaining arguments one by one
+                            for arg in remaining_args:
+                                arg_expr = self._compile_expression(arg)
+                                result = f"{result}({arg_expr})"
+                            return result
                         else:
-                            # Single argument or built-in function
+                            # Single argument or built-in function - use nested calls
                             func_expr = self._compile_expression(current)
                             if len(args) == 1:
                                 arg_expr = self._compile_expression(args[0])
                                 return f"{func_expr}({arg_expr})"
                             else:
-                                # Multiple args but not a defined function, use nested calls
+                                # Multiple args - use nested calls
                                 result = func_expr
                                 for arg in args:
                                     arg_expr = self._compile_expression(arg)
