@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from lango.systemo.ast.nodes import (
+    ArrowType,
     SymbolicOperation,
     BoolLiteral,
     CharLiteral,
@@ -18,6 +20,7 @@ from lango.systemo.ast.nodes import (
     FunctionDefinition,
     GroupedExpression,
     IfElse,
+    InstanceDeclaration,
     IntLiteral,
     LetStatement,
     ListLiteral,
@@ -28,8 +31,12 @@ from lango.systemo.ast.nodes import (
     Pattern,
     Program,
     StringLiteral,
-    TupleLiteral,
     TuplePattern,
+    TupleType,
+    TupleLiteral,
+    TypeApplication,
+    TypeConstructor,
+    TypeVariable,
     Variable,
     VariablePattern,
     is_expression,
@@ -56,9 +63,69 @@ from lango.shared.typechecker.lango_types import (
 
 
 @dataclass
-class FunctionInfo:
+class FunctionOverload:
+    """Represents a single overloaded version of a function."""
     arity: int
     type_info: Optional[Type] = None
+    monomorphized_name: Optional[str] = None
+
+@dataclass
+class FunctionInfo:
+    """Represents all overloaded versions of a function."""
+    overloads: List[FunctionOverload] = field(default_factory=list)
+    
+    def add_overload(self, arity: int, type_info: Optional[Type], monomorphized_name: str) -> None:
+        """Add a new overloaded version of this function."""
+        overload = FunctionOverload(arity=arity, type_info=type_info, monomorphized_name=monomorphized_name)
+        self.overloads.append(overload)
+    
+    def find_best_overload(self, arg_types: List[Optional[Type]]) -> Optional[FunctionOverload]:
+        """Find the best matching overload for the given argument types."""
+        # For now, do simple matching based on arity and type compatibility
+        for overload in self.overloads:
+            if overload.arity == len(arg_types) and self._types_match(overload.type_info, arg_types):
+                return overload
+        # Fallback to first overload with matching arity
+        for overload in self.overloads:
+            if overload.arity == len(arg_types):
+                return overload
+        # Fallback to first overload
+        return self.overloads[0] if self.overloads else None
+    
+    def _types_match(self, func_type: Optional[Type], arg_types: List[Optional[Type]]) -> bool:
+        """Check if function type matches the argument types."""
+        if func_type is None or not arg_types:
+            return True
+        
+        # Extract parameter types from function type
+        param_types = []
+        current_type = func_type
+        while isinstance(current_type, FunctionType):
+            param_types.append(current_type.param)
+            current_type = current_type.result
+        
+        if len(param_types) != len(arg_types):
+            return False
+        
+        # Simple type matching (can be enhanced later)
+        for param_type, arg_type in zip(param_types, arg_types):
+            if arg_type is not None and not self._type_compatible(param_type, arg_type):
+                return False
+        
+        return True
+    
+    def _type_compatible(self, expected: Type, actual: Type) -> bool:
+        """Check if actual type is compatible with expected type."""
+        # Simple equality check for now - can be enhanced for subtyping
+        if isinstance(expected, TypeCon) and isinstance(actual, TypeCon):
+            return expected.name == actual.name
+        # Add more sophisticated type checking as needed
+        return True
+    
+    @property
+    def arity(self) -> int:
+        """Get the arity of the first overload (for backward compatibility)."""
+        return self.overloads[0].arity if self.overloads else 0
 
 
 class systemoCompiler:
@@ -71,273 +138,171 @@ class systemoCompiler:
         self.local_variables: Set[str] = set()  # Track local pattern variables
 
         # Initialize built-in function information
-        builtin_functions = {
-            "primIntAdd": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
-                ),
-            ),
-            "primIntSub": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
-                ),
-            ),
-            "primIntMul": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
-                ),
-            ),
-            "primIntDiv": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
-                ),
-            ),
-            "primIntPow": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
-                ),
-            ),
-            "primIntNeg": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
-            ),
-            "primIntLt": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primIntLe": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primIntGt": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primIntGe": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primIntEq": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Int"),
-                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primIntShow": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("Int"), result=TypeCon("String")),
-            ),
-            "primFloatAdd": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(
-                        param=TypeCon("Float"), result=TypeCon("Float")
-                    ),
-                ),
-            ),
-            "primFloatSub": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(
-                        param=TypeCon("Float"), result=TypeCon("Float")
-                    ),
-                ),
-            ),
-            "primFloatMul": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(
-                        param=TypeCon("Float"), result=TypeCon("Float")
-                    ),
-                ),
-            ),
-            "primFloatDiv": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(
-                        param=TypeCon("Float"), result=TypeCon("Float")
-                    ),
-                ),
-            ),
-            "primFloatPow": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(
-                        param=TypeCon("Float"), result=TypeCon("Float")
-                    ),
-                ),
-            ),
-            "primFloatNeg": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("Float"), result=TypeCon("Float")),
-            ),
-            "primFloatLt": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primFloatLe": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primFloatGt": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primFloatGe": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primFloatEq": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Float"),
-                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primFloatShow": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(
-                    param=TypeCon("Float"), result=TypeCon("String")
-                ),
-            ),
-            "primStringConcat": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("String"),
-                    result=FunctionType(
-                        param=TypeCon("String"), result=TypeCon("String")
-                    ),
-                ),
-            ),
-            "primStringEq": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("String"),
-                    result=FunctionType(
-                        param=TypeCon("String"), result=TypeCon("Bool")
-                    ),
-                ),
-            ),
-            "primStringShow": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(
-                    param=TypeCon("String"), result=TypeCon("String")
-                ),
-            ),
-            "primCharEq": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Char"),
-                    result=FunctionType(param=TypeCon("Char"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primCharShow": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("Char"), result=TypeCon("String")),
-            ),
-            "primBoolAnd": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Bool"),
-                    result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primBoolOr": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Bool"),
-                    result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primBoolNot": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
-            ),
-            "primBoolEq": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeCon("Bool"),
-                    result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
-                ),
-            ),
-            "primBoolShow": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("Bool"), result=TypeCon("String")),
-            ),
-            "putStr": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(
-                    param=TypeCon("String"),
-                    result=TypeApp(constructor=TypeCon("IO"), argument=TypeCon("()")),
-                ),
-            ),
-            "primListConcat": FunctionInfo(
-                arity=2,
-                type_info=FunctionType(
-                    param=TypeApp(constructor=TypeCon("List"), argument=TypeVar("a")),
-                    result=FunctionType(
-                        param=TypeApp(
-                            constructor=TypeCon("List"), argument=TypeVar("a")
-                        ),
-                        result=TypeApp(
-                            constructor=TypeCon("List"), argument=TypeVar("a")
-                        ),
-                    ),
-                ),
-            ),
-            "primListShow": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(
-                    param=TypeApp(constructor=TypeCon("List"), argument=TypeVar("a")),
-                    result=TypeCon("String"),
-                ),
-            ),
-            "error": FunctionInfo(
-                arity=1,
-                type_info=FunctionType(param=TypeCon("String"), result=TypeVar("a")),
-            ),
-        }
-        self.functions.update(builtin_functions)
+        self._initialize_builtin_functions()
+
+    def _create_monomorphized_name(self, base_name: str, func_type: Optional[Type]) -> str:
+        """Create a monomorphized function name based on the type signature."""
+        # Sanitize the base name first
+        sanitized_base_name = self._sanitize_operator_name(base_name)
+        
+        if func_type is None:
+            return f"systemo_{sanitized_base_name}"
+        
+        type_suffix = self._type_to_suffix(func_type)
+        return f"systemo_{sanitized_base_name}_{type_suffix}"
+
+    def _type_to_suffix(self, func_type: Type) -> str:
+        """Convert a type to a suffix for monomorphized names."""
+        def type_name(t: Type) -> str:
+            match t:
+                case TypeCon(name=name):
+                    return name.lower()
+                case FunctionType(param=param, result=result):
+                    return f"{type_name(param)}_to_{type_name(result)}"
+                case TypeApp(constructor=TypeCon(name=name), argument=arg):
+                    return f"{name.lower()}_{type_name(arg)}"
+                case TypeVar(name=name):
+                    return name.lower()
+                case _:
+                    return "any"
+        
+        # For function types, extract parameter types
+        param_types = []
+        current_type = func_type
+        while isinstance(current_type, FunctionType):
+            param_types.append(current_type.param)
+            current_type = current_type.result
+        
+        if param_types:
+            return "_".join(type_name(pt) for pt in param_types)
+        else:
+            return type_name(func_type)
+
+    def _add_builtin_function(self, name: str, arity: int, type_info: Type) -> None:
+        """Add a builtin function with its type information."""
+        if name not in self.functions:
+            self.functions[name] = FunctionInfo()
+        
+        monomorphized_name = self._create_monomorphized_name(name, type_info)
+        self.functions[name].add_overload(arity, type_info, monomorphized_name)
+
+    def _initialize_builtin_functions(self) -> None:
+        """Initialize all builtin functions with their type signatures."""
+        # Integer operations
+        int_int_to_int = FunctionType(
+            param=TypeCon("Int"),
+            result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+        )
+        int_to_int = FunctionType(param=TypeCon("Int"), result=TypeCon("Int"))
+        int_int_to_bool = FunctionType(
+            param=TypeCon("Int"),
+            result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
+        )
+        int_to_string = FunctionType(param=TypeCon("Int"), result=TypeCon("String"))
+
+        self._add_builtin_function("primIntAdd", 2, int_int_to_int)
+        self._add_builtin_function("primIntSub", 2, int_int_to_int)
+        self._add_builtin_function("primIntMul", 2, int_int_to_int)
+        self._add_builtin_function("primIntDiv", 2, int_int_to_int)
+        self._add_builtin_function("primIntPow", 2, int_int_to_int)
+        self._add_builtin_function("primIntNeg", 1, int_to_int)
+        self._add_builtin_function("primIntLt", 2, int_int_to_bool)
+        self._add_builtin_function("primIntLe", 2, int_int_to_bool)
+        self._add_builtin_function("primIntGt", 2, int_int_to_bool)
+        self._add_builtin_function("primIntGe", 2, int_int_to_bool)
+        self._add_builtin_function("primIntEq", 2, int_int_to_bool)
+        self._add_builtin_function("primIntShow", 1, int_to_string)
+
+        # Float operations
+        float_float_to_float = FunctionType(
+            param=TypeCon("Float"),
+            result=FunctionType(param=TypeCon("Float"), result=TypeCon("Float")),
+        )
+        float_to_float = FunctionType(param=TypeCon("Float"), result=TypeCon("Float"))
+        float_float_to_bool = FunctionType(
+            param=TypeCon("Float"),
+            result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
+        )
+        float_to_string = FunctionType(param=TypeCon("Float"), result=TypeCon("String"))
+
+        self._add_builtin_function("primFloatAdd", 2, float_float_to_float)
+        self._add_builtin_function("primFloatSub", 2, float_float_to_float)
+        self._add_builtin_function("primFloatMul", 2, float_float_to_float)
+        self._add_builtin_function("primFloatDiv", 2, float_float_to_float)
+        self._add_builtin_function("primFloatPow", 2, float_float_to_float)
+        self._add_builtin_function("primFloatNeg", 1, float_to_float)
+        self._add_builtin_function("primFloatLt", 2, float_float_to_bool)
+        self._add_builtin_function("primFloatLe", 2, float_float_to_bool)
+        self._add_builtin_function("primFloatGt", 2, float_float_to_bool)
+        self._add_builtin_function("primFloatGe", 2, float_float_to_bool)
+        self._add_builtin_function("primFloatEq", 2, float_float_to_bool)
+        self._add_builtin_function("primFloatShow", 1, float_to_string)
+
+        # String operations
+        string_string_to_string = FunctionType(
+            param=TypeCon("String"),
+            result=FunctionType(param=TypeCon("String"), result=TypeCon("String")),
+        )
+        string_string_to_bool = FunctionType(
+            param=TypeCon("String"),
+            result=FunctionType(param=TypeCon("String"), result=TypeCon("Bool")),
+        )
+        string_to_string = FunctionType(param=TypeCon("String"), result=TypeCon("String"))
+
+        self._add_builtin_function("primStringConcat", 2, string_string_to_string)
+        self._add_builtin_function("primStringEq", 2, string_string_to_bool)
+        self._add_builtin_function("primStringShow", 1, string_to_string)
+
+        # Character operations
+        char_char_to_bool = FunctionType(
+            param=TypeCon("Char"),
+            result=FunctionType(param=TypeCon("Char"), result=TypeCon("Bool")),
+        )
+        char_to_string = FunctionType(param=TypeCon("Char"), result=TypeCon("String"))
+
+        self._add_builtin_function("primCharEq", 2, char_char_to_bool)
+        self._add_builtin_function("primCharShow", 1, char_to_string)
+
+        # Boolean operations
+        bool_bool_to_bool = FunctionType(
+            param=TypeCon("Bool"),
+            result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
+        )
+        bool_to_bool = FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool"))
+        bool_to_string = FunctionType(param=TypeCon("Bool"), result=TypeCon("String"))
+
+        self._add_builtin_function("primBoolAnd", 2, bool_bool_to_bool)
+        self._add_builtin_function("primBoolOr", 2, bool_bool_to_bool)
+        self._add_builtin_function("primBoolNot", 1, bool_to_bool)
+        self._add_builtin_function("primBoolEq", 2, bool_bool_to_bool)
+        self._add_builtin_function("primBoolShow", 1, bool_to_string)
+
+        # IO operations
+        string_to_io_unit = FunctionType(
+            param=TypeCon("String"),
+            result=TypeApp(constructor=TypeCon("IO"), argument=TypeCon("()")),
+        )
+        self._add_builtin_function("putStr", 1, string_to_io_unit)
+
+        # List operations
+        list_a = TypeApp(constructor=TypeCon("List"), argument=TypeVar("a"))
+        list_list_to_list = FunctionType(
+            param=list_a,
+            result=FunctionType(param=list_a, result=list_a),
+        )
+        list_to_string = FunctionType(param=list_a, result=TypeCon("String"))
+
+        self._add_builtin_function("primListConcat", 2, list_list_to_list)
+        self._add_builtin_function("primListShow", 1, list_to_string)
+
+        # Error function
+        string_to_a = FunctionType(param=TypeCon("String"), result=TypeVar("a"))
+        self._add_builtin_function("error", 1, string_to_a)
+
+        # Add operator overloads
+        # + operator for different types
+        self._add_builtin_function("+", 2, int_int_to_int)
+        self._add_builtin_function("+", 2, float_float_to_float)
 
     def _indent(self) -> str:
         return "    " * self.indent_level
@@ -406,11 +371,38 @@ class systemoCompiler:
         return None
 
     def _convert_type_expression_to_type(self, type_expr: Any) -> Optional[Type]:
-        """Convert a TypeExpression to a Type, using the ty field if available."""
+        """Convert a TypeExpression AST node to a Type object."""
         if hasattr(type_expr, "ty") and type_expr.ty is not None:
             return type_expr.ty
-        # If no type information is available, return None
-        return None
+        
+        # Convert from AST type expression nodes to Type objects
+        match type_expr:
+            case ArrowType(from_type=from_type, to_type=to_type):
+                # Convert function type: A -> B becomes FunctionType(param=A, result=B)
+                param_type = self._convert_type_expression_to_type(from_type)
+                result_type = self._convert_type_expression_to_type(to_type)
+                if param_type and result_type:
+                    return FunctionType(param=param_type, result=result_type)
+                return None
+            case TypeConstructor(name=name):
+                # Convert type constructor to TypeCon
+                return TypeCon(name)
+            case TypeVariable(name=name):
+                # Convert type variable to TypeVar
+                return TypeVar(name)
+            case TypeApplication(constructor=constructor, argument=argument):
+                # Convert type application: F A becomes TypeApp(constructor=F, argument=A)
+                constructor_type = self._convert_type_expression_to_type(constructor)
+                argument_type = self._convert_type_expression_to_type(argument)
+                if constructor_type and argument_type:
+                    return TypeApp(constructor=constructor_type, argument=argument_type)
+                return None
+            case TupleType(element_types=element_types):
+                # For now, treat tuples as generic - we could implement proper tuple types later
+                return None
+            case _:
+                # Unknown type expression
+                return None
 
     def _systemo_type_to_python_hint(self, systemo_type: Optional[Type]) -> str:
         """Convert a systemo type to a Python type hint string."""
@@ -460,6 +452,62 @@ class systemoCompiler:
             case _:
                 return "Any"
 
+    def _infer_expression_type(self, expr: Expression) -> Optional[Type]:
+        """Infer the type of an expression (basic type inference)."""
+        match expr:
+            case IntLiteral() | NegativeInt():
+                return TypeCon("Int")
+            case FloatLiteral() | NegativeFloat():
+                return TypeCon("Float")
+            case StringLiteral():
+                return TypeCon("String")
+            case CharLiteral():
+                return TypeCon("Char")
+            case BoolLiteral():
+                return TypeCon("Bool")
+            case ListLiteral(elements=elements):
+                if elements:
+                    elem_type = self._infer_expression_type(elements[0])
+                    return TypeApp(constructor=TypeCon("List"), argument=elem_type) if elem_type else None
+                return TypeApp(constructor=TypeCon("List"), argument=TypeVar("a"))
+            case TupleLiteral(elements=elements):
+                # For simplicity, treat tuples as generic for now
+                return None
+            case Variable(name=name):
+                # Try to get type from function info
+                if name in self.functions and self.functions[name].overloads:
+                    overload = self.functions[name].overloads[0]
+                    if overload.type_info:
+                        # Extract return type from function type
+                        current_type = overload.type_info
+                        while isinstance(current_type, FunctionType):
+                            current_type = current_type.result
+                        return current_type
+                return None
+            case _:
+                return None
+
+    def _resolve_function_call(self, func_name: str, args: List[Expression]) -> str:
+        """Resolve function call to the appropriate monomorphized version."""
+        if func_name not in self.functions:
+            # Unknown function, use default naming
+            prefixed_name = self._prefix_name(func_name)
+            return prefixed_name
+        
+        func_info = self.functions[func_name]
+        
+        # Infer argument types
+        arg_types = [self._infer_expression_type(arg) for arg in args]
+        
+        # Find best matching overload
+        best_overload = func_info.find_best_overload(arg_types)
+        
+        if best_overload and best_overload.monomorphized_name:
+            return best_overload.monomorphized_name
+        else:
+            # Fallback to default naming
+            return self._prefix_name(func_name)
+
     def _extract_pattern_variables(self, pattern: Pattern) -> Set[str]:
         """Extract all variable names from a pattern recursively."""
         variables = set()
@@ -504,6 +552,27 @@ class systemoCompiler:
                     if function_name not in function_definitions:
                         function_definitions[function_name] = []
                     function_definitions[function_name].append(stmt)
+                case InstanceDeclaration(instance_name=instance_name, function_definition=func_def, ty=instance_ty, type_signature=type_sig):
+                    # Handle instance declarations as separate overloaded functions
+                    # Each instance gets its own monomorphized name based on type signature
+                    func_def.function_name = instance_name  # Ensure the name matches
+                    
+                    # Use the type from the instance declaration, not the function definition
+                    type_info = instance_ty if instance_ty is not None else self._convert_type_expression_to_type(type_sig)
+                    
+                    # Create a unique function definition for this specific overload
+                    # Use the type signature to create a monomorphized name
+                    monomorphized_name = self._create_monomorphized_name(instance_name, type_info)
+                    
+                    # Add this as a single function definition with monomorphized name
+                    lines.append(self._compile_simple_function(func_def, monomorphized_name))
+                    
+                    # Also add to the function registry for call resolution
+                    if instance_name not in self.functions:
+                        self.functions[instance_name] = FunctionInfo()
+                    
+                    max_params = len(func_def.patterns) if func_def.patterns else 0
+                    self.functions[instance_name].add_overload(max_params, type_info, monomorphized_name)
                 case LetStatement(variable=variable, value=value):
                     prefixed_var = self._prefix_name(variable)
                     lines.append(
@@ -516,7 +585,13 @@ class systemoCompiler:
 
         # Add main execution
         if "main" in function_definitions:
-            lines.extend(["", "if __name__ == '__main__':", "    systemo_main()"])
+            # Use the monomorphized main function name
+            main_func_info = self.functions.get("main")
+            if main_func_info and main_func_info.overloads:
+                main_name = main_func_info.overloads[0].monomorphized_name
+                lines.extend(["", "if __name__ == '__main__':", f"    {main_name}()"])
+            else:
+                lines.extend(["", "if __name__ == '__main__':", "    systemo_main()"])
 
         return "\n".join(lines)
 
@@ -607,8 +682,6 @@ class systemoCompiler:
         definitions: List[FunctionDefinition],
     ) -> str:
         """Compile function definitions with pattern matching."""
-        prefixed_func_name = self._prefix_name(func_name)
-
         # Track function arity (number of parameters)
         max_params = (
             max(len(defn.patterns) for defn in definitions) if definitions else 0
@@ -616,13 +689,14 @@ class systemoCompiler:
 
         # Store function information
         function_type = definitions[0].ty if definitions and definitions[0].ty else None
-        self.functions[func_name] = FunctionInfo(
-            arity=max_params,
-            type_info=function_type,
-        )
+        if func_name not in self.functions:
+            self.functions[func_name] = FunctionInfo()
+        
+        monomorphized_name = self._create_monomorphized_name(func_name, function_type)
+        self.functions[func_name].add_overload(max_params, function_type, monomorphized_name)
 
         if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
-            return self._compile_simple_function(definitions[0], prefixed_func_name)
+            return self._compile_simple_function(definitions[0], monomorphized_name)
 
         # Get return type hint from the first function definition
         return_type_hint = "Any"
@@ -672,7 +746,7 @@ class systemoCompiler:
             param_list = [f"arg_0: {param_type}"]
 
         lines = [
-            f"def {prefixed_func_name}({', '.join(param_list)}) -> {return_type_hint}:",
+            f"def {monomorphized_name}({', '.join(param_list)}) -> {return_type_hint}:",
         ]
 
         self.indent_level += 1
@@ -811,12 +885,12 @@ class systemoCompiler:
             arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
             if max_params == 0:
                 error_msg = (
-                    f"raise ValueError(f'No matching pattern for {prefixed_func_name}')"
+                    f"raise ValueError(f'No matching pattern for {monomorphized_name}')"
                 )
             elif max_params == 1:
-                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{arg_0}}')"
+                error_msg = f"raise ValueError(f'No matching pattern for {monomorphized_name} with args: {{arg_0}}')"
             else:
-                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{{arg_names}}}')"
+                error_msg = f"raise ValueError(f'No matching pattern for {monomorphized_name} with args: {{{arg_names}}}')"
 
             lines.append(self._indent() + error_msg)
         self.indent_level -= 1
@@ -1135,12 +1209,13 @@ class systemoCompiler:
 
             # Variables and constructors
             case Variable(name=name):
-                prefixed_name = self._prefix_name(name)
                 # Check if this is a nullary function (0 parameters) and automatically call it
                 if name in self.functions and self.functions[name].arity == 0:
-                    return f"{prefixed_name}()"
+                    resolved_name = self._resolve_function_call(name, [])
+                    return f"{resolved_name}()"
                 else:
-                    return prefixed_name
+                    resolved_name = self._resolve_function_call(name, [])
+                    return resolved_name
             case Constructor(name=name):
                 # Nullary constructors should be instantiated
                 constructor_def = self._find_constructor_def(name)
@@ -1180,19 +1255,21 @@ class systemoCompiler:
                         arg_exprs = [self._compile_expression(arg) for arg in args]
                         return f"{name}({', '.join(arg_exprs)})"
                     case Variable(name=name):
-                        # Check if this is a user-defined function
-                        prefixed_name = self._prefix_name(name)
+                        # Resolve to the correct monomorphized function name
+                        resolved_name = self._resolve_function_call(name, args)
 
                         # Get the expected arity for this function
-                        expected_arity = self.functions.get(
-                            name,
-                            FunctionInfo(arity=1),
-                        ).arity
+                        func_info = self.functions.get(name)
+                        if func_info is None:
+                            # Create default function info with arity 1
+                            func_info = FunctionInfo()
+                            func_info.add_overload(1, None, self._prefix_name(name))
+                        expected_arity = func_info.arity
 
                         if len(args) == expected_arity:
                             # Full application - call function directly
                             arg_exprs = [self._compile_expression(arg) for arg in args]
-                            return f"{prefixed_name}({', '.join(arg_exprs)})"
+                            return f"{resolved_name}({', '.join(arg_exprs)})"
                         elif len(args) < expected_arity and name in self.functions:
                             # Partial application - create lambda for remaining args
                             arg_exprs = [self._compile_expression(arg) for arg in args]
@@ -1201,7 +1278,7 @@ class systemoCompiler:
                                 f"__arg_{i}" for i in range(remaining_params)
                             ]
                             all_args = arg_exprs + lambda_params
-                            return f"lambda {', '.join(lambda_params)}: {prefixed_name}({', '.join(all_args)})"
+                            return f"lambda {', '.join(lambda_params)}: {resolved_name}({', '.join(all_args)})"
                         elif len(args) > expected_arity:
                             # Over-application - call function with exact args, then apply rest
                             exact_args = args[:expected_arity]
@@ -1210,7 +1287,7 @@ class systemoCompiler:
                             arg_exprs = [
                                 self._compile_expression(arg) for arg in exact_args
                             ]
-                            result = f"{prefixed_name}({', '.join(arg_exprs)})"
+                            result = f"{resolved_name}({', '.join(arg_exprs)})"
 
                             # Apply remaining arguments one by one
                             for arg in remaining_args:
@@ -1218,14 +1295,13 @@ class systemoCompiler:
                                 result = f"{result}({arg_expr})"
                             return result
                         else:
-                            # Single argument or built-in function - use nested calls
-                            func_expr = self._compile_expression(current)
+                            # Single argument or built-in function - use resolved name
                             if len(args) == 1:
                                 arg_expr = self._compile_expression(args[0])
-                                return f"{func_expr}({arg_expr})"
+                                return f"{resolved_name}({arg_expr})"
                             else:
                                 # Multiple args - use nested calls
-                                result = func_expr
+                                result = resolved_name
                                 for arg in args:
                                     arg_expr = self._compile_expression(arg)
                                     result = f"{result}({arg_expr})"
@@ -1296,26 +1372,23 @@ class systemoCompiler:
             left = self._compile_expression(operands[0])
             right = self._compile_expression(operands[1])
 
-            # For binary operators, call the dispatcher with both arguments directly
-            # to avoid the issue with unary/binary instance ambiguity
-            safe_op_name = self._sanitize_operator_name(operator)
-
-            # Use a special binary calling convention to distinguish from unary operations
-            return f"systemo_{safe_op_name}_binary({left}, {right})"
+            # Try to resolve to monomorphized function name
+            resolved_name = self._resolve_function_call(operator, operands)
+            return f"{resolved_name}({left}, {right})"
 
         # Handle unary operators
         elif len(operands) == 1:
             operand = self._compile_expression(operands[0])
 
-            # For unary operators, use the regular dispatcher
-            safe_op_name = self._sanitize_operator_name(operator)
-            return f"systemo_{safe_op_name}({operand})"
+            # Try to resolve to monomorphized function name
+            resolved_name = self._resolve_function_call(operator, operands)
+            return f"{resolved_name}({operand})"
 
         # Fallback for other cases
         else:
             compiled_operands = [self._compile_expression(op) for op in operands]
-            safe_op_name = self._sanitize_operator_name(operator)
-            return f"systemo_{safe_op_name}({', '.join(compiled_operands)})"
+            resolved_name = self._resolve_function_call(operator, operands)
+            return f"{resolved_name}({', '.join(compiled_operands)})"
 
     def _compile_do_block(self, do_block: DoBlock) -> str:
         # For single statements, we can still inline them

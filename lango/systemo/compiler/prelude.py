@@ -8,7 +8,7 @@ NaN = float("nan")
 Infinity = float("inf")
 
 
-def systemo_error(message: str) -> Any:
+def systemo_error_string(message: str) -> Any:
     raise RuntimeError(f"Runtime error: {message}")
 
 
