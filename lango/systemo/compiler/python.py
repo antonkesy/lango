@@ -398,10 +398,63 @@ class systemoCompiler:
                     return TypeApp(constructor=constructor_type, argument=argument_type)
                 return None
             case TupleType(element_types=element_types):
-                # For now, treat tuples as generic - we could implement proper tuple types later
+                # Convert tuple types to a specialized tuple type representation
+                # For now, we create a synthetic TypeCon for tuples
+                if len(element_types) == 2:
+                    # Binary tuple (a, b)
+                    elem1_type = self._convert_type_expression_to_type(element_types[0])
+                    elem2_type = self._convert_type_expression_to_type(element_types[1])
+                    if elem1_type and elem2_type:
+                        # Create a type application: Tuple2 a b
+                        tuple_con = TypeCon("Tuple2")
+                        tuple_with_first = TypeApp(constructor=tuple_con, argument=elem1_type)
+                        return TypeApp(constructor=tuple_with_first, argument=elem2_type)
+                elif len(element_types) == 3:
+                    # Triple tuple (a, b, c)
+                    elem1_type = self._convert_type_expression_to_type(element_types[0])
+                    elem2_type = self._convert_type_expression_to_type(element_types[1])
+                    elem3_type = self._convert_type_expression_to_type(element_types[2])
+                    if elem1_type and elem2_type and elem3_type:
+                        # Create a type application: Tuple3 a b c
+                        tuple_con = TypeCon("Tuple3")
+                        tuple_with_first = TypeApp(constructor=tuple_con, argument=elem1_type)
+                        tuple_with_second = TypeApp(constructor=tuple_with_first, argument=elem2_type)
+                        return TypeApp(constructor=tuple_with_second, argument=elem3_type)
+                else:
+                    # Generic tuple type for other arities
+                    return TypeCon("Tuple")
                 return None
+            case list() if all(hasattr(elem, 'name') or hasattr(elem, '__class__') for elem in type_expr):
+                # Handle list of type expressions (for complex types)
+                converted_types = []
+                for elem in type_expr:
+                    converted = self._convert_type_expression_to_type(elem)
+                    if converted:
+                        converted_types.append(converted)
+                
+                if len(converted_types) == 1:
+                    return converted_types[0]
+                elif len(converted_types) > 1:
+                    # Multiple types - could be a function chain or tuple
+                    # Try to build a function type chain
+                    result_type = converted_types[-1]
+                    for param_type in reversed(converted_types[:-1]):
+                        result_type = FunctionType(param=param_type, result=result_type)
+                    return result_type
+                return None
+            case str():
+                # Handle string type names directly
+                return TypeCon(type_expr)
             case _:
-                # Unknown type expression
+                # Unknown type expression - try to extract name if available
+                if hasattr(type_expr, 'name'):
+                    return TypeCon(str(type_expr.name))
+                elif hasattr(type_expr, '__class__'):
+                    # Last resort: use the class name
+                    class_name = type_expr.__class__.__name__
+                    if class_name.endswith('Type'):
+                        return TypeCon(class_name[:-4])  # Remove 'Type' suffix
+                    return TypeCon(class_name)
                 return None
 
     def _systemo_type_to_python_hint(self, systemo_type: Optional[Type]) -> str:
@@ -420,12 +473,29 @@ class systemoCompiler:
                 return "bool"
             case TypeCon(name="()"):
                 return "None"
+            case TypeCon(name="Tuple"):
+                return "tuple"
+            case TypeCon(name="Tuple2"):
+                return "tuple"
+            case TypeCon(name="Tuple3"):
+                return "tuple"
             case TypeApp(constructor=TypeCon(name="List"), argument=arg_type):
                 inner_type = self._systemo_type_to_python_hint(arg_type)
                 return f"List[{inner_type}]"
             case TypeApp(constructor=TypeCon(name="IO"), argument=arg_type):
                 # IO types typically don't have meaningful return types in our compiled Python
                 return "None"
+            case TypeApp(constructor=TypeApp(constructor=TypeCon(name="Tuple2"), argument=arg1_type), argument=arg2_type):
+                # Binary tuple type: Tuple2 A B -> Tuple[A, B]
+                type1_hint = self._systemo_type_to_python_hint(arg1_type)
+                type2_hint = self._systemo_type_to_python_hint(arg2_type)
+                return f"Tuple[{type1_hint}, {type2_hint}]"
+            case TypeApp(constructor=TypeApp(constructor=TypeApp(constructor=TypeCon(name="Tuple3"), argument=arg1_type), argument=arg2_type), argument=arg3_type):
+                # Triple tuple type: Tuple3 A B C -> Tuple[A, B, C]
+                type1_hint = self._systemo_type_to_python_hint(arg1_type)
+                type2_hint = self._systemo_type_to_python_hint(arg2_type)
+                type3_hint = self._systemo_type_to_python_hint(arg3_type)
+                return f"Tuple[{type1_hint}, {type2_hint}, {type3_hint}]"
             case FunctionType(param=param_type, result=result_type):
                 # For function types, we'll use Callable
                 param_hint = self._systemo_type_to_python_hint(param_type)
@@ -449,11 +519,14 @@ class systemoCompiler:
             case TypeVar(name=name):
                 # Type variables become Any for now
                 return "Any"
+            case TypeCon(name=name):
+                # Generic type constructor - use the name as-is
+                return name
             case _:
                 return "Any"
 
     def _infer_expression_type(self, expr: Expression) -> Optional[Type]:
-        """Infer the type of an expression (basic type inference)."""
+        """Infer the type of an expression (enhanced type inference)."""
         match expr:
             case IntLiteral() | NegativeInt():
                 return TypeCon("Int")
@@ -471,7 +544,7 @@ class systemoCompiler:
                     return TypeApp(constructor=TypeCon("List"), argument=elem_type) if elem_type else None
                 return TypeApp(constructor=TypeCon("List"), argument=TypeVar("a"))
             case TupleLiteral(elements=elements):
-                # For simplicity, treat tuples as generic for now
+                # For tuples, we could create a proper tuple type, but for now return generic
                 return None
             case Variable(name=name):
                 # Try to get type from function info
@@ -484,11 +557,68 @@ class systemoCompiler:
                             current_type = current_type.result
                         return current_type
                 return None
+            case Constructor(name=name):
+                # For constructors, try to infer from data type definitions
+                constructor_def = self._find_constructor_def(name)
+                if constructor_def:
+                    # Find which data type this constructor belongs to
+                    for data_type_name, data_decl in self.data_types.items():
+                        if any(ctor.name == name for ctor in data_decl.constructors):
+                            return TypeCon(data_type_name)
+                return None
+            case FunctionApplication(function=function, argument=argument):
+                # Infer function type and apply argument type
+                func_type = self._infer_expression_type(function)
+                arg_type = self._infer_expression_type(argument)
+                
+                if isinstance(func_type, FunctionType):
+                    # Return the result type of the function
+                    return func_type.result
+                return None
+            case ConstructorExpression(constructor_name=constructor_name):
+                # Constructor application results in the data type
+                constructor_def = self._find_constructor_def(constructor_name)
+                if constructor_def:
+                    for data_type_name, data_decl in self.data_types.items():
+                        if any(ctor.name == constructor_name for ctor in data_decl.constructors):
+                            return TypeCon(data_type_name)
+                return None
+            case SymbolicOperation(operator=operator, operands=operands):
+                # Try to infer from operator overloads
+                if operator in self.functions and self.functions[operator].overloads:
+                    # For now, use the first overload's return type
+                    overload = self.functions[operator].overloads[0]
+                    if overload.type_info:
+                        current_type = overload.type_info
+                        while isinstance(current_type, FunctionType):
+                            current_type = current_type.result
+                        return current_type
+                return None
+            case GroupedExpression(expression=expression):
+                # Grouped expressions have the same type as their content
+                return self._infer_expression_type(expression)
+            case IfElse(then_expr=then_expr, else_expr=else_expr):
+                # If-else expressions have the type of the then/else branches
+                then_type = self._infer_expression_type(then_expr)
+                else_type = self._infer_expression_type(else_expr)
+                # For now, return the first non-None type
+                return then_type or else_type
+            case DoBlock(statements=statements):
+                # Do blocks have the type of their last statement
+                if statements:
+                    last_stmt = statements[-1]
+                    if is_expression(last_stmt):
+                        return self._infer_expression_type(last_stmt)  # type: ignore
+                return None
             case _:
                 return None
 
     def _resolve_function_call(self, func_name: str, args: List[Expression]) -> str:
         """Resolve function call to the appropriate monomorphized version."""
+        # Check if this is a primitive function - don't monomorphize these
+        if func_name.startswith("prim") or func_name in ["error", "putStr"]:
+            return func_name
+        
         if func_name not in self.functions:
             # Unknown function, use default naming
             prefixed_name = self._prefix_name(func_name)
@@ -617,15 +747,8 @@ class systemoCompiler:
                 for i, (field_name, field_type_expr) in enumerate(
                     zip(field_names, field_types),
                 ):
-                    # Convert field type expression to Python type hint
-                    if field_type_expr:
-                        converted_type = self._convert_type_expression_to_type(
-                            field_type_expr,
-                        )
-                        type_hint = self._systemo_type_to_python_hint(converted_type)
-                    else:
-                        type_hint = "Any"
-                    typed_args.append(f"arg_{i}: {type_hint}")
+                    # Use Any for all constructor parameters to avoid forward reference issues
+                    typed_args.append(f"arg_{i}: Any")
 
                 lines.extend(
                     [
@@ -645,15 +768,8 @@ class systemoCompiler:
                 # Create typed arguments
                 typed_args = []
                 for i, type_atom in enumerate(constructor.type_atoms):
-                    # Convert type atom to Python type hint
-                    if type_atom:
-                        converted_type = self._convert_type_expression_to_type(
-                            type_atom,
-                        )
-                        type_hint = self._systemo_type_to_python_hint(converted_type)
-                    else:
-                        type_hint = "Any"
-                    typed_args.append(f"arg_{i}: {type_hint}")
+                    # Use Any for all constructor parameters to avoid forward reference issues
+                    typed_args.append(f"arg_{i}: Any")
 
                 lines.extend(
                     [
@@ -695,8 +811,11 @@ class systemoCompiler:
         monomorphized_name = self._create_monomorphized_name(func_name, function_type)
         self.functions[func_name].add_overload(max_params, function_type, monomorphized_name)
 
-        if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
-            return self._compile_simple_function(definitions[0], monomorphized_name)
+        if len(definitions) == 1:
+            # Single definition - use simple compilation if it doesn't have complex patterns
+            func_def = definitions[0]
+            if len(func_def.patterns) <= 1 or all(isinstance(p, VariablePattern) for p in func_def.patterns):
+                return self._compile_simple_function(func_def, monomorphized_name)
 
         # Get return type hint from the first function definition
         return_type_hint = "Any"
@@ -906,7 +1025,7 @@ class systemoCompiler:
         func_def: FunctionDefinition,
         prefixed_name: Optional[str] = None,
     ) -> str:
-        """Compile a simple function with at most one parameter."""
+        """Compile a simple function with multiple parameters."""
         func_name = prefixed_name or f"systemo_{func_def.function_name}"
 
         # Track pattern variables
@@ -916,16 +1035,19 @@ class systemoCompiler:
 
         # Get type hints from the function's type annotation
         return_type_hint = "Any"
-        param_type_hint = "Any"
+        param_type_hints = []
 
         if func_def.ty:
-            match func_def.ty:
-                case FunctionType(param=param_type, result=result_type):
-                    param_type_hint = self._systemo_type_to_python_hint(param_type)
-                    return_type_hint = self._systemo_type_to_python_hint(result_type)
-                case _:
-                    # Not a function type, use it as return type
-                    return_type_hint = self._systemo_type_to_python_hint(func_def.ty)
+            # Extract parameter types from function type chain
+            current_type = func_def.ty
+            while isinstance(current_type, FunctionType):
+                param_type_hints.append(self._systemo_type_to_python_hint(current_type.param))
+                current_type = current_type.result
+            return_type_hint = self._systemo_type_to_python_hint(current_type)
+        
+        # Ensure we have at least as many type hints as patterns
+        while len(param_type_hints) < len(func_def.patterns):
+            param_type_hints.append("Any")
 
         if len(func_def.patterns) == 0:
             # Check if the body is a do block with multiple statements
@@ -938,8 +1060,11 @@ class systemoCompiler:
                         f"def {func_name}() -> {return_type_hint}:",
                         f"    return {self._compile_expression(func_def.body)}",
                     ]
-        else:
+        elif len(func_def.patterns) == 1:
+            # Single parameter function
             pattern = func_def.patterns[0]
+            param_type_hint = param_type_hints[0] if param_type_hints else "Any"
+            
             match pattern:
                 case VariablePattern(name=name):
                     # Check if the body is a do block with multiple statements
@@ -960,6 +1085,29 @@ class systemoCompiler:
                     lines = [
                         f"def {func_name}(arg: {param_type_hint}) -> {return_type_hint}:",
                         f"    {self._compile_pattern_match(pattern, 'arg', func_def.body)}",
+                    ]
+        else:
+            # Multiple parameter function - handle all patterns as parameters
+            param_list = []
+            for i, pattern in enumerate(func_def.patterns):
+                param_type_hint = param_type_hints[i] if i < len(param_type_hints) else "Any"
+                match pattern:
+                    case VariablePattern(name=name):
+                        param_list.append(f"{name}: {param_type_hint}")
+                    case _:
+                        param_list.append(f"arg_{i}: {param_type_hint}")
+            
+            # Check if the body is a do block with multiple statements
+            match func_def.body:
+                case DoBlock(statements=statements) if len(statements) > 1:
+                    lines = [
+                        f"def {func_name}({', '.join(param_list)}) -> {return_type_hint}:",
+                    ]
+                    lines.extend(self._compile_do_block_as_statements(func_def.body))
+                case _:
+                    lines = [
+                        f"def {func_name}({', '.join(param_list)}) -> {return_type_hint}:",
+                        f"    return {self._compile_expression(func_def.body)}",
                     ]
 
         lines.append("")
