@@ -110,7 +110,9 @@ def parse_type_expr(node) -> Optional[Type]:
             return None
 
 
-def collect_overloaded_functions(program: Program) -> Dict[str, Dict[str, FunctionDefinition]]:
+def collect_overloaded_functions(
+    program: Program,
+) -> Dict[str, Dict[str, FunctionDefinition]]:
     """Collect overloaded functions from the program, returning a dict of function names to type-signature-keyed function definitions."""
     overloaded_functions: Dict[str, Dict[str, FunctionDefinition]] = {}
 
@@ -124,7 +126,7 @@ def collect_overloaded_functions(program: Program) -> Dict[str, Dict[str, Functi
             if not isinstance(func_type, FunctionType):
                 raise NotImplementedError("TODO")
                 continue
-            
+
             if func_name not in overloaded_functions:
                 overloaded_functions[func_name] = {}
             overloaded_functions[func_name][str(func_type)] = stmt
@@ -140,7 +142,7 @@ def collect_overloaded_functions(program: Program) -> Dict[str, Dict[str, Functi
             # Only accept FunctionType objects
             if not isinstance(func_type, FunctionType):
                 continue
-            
+
             if func_name not in overloaded_functions:
                 overloaded_functions[func_name] = {}
             overloaded_functions[func_name][str(func_type)] = stmt.function_definition
