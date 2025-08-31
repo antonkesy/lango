@@ -1,5 +1,39 @@
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
+from lango.systemo.ast.nodes import (
+    SymbolicOperation,
+    BoolLiteral,
+    CharLiteral,
+    ConsPattern,
+    Constructor,
+    ConstructorExpression,
+    ConstructorPattern,
+    DataConstructor,
+    DataDeclaration,
+    DoBlock,
+    Expression,
+    FloatLiteral,
+    FunctionApplication,
+    FunctionDefinition,
+    GroupedExpression,
+    IfElse,
+    IntLiteral,
+    LetStatement,
+    ListLiteral,
+    ListPattern,
+    LiteralPattern,
+    NegativeFloat,
+    NegativeInt,
+    Pattern,
+    Program,
+    StringLiteral,
+    TupleLiteral,
+    TuplePattern,
+    Variable,
+    VariablePattern,
+    is_expression,
+)
 from lango.shared.compiler.python import (
     build_cons_pattern_match,
     build_list_pattern_match,
@@ -19,54 +53,291 @@ from lango.shared.typechecker.lango_types import (
     TypeCon,
     TypeVar,
 )
-from lango.systemo.ast.nodes import (
-    BoolLiteral,
-    CharLiteral,
-    ConsPattern,
-    Constructor,
-    ConstructorExpression,
-    ConstructorPattern,
-    DataConstructor,
-    DataDeclaration,
-    DoBlock,
-    Expression,
-    FloatLiteral,
-    FunctionApplication,
-    FunctionDefinition,
-    GroupedExpression,
-    IfElse,
-    InstanceDeclaration,
-    IntLiteral,
-    LetStatement,
-    ListLiteral,
-    ListPattern,
-    LiteralPattern,
-    NegativeFloat,
-    NegativeInt,
-    Pattern,
-    Program,
-    StringLiteral,
-    SymbolicOperation,
-    TupleLiteral,
-    TuplePattern,
-    Variable,
-    VariablePattern,
-    is_expression,
-)
+
+
+@dataclass
+class FunctionInfo:
+    arity: int
+    type_info: Optional[Type] = None
 
 
 class systemoCompiler:
     def __init__(self) -> None:
         self.indent_level = 0
-        self.defined_functions: Set[str] = set()
-        self.nullary_functions: Set[str] = set()  # Functions with no parameters
-        self.lambda_lifted_functions: Set[str] = (
-            set()
-        )  # Functions that had lambdas lifted to parameters
-        self.function_types: Dict[str, Type] = {}  # Track function types
+        self.functions: Dict[str, FunctionInfo] = (
+            {}
+        )  # Consolidated function information
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
-        self.do_block_counter = 0  # Counter for unique do block function names
+
+        # Initialize built-in function information
+        builtin_functions = {
+            "primIntAdd": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+                ),
+            ),
+            "primIntSub": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+                ),
+            ),
+            "primIntMul": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+                ),
+            ),
+            "primIntDiv": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+                ),
+            ),
+            "primIntPow": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+                ),
+            ),
+            "primIntNeg": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("Int"), result=TypeCon("Int")),
+            ),
+            "primIntLt": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primIntLe": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primIntGt": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primIntGe": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primIntEq": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Int"),
+                    result=FunctionType(param=TypeCon("Int"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primIntShow": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("Int"), result=TypeCon("String")),
+            ),
+            "primFloatAdd": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(
+                        param=TypeCon("Float"), result=TypeCon("Float")
+                    ),
+                ),
+            ),
+            "primFloatSub": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(
+                        param=TypeCon("Float"), result=TypeCon("Float")
+                    ),
+                ),
+            ),
+            "primFloatMul": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(
+                        param=TypeCon("Float"), result=TypeCon("Float")
+                    ),
+                ),
+            ),
+            "primFloatDiv": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(
+                        param=TypeCon("Float"), result=TypeCon("Float")
+                    ),
+                ),
+            ),
+            "primFloatPow": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(
+                        param=TypeCon("Float"), result=TypeCon("Float")
+                    ),
+                ),
+            ),
+            "primFloatNeg": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("Float"), result=TypeCon("Float")),
+            ),
+            "primFloatLt": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primFloatLe": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primFloatGt": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primFloatGe": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primFloatEq": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Float"),
+                    result=FunctionType(param=TypeCon("Float"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primFloatShow": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(
+                    param=TypeCon("Float"), result=TypeCon("String")
+                ),
+            ),
+            "primStringConcat": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("String"),
+                    result=FunctionType(
+                        param=TypeCon("String"), result=TypeCon("String")
+                    ),
+                ),
+            ),
+            "primStringEq": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("String"),
+                    result=FunctionType(
+                        param=TypeCon("String"), result=TypeCon("Bool")
+                    ),
+                ),
+            ),
+            "primStringShow": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(
+                    param=TypeCon("String"), result=TypeCon("String")
+                ),
+            ),
+            "primCharEq": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Char"),
+                    result=FunctionType(param=TypeCon("Char"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primCharShow": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("Char"), result=TypeCon("String")),
+            ),
+            "primBoolAnd": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Bool"),
+                    result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primBoolOr": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Bool"),
+                    result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primBoolNot": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
+            ),
+            "primBoolEq": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeCon("Bool"),
+                    result=FunctionType(param=TypeCon("Bool"), result=TypeCon("Bool")),
+                ),
+            ),
+            "primBoolShow": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("Bool"), result=TypeCon("String")),
+            ),
+            "putStr": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(
+                    param=TypeCon("String"),
+                    result=TypeApp(constructor=TypeCon("IO"), argument=TypeCon("()")),
+                ),
+            ),
+            "primListConcat": FunctionInfo(
+                arity=2,
+                type_info=FunctionType(
+                    param=TypeApp(constructor=TypeCon("List"), argument=TypeVar("a")),
+                    result=FunctionType(
+                        param=TypeApp(
+                            constructor=TypeCon("List"), argument=TypeVar("a")
+                        ),
+                        result=TypeApp(
+                            constructor=TypeCon("List"), argument=TypeVar("a")
+                        ),
+                    ),
+                ),
+            ),
+            "primListShow": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(
+                    param=TypeApp(constructor=TypeCon("List"), argument=TypeVar("a")),
+                    result=TypeCon("String"),
+                ),
+            ),
+            "error": FunctionInfo(
+                arity=1,
+                type_info=FunctionType(param=TypeCon("String"), result=TypeVar("a")),
+            ),
+        }
+        self.functions.update(builtin_functions)
 
     def _indent(self) -> str:
         return "    " * self.indent_level
@@ -77,9 +348,51 @@ class systemoCompiler:
         if name in self.local_variables:
             return name
         # Don't prefix constructor names (they should be detected by their usage)
-        # Add systemo_ prefix to all other names, with sanitization for operators
-        sanitized_name = self._sanitize_operator_name(name)
-        return f"systemo_{sanitized_name}"
+        # Add systemo_ prefix to all other names
+        name = self._sanitize_operator_name(name)
+        return f"systemo_{name}"
+
+    def _sanitize_operator_name(self, operator: str) -> str:
+        """Convert operator symbols to safe Python function names."""
+        replacements = {
+            "!": "bang",
+            "@": "at",
+            "#": "hash",
+            "$": "dollar",
+            "%": "percent",
+            "^": "caret",
+            "&": "amp",
+            "*": "star",
+            "+": "plus",
+            "-": "minus",
+            "=": "eq",
+            "|": "pipe",
+            "\\": "backslash",
+            "/": "slash",
+            "?": "question",
+            "<": "lt",
+            ">": "gt",
+            "~": "tilde",
+            "`": "backtick",
+            ":": "colon",
+            ";": "semicolon",
+            "'": "quote",
+            '"': "doublequote",
+            ",": "comma",
+            ".": "dot",
+            "(": "lparen",
+            ")": "rparen",
+            "[": "lbracket",
+            "]": "rbracket",
+            "{": "lbrace",
+            "}": "rbrace",
+        }
+
+        result = operator
+        for char, replacement in replacements.items():
+            result = result.replace(char, replacement)
+
+        return result
 
     def _find_constructor_def(
         self,
@@ -91,31 +404,6 @@ class systemoCompiler:
                 if constructor.name == constructor_name:
                     return constructor
         return None
-
-    def _get_function_final_return_type(self, func_name: str) -> str:
-        """Get the final return type of a function, unwrapping curried functions."""
-        if func_name not in self.function_types:
-            return "Any"
-
-        func_type = self.function_types[func_name]
-        # Unwrap function types to get the final return type
-        while isinstance(func_type, FunctionType):
-            func_type = func_type.result
-
-        return self._systemo_type_to_python_hint(func_type)
-
-    def _get_function_arity(self, func_name: str) -> int:
-        """Get the number of parameters (arity) of a function."""
-        if func_name not in self.function_types:
-            # If function type is not known, assume arity 1 as default
-            return 1
-
-        func_type = self.function_types[func_name]
-        arity = 0
-        while isinstance(func_type, FunctionType):
-            arity += 1
-            func_type = func_type.result
-        return arity
 
     def _convert_type_expression_to_type(self, type_expr: Any) -> Optional[Type]:
         """Convert a TypeExpression to a Type, using the ty field if available."""
@@ -192,128 +480,6 @@ class systemoCompiler:
                 pass
         return variables
 
-    def _build_record_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        field_name: str,
-        var_name: str,
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for record constructors."""
-        return build_record_pattern_match(
-            value_expr,
-            constructor,
-            field_name,
-            var_name,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_positional_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        var_name: str,
-        body: Expression,
-        arg_index: int = 0,
-    ) -> str:
-        return build_positional_pattern_match(
-            value_expr,
-            constructor,
-            var_name,
-            body,
-            self._compile_expression,
-            arg_index,
-        )
-
-    def _build_multi_arg_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        assignments: List[str],
-        body: Expression,
-    ) -> str:
-        return build_multi_arg_pattern_match(
-            value_expr,
-            constructor,
-            assignments,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_literal_pattern_match(
-        self,
-        value_expr: str,
-        value: Any,
-        body: Expression,
-    ) -> str:
-        return build_literal_pattern_match(
-            value_expr,
-            value,
-            body,
-            self._compile_expression,
-            self._compile_literal_value,
-        )
-
-    def _build_cons_pattern_match(
-        self,
-        value_expr: str,
-        head_var: Optional[str],
-        tail_var: Optional[str],
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for cons patterns (x:xs)."""
-        return build_cons_pattern_match(
-            value_expr,
-            head_var,
-            tail_var,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_tuple_pattern_match(
-        self,
-        value_expr: str,
-        tuple_vars: List[str],
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for tuple patterns."""
-        return build_tuple_pattern_match(
-            value_expr,
-            tuple_vars,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_list_pattern_match(
-        self,
-        value_expr: str,
-        list_vars: List[str],
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for list patterns."""
-        return build_list_pattern_match(
-            value_expr,
-            list_vars,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_simple_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for constructors with no arguments."""
-        return build_simple_pattern_match(
-            value_expr,
-            constructor,
-            body,
-            self._compile_expression,
-        )
-
     def compile(self, program: Program) -> str:
         lines = []
         with open("lango/systemo/compiler/prelude.py", "r") as f:
@@ -329,8 +495,6 @@ class systemoCompiler:
 
         # Group function definitions by name
         function_definitions: Dict[str, List[FunctionDefinition]] = {}
-        # Group instance declarations by name
-        instance_declarations: Dict[str, List["InstanceDeclaration"]] = {}
 
         for stmt in program.statements:
             match stmt:
@@ -340,10 +504,6 @@ class systemoCompiler:
                     if function_name not in function_definitions:
                         function_definitions[function_name] = []
                     function_definitions[function_name].append(stmt)
-                case InstanceDeclaration(instance_name=instance_name):
-                    if instance_name not in instance_declarations:
-                        instance_declarations[instance_name] = []
-                    instance_declarations[instance_name].append(stmt)
                 case LetStatement(variable=variable, value=value):
                     prefixed_var = self._prefix_name(variable)
                     lines.append(
@@ -352,13 +512,7 @@ class systemoCompiler:
 
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
-            # Skip built-in functions to avoid conflicts
-            if func_name not in ["error"]:
-                lines.append(self._compile_function_group(func_name, definitions))
-
-        # Generate instance declarations (monomorphized functions)
-        for instance_name, instances in instance_declarations.items():
-            lines.extend(self._compile_instances(instance_name, instances))
+            lines.append(self._compile_function_group(func_name, definitions))
 
         # Add main execution
         if "main" in function_definitions:
@@ -447,278 +601,25 @@ class systemoCompiler:
         lines.append("")
         return "\n".join(lines)
 
-    def _compile_instances(
-        self,
-        instance_name: str,
-        instances: List["InstanceDeclaration"],
-    ) -> List[str]:
-        """Compile instance declarations into monomorphized functions with proper type dispatch."""
-        lines = []
-
-        # Extract the actual function name from parsing artifacts
-        actual_function_name = self._extract_function_name(instance_name)
-
-        # Skip generating dispatcher for functions already defined in prelude
-        # These functions already have proper implementations that handle all cases
-        prelude_functions = {"error"}
-        if actual_function_name in prelude_functions:
-            return []  # Don't generate any instance functions
-
-        # Use the same sanitization method as for symbolic operations
-        safe_instance_name = self._sanitize_operator_name(actual_function_name)
-
-        # Ensure it starts with a letter for valid Python identifier
-        if not safe_instance_name or not safe_instance_name[0].isalpha():
-            safe_instance_name = f"op_{safe_instance_name}"
-
-        # Group instances by type signature to handle multiple patterns for same type
-        type_to_instances = {}
-        for instance in instances:
-            type_sig = self._type_expression_to_string(instance.type_signature)
-            if type_sig not in type_to_instances:
-                type_to_instances[type_sig] = []
-            type_to_instances[type_sig].append(instance)
-
-        # Generate monomorphized functions for each unique type signature
-        type_to_function = {}
-
-        for i, (type_sig, grouped_instances) in enumerate(type_to_instances.items()):
-            monomorphized_name = f"systemo_{safe_instance_name}_{i}"
-            type_to_function[type_sig] = monomorphized_name
-
-            if len(grouped_instances) == 1:
-                # Single instance - use existing compilation methods
-                instance = grouped_instances[0]
-                func_def = instance.function_definition
-
-                if len(func_def.patterns) == 2:
-                    # Binary operator - generate a curried function
-                    compiled_func = self._compile_binary_instance_function(
-                        func_def,
-                        monomorphized_name,
-                    )
-                else:
-                    # Single argument or nullary - use existing method
-                    compiled_func = self._compile_simple_function(
-                        func_def,
-                        monomorphized_name,
-                    )
-            else:
-                # Multiple instances with same type signature - combine into one function
-                compiled_func = self._compile_grouped_instance_function(
-                    grouped_instances,
-                    monomorphized_name,
-                )
-
-            lines.append(compiled_func)
-
-        # Generate a type-aware dispatcher function
-        lines.append(
-            self._generate_typed_dispatcher(
-                safe_instance_name,
-                instances,
-                type_to_function,
-            ),
-        )
-
-        # Generate a binary-specific dispatcher for binary operations
-        lines.append(
-            self._generate_typed_binary_dispatcher(
-                safe_instance_name,
-                instances,
-                type_to_function,
-            ),
-        )
-
-        return lines
-
-    def _extract_function_name(self, instance_name) -> str:
-        """Extract the actual function name from parsing artifacts."""
-        # Handle Tree objects from lark parser
-        if hasattr(instance_name, "children") and hasattr(instance_name, "data"):
-            # This is a Tree object from lark
-            if instance_name.children:
-                child = instance_name.children[0]
-                if hasattr(child, "value"):
-                    # This is a Token with a value
-                    return child.value
-                elif isinstance(child, str):
-                    return child
-                else:
-                    # Handle other types by converting to string
-                    return str(child)
-
-        # Handle string representations (fallback for existing code)
-        if isinstance(instance_name, str):
-            import re
-
-            # Look for operator patterns like Tree(Token('RULE', 'inst_operator_name'), ['/'])
-            operator_match = re.search(
-                r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']+)'\]\)",
-                instance_name,
-            )
-            if operator_match:
-                return operator_match.group(1)
-
-            # Look for patterns like Token('ID', 'xcoord') in the string
-            token_match = re.search(r"Token\('ID', '(\w+)'\)", instance_name)
-            if token_match:
-                return token_match.group(1)
-
-        # Final fallback
-        return str(instance_name)
-
-        # Look for simple word patterns
-        word_match = re.search(r"\b([a-zA-Z]\w*)\b", instance_name)
-        if word_match:
-            return word_match.group(1)
-
-        # Fallback
-        return "instance"
-
-    def _generate_type_dispatcher_simple(
-        self,
-        instance_name: str,
-        instances: List["InstanceDeclaration"],
-    ) -> str:
-        """Generate a simple dispatcher function that tries each monomorphized version."""
-        prefixed_name = f"systemo_{instance_name}"
-        lines = [f"def {prefixed_name}(arg: Any) -> Any:"]
-
-        if len(instances) == 0:
-            lines.append(f"    raise ValueError(f'No instances of {instance_name}')")
-            lines.append("")
-            return "\n".join(lines)
-
-        # Try each instance in sequence using individual try/except blocks
-        for i, instance in enumerate(instances):
-            monomorphized_name = f"systemo_{instance_name}_{i}"
-            lines.append(f"    try:")
-
-            # Check if this is a binary function (curried) by examining the function definition patterns
-            func_def = instance.function_definition
-            if len(func_def.patterns) == 2:
-                # This is a binary function - return the partial application with the first argument
-                lines.append(f"        return {monomorphized_name}(arg)")
-            else:
-                # This is a unary function - call it directly
-                lines.append(f"        return {monomorphized_name}(arg)")
-            lines.append(f"    except (ValueError, AttributeError):")
-            lines.append(f"        pass")
-
-        # Final fallback
-        lines.append(
-            f"    raise ValueError(f'No instance of {instance_name} for type {{type(arg).__name__}}')",
-        )
-
-        lines.append("")
-        return "\n".join(lines)
-
-    def _generate_binary_dispatcher(
-        self,
-        instance_name: str,
-        instances: List["InstanceDeclaration"],
-    ) -> str:
-        """Generate a binary-specific dispatcher that only considers binary instances."""
-        prefixed_name = f"systemo_{instance_name}_binary"
-        lines = [f"def {prefixed_name}(arg_0: Any, arg_1: Any) -> Any:"]
-
-        # Filter instances to only include binary ones (those with 2 patterns)
-        binary_instances = [
-            (i, instance)
-            for i, instance in enumerate(instances)
-            if len(instance.function_definition.patterns) == 2
-        ]
-
-        if len(binary_instances) == 0:
-            lines.append(
-                f"    raise ValueError(f'No binary instances of {instance_name}')",
-            )
-            lines.append("")
-            return "\n".join(lines)
-
-        # Try each binary instance in sequence
-        for original_index, instance in binary_instances:
-            monomorphized_name = f"systemo_{instance_name}_{original_index}"
-            lines.append(f"    try:")
-            lines.append(f"        return {monomorphized_name}(arg_0, arg_1)")
-            lines.append(f"    except (ValueError, AttributeError):")
-            lines.append(f"        pass")
-
-        # Final fallback
-        lines.append(
-            f"    raise ValueError(f'No binary instance of {instance_name} for types {{type(arg_0).__name__}}, {{type(arg_1).__name__}}')",
-        )
-
-        lines.append("")
-        return "\n".join(lines)
-
-    def _generate_type_dispatcher(
-        self,
-        instance_name: str,
-        instances: List["InstanceDeclaration"],
-    ) -> str:
-        """Generate a dispatcher function that calls the right monomorphized version."""
-        prefixed_name = f"systemo_{instance_name}"
-        lines = [f"def {prefixed_name}(arg: Any) -> Any:"]
-
-        # Generate type checks for each instance
-        type_handled = False
-        for i, instance in enumerate(instances):
-            param_type = self._extract_first_param_type_name(instance.type_signature)
-
-            if param_type and param_type in self.data_types:
-                # Check for constructor types
-                constructor_names = [
-                    ctor.name for ctor in self.data_types[param_type].constructors
-                ]
-
-                if constructor_names:
-                    # Generate type check based on constructor
-                    type_checks = [
-                        f"type(arg).__name__ == '{ctor_name}'"
-                        for ctor_name in constructor_names
-                    ]
-                    condition = " or ".join(type_checks)
-                    monomorphized_name = f"systemo_{instance_name}_{param_type}"
-                    lines.append(f"    if {condition}:")
-                    lines.append(f"        return {monomorphized_name}(arg)")
-                    type_handled = True
-
-        if not type_handled:
-            # Fallback: if we can't determine types, just use the first implementation
-            if instances:
-                monomorphized_name = f"systemo_{instance_name}_0"
-                lines.append(f"    return {monomorphized_name}(arg)")
-            else:
-                lines.append(
-                    f"    raise ValueError(f'No instances of {instance_name}')",
-                )
-        else:
-            # Fallback error for unknown types
-            lines.append(
-                f"    raise ValueError(f'No instance of {instance_name} for type {{type(arg).__name__}}')",
-            )
-
-        lines.append("")
-        return "\n".join(lines)
-
     def _compile_function_group(
         self,
         func_name: str,
         definitions: List[FunctionDefinition],
     ) -> str:
         """Compile function definitions with pattern matching."""
-        prefixed_func_name = f"systemo_{func_name}"
-        self.defined_functions.add(func_name)
+        prefixed_func_name = self._prefix_name(func_name)
 
-        # Store function type information
-        if definitions and definitions[0].ty:
-            self.function_types[func_name] = definitions[0].ty
+        # Track function arity (number of parameters)
+        max_params = (
+            max(len(defn.patterns) for defn in definitions) if definitions else 0
+        )
 
-        # Check if any definition is nullary
-        if any(len(defn.patterns) == 0 for defn in definitions):
-            self.nullary_functions.add(func_name)
+        # Store function information
+        function_type = definitions[0].ty if definitions and definitions[0].ty else None
+        self.functions[func_name] = FunctionInfo(
+            arity=max_params,
+            type_info=function_type,
+        )
 
         if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
             return self._compile_simple_function(definitions[0], prefixed_func_name)
@@ -737,7 +638,8 @@ class systemoCompiler:
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Use standard function signature for multi-parameter functions
+        # Create parameter list with type hints for multi-parameter functions
+        param_list = []
         if max_params > 1:
             # For multi-parameter functions, get parameter types from the function type
             param_types: List[str] = []
@@ -758,10 +660,6 @@ class systemoCompiler:
                 param_types.append("Any")
 
             param_list = [f"arg_{i}: {param_types[i]}" for i in range(max_params)]
-
-            lines = [
-                f"def {prefixed_func_name}({', '.join(param_list)}) -> {return_type_hint}:",
-            ]
         else:
             # For single parameter functions, try to get the parameter type
             param_type = "Any"
@@ -771,9 +669,11 @@ class systemoCompiler:
                 and isinstance(definitions[0].ty, FunctionType)
             ):
                 param_type = self._systemo_type_to_python_hint(definitions[0].ty.param)
-            lines = [
-                f"def {prefixed_func_name}(arg_0: {param_type}) -> {return_type_hint}:",
-            ]
+            param_list = [f"arg_0: {param_type}"]
+
+        lines = [
+            f"def {prefixed_func_name}({', '.join(param_list)}) -> {return_type_hint}:",
+        ]
 
         self.indent_level += 1
 
@@ -907,153 +807,21 @@ class systemoCompiler:
 
         # Only add fallback error if patterns are not exhaustive
         if not has_exhaustive_patterns:
-            if max_params > 1:
-                # For curried functions, show the individual arguments
-                arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
-                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{{arg_names}}}')"
-            else:
-                # For single parameter functions, show arg_0
+            # Show all arguments in error message
+            arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
+            if max_params == 0:
+                error_msg = (
+                    f"raise ValueError(f'No matching pattern for {prefixed_func_name}')"
+                )
+            elif max_params == 1:
                 error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{arg_0}}')"
+            else:
+                error_msg = f"raise ValueError(f'No matching pattern for {prefixed_func_name} with args: {{{arg_names}}}')"
 
             lines.append(self._indent() + error_msg)
         self.indent_level -= 1
 
         # Restore local variables
-        self.local_variables = old_local_vars
-
-        lines.append("")
-        return "\n".join(lines)
-
-    def _compile_binary_instance_function(
-        self,
-        func_def: FunctionDefinition,
-        prefixed_name: str,
-    ) -> str:
-        """Compile a binary function (2 parameters) for instance declarations."""
-        lines = [
-            f"def {prefixed_name}(arg_0: Any, arg_1: Any) -> Any:",
-        ]
-
-        self.indent_level += 1
-
-        # Track pattern variables
-        old_local_vars = self.local_variables.copy()
-
-        # Extract variables from patterns
-        for pattern in func_def.patterns:
-            self.local_variables.update(self._extract_pattern_variables(pattern))
-
-        # Generate pattern matching for both arguments
-        pattern_0 = func_def.patterns[0]
-        pattern_1 = func_def.patterns[1]
-
-        # Build the pattern matching logic
-        condition_parts = []
-        assignments = []
-
-        # Handle first pattern
-        match pattern_0:
-            case LiteralPattern(value=value):
-                condition_parts.append(f"arg_0 == {self._compile_literal_value(value)}")
-            case VariablePattern(name=name):
-                # Don't assign if the name is an operator symbol or contains parentheses/operators
-                # Skip assignment for patterns that look like operator names: (?), (+), etc.
-                if name.isidentifier() and not (
-                    name.startswith("(") and name.endswith(")")
-                ):
-                    assignments.append(f"{name} = arg_0")
-            case ListPattern(patterns=patterns):
-                # List pattern - check list length and destructure
-                condition_parts.append(f"len(arg_0) == {len(patterns)}")
-                for i, sub_pattern in enumerate(patterns):
-                    match sub_pattern:
-                        case VariablePattern(name=name):
-                            assignments.append(f"{name} = arg_0[{i}]")
-            case ConsPattern(head=head, tail=tail):
-                # Cons pattern (x:xs) - check if list is non-empty and destructure
-                condition_parts.append("len(arg_0) > 0")
-                match head:
-                    case VariablePattern(name=name):
-                        assignments.append(f"{name} = arg_0[0]")
-                match tail:
-                    case VariablePattern(name=name):
-                        assignments.append(f"{name} = arg_0[1:]")
-            case _:
-                # More complex patterns would need additional handling
-                condition_parts.append("True")  # Placeholder
-
-        # Handle second pattern
-        match pattern_1:
-            case LiteralPattern(value=value):
-                condition_parts.append(f"arg_1 == {self._compile_literal_value(value)}")
-            case VariablePattern(name=name):
-                # Don't assign if the name is an operator symbol or contains parentheses/operators
-                # Skip assignment for patterns that look like operator names: (?), (+), etc.
-                if name.isidentifier() and not (
-                    name.startswith("(") and name.endswith(")")
-                ):
-                    assignments.append(f"{name} = arg_1")
-            case ListPattern(patterns=patterns):
-                # List pattern - check list length and destructure
-                condition_parts.append(f"len(arg_1) == {len(patterns)}")
-                for i, sub_pattern in enumerate(patterns):
-                    match sub_pattern:
-                        case VariablePattern(name=name):
-                            assignments.append(f"{name} = arg_1[{i}]")
-            case ConsPattern(head=head, tail=tail):
-                # Cons pattern (x:xs) - check if list is non-empty and destructure
-                condition_parts.append("len(arg_1) > 0")
-                match head:
-                    case VariablePattern(name=name):
-                        assignments.append(f"{name} = arg_1[0]")
-                match tail:
-                    case VariablePattern(name=name):
-                        assignments.append(f"{name} = arg_1[1:]")
-            case _:
-                # More complex patterns would need additional handling
-                condition_parts.append("True")  # Placeholder
-
-        # Build the complete condition
-        if condition_parts:
-            condition = " and ".join(condition_parts)
-            lines.append(f"{self._indent()}if {condition}:")
-        else:
-            # All patterns are variables, no condition needed
-            lines.append(f"{self._indent()}if True:")
-
-        self.indent_level += 1
-
-        # Add variable assignments
-        for assignment in assignments:
-            lines.append(f"{self._indent()}{assignment}")
-
-        # Workaround for parsing issue: if the body references variables that aren't assigned,
-        # try to map them from positional arguments. This handles cases like a (?) b = a + b
-        # where the pattern is parsed as [(?, b)] but the body uses [a, b]
-        body_text = str(func_def.body)
-        assigned_vars = {assignment.split(" = ")[0] for assignment in assignments}
-
-        # Common variable names that might be missing due to operator parsing issues
-        if "a" in body_text and "a" not in assigned_vars:
-            lines.append(f"{self._indent()}a = arg_0")
-            self.local_variables.add("a")
-        if "x" in body_text and "x" not in assigned_vars:
-            lines.append(f"{self._indent()}x = arg_0")
-            self.local_variables.add("x")
-
-        # Compile the function body
-        lines.append(
-            f"{self._indent()}return {self._compile_expression(func_def.body)}",
-        )
-
-        self.indent_level -= 1
-
-        # Add fallback
-        lines.append(
-            f"{self._indent()}raise ValueError(f'No matching pattern for {prefixed_name} with args: {{arg_0, arg_1}}')",
-        )
-
-        self.indent_level -= 1
         self.local_variables = old_local_vars
 
         lines.append("")
@@ -1092,47 +860,10 @@ class systemoCompiler:
                     lines = [f"def {func_name}() -> {return_type_hint}:"]
                     lines.extend(self._compile_do_block_as_statements(func_def.body))
                 case _:
-                    # Compile the expression first to see if it's a partial application
-                    compiled_body = self._compile_expression(func_def.body)
-
-                    # Check if the compiled expression is a lambda (partial application)
-                    if compiled_body.startswith("lambda "):
-                        # Extract lambda parameters and body
-                        # Format: "lambda param1, param2: body"
-                        lambda_part = compiled_body[7:]  # Remove "lambda "
-                        colon_index = lambda_part.find(":")
-                        if colon_index != -1:
-                            params_str = lambda_part[:colon_index].strip()
-                            lambda_body = lambda_part[colon_index + 1 :].strip()
-
-                            # Add type hints to parameters
-                            if params_str:
-                                # Mark this function as lambda-lifted (not truly nullary)
-                                self.lambda_lifted_functions.add(func_def.function_name)
-                                params_with_types = ", ".join(
-                                    f"{param}: Any" for param in params_str.split(", ")
-                                )
-                                lines = [
-                                    f"def {func_name}({params_with_types}) -> {return_type_hint}:",
-                                    f"    return {lambda_body}",
-                                ]
-                            else:
-                                # No parameters in lambda
-                                lines = [
-                                    f"def {func_name}() -> {return_type_hint}:",
-                                    f"    return {lambda_body}",
-                                ]
-                        else:
-                            # Fallback to original behavior
-                            lines = [
-                                f"def {func_name}() -> {return_type_hint}:",
-                                f"    return {compiled_body}",
-                            ]
-                    else:
-                        lines = [
-                            f"def {func_name}() -> {return_type_hint}:",
-                            f"    return {compiled_body}",
-                        ]
+                    lines = [
+                        f"def {func_name}() -> {return_type_hint}:",
+                        f"    return {self._compile_expression(func_def.body)}",
+                    ]
         else:
             pattern = func_def.patterns[0]
             match pattern:
@@ -1209,7 +940,13 @@ class systemoCompiler:
                 self.local_variables.add(name)
                 return f"{name} = {value_expr}\n    return {self._compile_expression(body)}"
             case LiteralPattern(value=value):
-                return self._build_literal_pattern_match(value_expr, value, body)
+                return build_literal_pattern_match(
+                    value_expr,
+                    value,
+                    body,
+                    self._compile_expression,
+                    self._compile_literal_value,
+                )
             case ConsPattern(head=head, tail=tail):
                 # Cons pattern (x:xs) - destructure list
                 head_var = None
@@ -1227,11 +964,12 @@ class systemoCompiler:
                     case _:
                         pass
 
-                return self._build_cons_pattern_match(
+                return build_cons_pattern_match(
                     value_expr,
                     head_var,
                     tail_var,
                     body,
+                    self._compile_expression,
                 )
             case TuplePattern(patterns=patterns):
                 # Tuple pattern - destructure tuple
@@ -1244,10 +982,11 @@ class systemoCompiler:
                         case _:
                             tuple_vars.append(f"_tuple_elem_{i}")
 
-                return self._build_tuple_pattern_match(
+                return build_tuple_pattern_match(
                     value_expr,
                     tuple_vars,
                     body,
+                    self._compile_expression,
                 )
             case ConstructorPattern(constructor=constructor, patterns=patterns):
                 # Extract variables from constructor pattern
@@ -1267,28 +1006,31 @@ class systemoCompiler:
                                 field_name = constructor_def.record_constructor.fields[
                                     0
                                 ].name
-                                return self._build_record_pattern_match(
+                                return build_record_pattern_match(
                                     value_expr,
                                     constructor,
                                     field_name,
                                     var_name,
                                     body,
+                                    self._compile_expression,
                                 )
                             else:
                                 # Positional constructor - use arg_ access
-                                return self._build_positional_pattern_match(
+                                return build_positional_pattern_match(
                                     value_expr,
                                     constructor,
                                     var_name,
                                     body,
-                                    arg_index=0,
+                                    self._compile_expression,
+                                    0,
                                 )
                         case _:
                             # Handle non-variable patterns with single argument
-                            return self._build_simple_pattern_match(
+                            return build_simple_pattern_match(
                                 value_expr,
                                 constructor,
                                 body,
+                                self._compile_expression,
                             )
                 elif len(patterns) > 1:
                     # Multiple variables in constructor pattern
@@ -1321,18 +1063,20 @@ class systemoCompiler:
                                 case _:
                                     pass
 
-                    return self._build_multi_arg_pattern_match(
+                    return build_multi_arg_pattern_match(
                         value_expr,
                         constructor,
                         assignments,
                         body,
+                        self._compile_expression,
                     )
                 else:
                     # Constructor with no arguments
-                    return self._build_simple_pattern_match(
+                    return build_simple_pattern_match(
                         value_expr,
                         constructor,
                         body,
+                        self._compile_expression,
                     )
             case ListPattern(patterns=patterns):
                 # List pattern - destructure list
@@ -1345,90 +1089,17 @@ class systemoCompiler:
                         case _:
                             list_vars.append(f"_list_elem_{i}")
 
-                return self._build_list_pattern_match(
+                return build_list_pattern_match(
                     value_expr,
                     list_vars,
                     body,
+                    self._compile_expression,
                 )
             case _:
                 return f"return {self._compile_expression(body)}"
 
     def _compile_literal_value(self, value: Any) -> str:
         return compile_literal_value(value)
-
-    def _compile_symbolic_operation(
-        self,
-        operator: str,
-        operands: List["Expression"],
-    ) -> str:
-        """Compile symbolic operations (operators) to Python code."""
-        # Handle binary operators
-        if len(operands) == 2:
-            left = self._compile_expression(operands[0])
-            right = self._compile_expression(operands[1])
-
-            # For binary operators, call the dispatcher with both arguments directly
-            # to avoid the issue with unary/binary instance ambiguity
-            safe_op_name = self._sanitize_operator_name(operator)
-
-            # Use a special binary calling convention to distinguish from unary operations
-            return f"systemo_{safe_op_name}_binary({left}, {right})"
-
-        # Handle unary operators
-        elif len(operands) == 1:
-            operand = self._compile_expression(operands[0])
-
-            # For unary operators, use the regular dispatcher
-            safe_op_name = self._sanitize_operator_name(operator)
-            return f"systemo_{safe_op_name}({operand})"
-
-        # Fallback for other cases
-        else:
-            compiled_operands = [self._compile_expression(op) for op in operands]
-            safe_op_name = self._sanitize_operator_name(operator)
-            return f"systemo_{safe_op_name}({', '.join(compiled_operands)})"
-
-    def _sanitize_operator_name(self, operator: str) -> str:
-        """Convert operator symbols to safe Python function names."""
-        replacements = {
-            "!": "bang",
-            "@": "at",
-            "#": "hash",
-            "$": "dollar",
-            "%": "percent",
-            "^": "caret",
-            "&": "amp",
-            "*": "star",
-            "+": "plus",
-            "-": "minus",
-            "=": "eq",
-            "|": "pipe",
-            "\\": "backslash",
-            "/": "slash",
-            "?": "question",
-            "<": "lt",
-            ">": "gt",
-            "~": "tilde",
-            "`": "backtick",
-            ":": "colon",
-            ";": "semicolon",
-            "'": "quote",
-            '"': "doublequote",
-            ",": "comma",
-            ".": "dot",
-            "(": "lparen",
-            ")": "rparen",
-            "[": "lbracket",
-            "]": "rbracket",
-            "{": "lbrace",
-            "}": "rbrace",
-        }
-
-        result = operator
-        for char, replacement in replacements.items():
-            result = result.replace(char, replacement)
-
-        return result
 
     def _compile_expression(self, expr: Expression) -> str:
         match expr:
@@ -1462,32 +1133,14 @@ class systemoCompiler:
                     return f"({compiled_elements[0]},)"
                 return f"({', '.join(compiled_elements)})"
 
-                # Variables and constructors
-                return "systemo_put_str"
-            case Variable(name="error"):
-                return "systemo_error"
+            # Variables and constructors
             case Variable(name=name):
-                # Primitive functions should not be prefixed
-                if name.startswith("prim"):
-                    if (
-                        name in self.nullary_functions
-                        and name not in self.lambda_lifted_functions
-                    ):
-                        return f"{name}()"
-                    else:
-                        return name
+                prefixed_name = self._prefix_name(name)
+                # Check if this is a nullary function (0 parameters) and automatically call it
+                if name in self.functions and self.functions[name].arity == 0:
+                    return f"{prefixed_name}()"
                 else:
-                    prefixed_name = self._prefix_name(name)
-                    # Pattern variables (local variables) should never be called as functions
-                    if name in self.local_variables:
-                        return prefixed_name
-                    elif (
-                        name in self.nullary_functions
-                        and name not in self.lambda_lifted_functions
-                    ):
-                        return f"{prefixed_name}()"
-                    else:
-                        return prefixed_name
+                    return prefixed_name
             case Constructor(name=name):
                 # Nullary constructors should be instantiated
                 constructor_def = self._find_constructor_def(name)
@@ -1503,8 +1156,8 @@ class systemoCompiler:
                 else:
                     return name
 
-            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._compile_expression(then_expr)} if {self._compile_expression(condition)} else {self._compile_expression(else_expr)})"
+            case SymbolicOperation(operator=operator, operands=operands):
+                return self._compile_symbolic_operation(operator, operands)
 
             # Function application
             case FunctionApplication():
@@ -1527,35 +1180,56 @@ class systemoCompiler:
                         arg_exprs = [self._compile_expression(arg) for arg in args]
                         return f"{name}({', '.join(arg_exprs)})"
                     case Variable(name=name):
-                        # Handle primitive functions specially - they are not curried
-                        if name.startswith("prim"):
-                            arg_exprs = [self._compile_expression(arg) for arg in args]
-                            return f"{name}({', '.join(arg_exprs)})"
-
-                        # Check the arity of the function to handle partial application
-                        expected_arity = self._get_function_arity(name)
-                        provided_args = len(args)
+                        # Check if this is a user-defined function
                         prefixed_name = self._prefix_name(name)
 
-                        if provided_args == expected_arity:
-                            # Exact match - call function directly
+                        # Get the expected arity for this function
+                        expected_arity = self.functions.get(
+                            name,
+                            FunctionInfo(arity=1),
+                        ).arity
+
+                        if len(args) == expected_arity:
+                            # Full application - call function directly
                             arg_exprs = [self._compile_expression(arg) for arg in args]
                             return f"{prefixed_name}({', '.join(arg_exprs)})"
-                        elif provided_args < expected_arity:
-                            # Partial application - generate lambda for remaining arguments
+                        elif len(args) < expected_arity and name in self.functions:
+                            # Partial application - create lambda for remaining args
                             arg_exprs = [self._compile_expression(arg) for arg in args]
-                            remaining_args = expected_arity - provided_args
-
-                            # Generate lambda parameters for remaining arguments
-                            lambda_params = [f"_arg{i}" for i in range(remaining_args)]
+                            remaining_params = expected_arity - len(args)
+                            lambda_params = [
+                                f"__arg_{i}" for i in range(remaining_params)
+                            ]
                             all_args = arg_exprs + lambda_params
-
                             return f"lambda {', '.join(lambda_params)}: {prefixed_name}({', '.join(all_args)})"
+                        elif len(args) > expected_arity:
+                            # Over-application - call function with exact args, then apply rest
+                            exact_args = args[:expected_arity]
+                            remaining_args = args[expected_arity:]
+
+                            arg_exprs = [
+                                self._compile_expression(arg) for arg in exact_args
+                            ]
+                            result = f"{prefixed_name}({', '.join(arg_exprs)})"
+
+                            # Apply remaining arguments one by one
+                            for arg in remaining_args:
+                                arg_expr = self._compile_expression(arg)
+                                result = f"{result}({arg_expr})"
+                            return result
                         else:
-                            # More arguments than expected - this shouldn't happen in well-typed code
-                            # Fall back to the current behavior
-                            arg_exprs = [self._compile_expression(arg) for arg in args]
-                            return f"{prefixed_name}({', '.join(arg_exprs)})"
+                            # Single argument or built-in function - use nested calls
+                            func_expr = self._compile_expression(current)
+                            if len(args) == 1:
+                                arg_expr = self._compile_expression(args[0])
+                                return f"{func_expr}({arg_expr})"
+                            else:
+                                # Multiple args - use nested calls
+                                result = func_expr
+                                for arg in args:
+                                    arg_expr = self._compile_expression(arg)
+                                    result = f"{result}({arg_expr})"
+                                return result
                     case _:
                         # Regular curried function application - fall back to nested calls
                         func_expr = self._compile_expression(expr.function)
@@ -1607,13 +1281,41 @@ class systemoCompiler:
             case GroupedExpression(expression=expression):
                 return f"({self._compile_expression(expression)})"
 
-            # Symbolic operations (operators)
-            case SymbolicOperation(operator=operator, operands=operands):
-                return self._compile_symbolic_operation(operator, operands)
-
             # Default case
             case _:
                 return f"None  # Unsupported: {type(expr)}"
+
+    def _compile_symbolic_operation(
+        self,
+        operator: str,
+        operands: List["Expression"],
+    ) -> str:
+        """Compile symbolic operations (operators) to Python code."""
+        # Handle binary operators
+        if len(operands) == 2:
+            left = self._compile_expression(operands[0])
+            right = self._compile_expression(operands[1])
+
+            # For binary operators, call the dispatcher with both arguments directly
+            # to avoid the issue with unary/binary instance ambiguity
+            safe_op_name = self._sanitize_operator_name(operator)
+
+            # Use a special binary calling convention to distinguish from unary operations
+            return f"systemo_{safe_op_name}_binary({left}, {right})"
+
+        # Handle unary operators
+        elif len(operands) == 1:
+            operand = self._compile_expression(operands[0])
+
+            # For unary operators, use the regular dispatcher
+            safe_op_name = self._sanitize_operator_name(operator)
+            return f"systemo_{safe_op_name}({operand})"
+
+        # Fallback for other cases
+        else:
+            compiled_operands = [self._compile_expression(op) for op in operands]
+            safe_op_name = self._sanitize_operator_name(operator)
+            return f"systemo_{safe_op_name}({', '.join(compiled_operands)})"
 
     def _compile_do_block(self, do_block: DoBlock) -> str:
         # For single statements, we can still inline them
@@ -1661,492 +1363,6 @@ class systemoCompiler:
     def _compile_expression_safe(self, stmt: Any) -> str:
         """Safely compile a statement as an expression."""
         return self._compile_expression(stmt) if is_expression(stmt) else "None"
-
-    def _type_expression_to_string(self, type_expr) -> str:
-        """Convert a type expression to a string representation."""
-        if hasattr(type_expr, "__class__"):
-            class_name = type_expr.__class__.__name__
-
-            if hasattr(type_expr, "name"):
-                # Basic types like Int, Float, Bool
-                return str(type_expr.name)
-            elif hasattr(type_expr, "param") and hasattr(type_expr, "result"):
-                # Function types
-                param_str = self._type_expression_to_string(type_expr.param)
-                result_str = self._type_expression_to_string(type_expr.result)
-                return f"{param_str} -> {result_str}"
-            elif hasattr(type_expr, "constructor"):
-                # Constructor types
-                return str(type_expr.constructor)
-            else:
-                return str(type_expr)
-        else:
-            return str(type_expr)
-
-    def _generate_typed_dispatcher(
-        self,
-        instance_name: str,
-        instances: List["InstanceDeclaration"],
-        type_to_function: Dict[str, str],
-    ) -> str:
-        """Generate a typed dispatcher function using proper type-based selection."""
-        prefixed_name = f"systemo_{instance_name}"
-        lines = [f"def {prefixed_name}(arg: Any) -> Any:"]
-
-        self.indent_level += 1
-
-        # Generate type-based dispatch similar to interpreter
-        type_handled = False
-
-        # Sort instances to put Bool before Int (since bool is subclass of int in Python)
-        sorted_instances = []
-        bool_instances = []
-        other_instances = []
-
-        for instance in instances:
-            arg_type = self._extract_first_param_type_name(instance.type_signature)
-            if arg_type == "Bool":
-                bool_instances.append(instance)
-            else:
-                other_instances.append(instance)
-
-        # Put Bool instances first, then others
-        sorted_instances = bool_instances + other_instances
-
-        for instance in sorted_instances:
-            type_sig = self._type_expression_to_string(instance.type_signature)
-            monomorphized_name = type_to_function[type_sig]
-
-            # Extract the argument type from the type signature object
-            arg_type = self._extract_first_param_type_name(instance.type_signature)
-
-            if arg_type:
-                # Generate appropriate type check
-                if arg_type in ["Int", "Float", "Bool", "String"]:
-                    # Built-in types
-                    python_type = {
-                        "Int": "int",
-                        "Float": "float",
-                        "Bool": "bool",
-                        "String": "str",
-                    }[arg_type]
-                    condition = f"isinstance(arg, {python_type})"
-                elif arg_type == "List":
-                    # List type - use isinstance for Python lists
-                    condition = "isinstance(arg, list)"
-                elif arg_type == "Tuple":
-                    # Tuple type - check both isinstance and length
-                    # Need to get tuple length from type signature
-                    tuple_length = self._extract_tuple_length(instance.type_signature)
-                    if tuple_length is not None:
-                        condition = (
-                            f"isinstance(arg, tuple) and len(arg) == {tuple_length}"
-                        )
-                    else:
-                        condition = "isinstance(arg, tuple)"
-                elif arg_type in self.data_types:
-                    # Custom data types - check constructor names
-                    constructor_names = [
-                        ctor.name for ctor in self.data_types[arg_type].constructors
-                    ]
-                    type_checks = [
-                        f"type(arg).__name__ == '{ctor_name}'"
-                        for ctor_name in constructor_names
-                    ]
-                    condition = " or ".join(type_checks)
-                elif arg_type == "Char":
-                    # Special handling for Char - check for char tuples
-                    condition = (
-                        "isinstance(arg, tuple) and len(arg) == 2 and arg[0] == 'char'"
-                    )
-                else:
-                    # Unknown type, try by name (but avoid complex expressions)
-                    if arg_type in ["Unknown"]:
-                        condition = "True"  # Fallback that always matches
-                    else:
-                        condition = f"type(arg).__name__ == '{arg_type}'"
-
-                lines.append(self._indent() + f"if {condition}:")
-                self.indent_level += 1
-
-                # Check if this is a binary function (curried)
-                func_def = instance.function_definition
-                if len(func_def.patterns) == 2:
-                    lines.append(self._indent() + f"return {monomorphized_name}(arg)")
-                else:
-                    lines.append(self._indent() + f"return {monomorphized_name}(arg)")
-
-                self.indent_level -= 1
-                type_handled = True
-
-        # Add fallback error
-        if type_handled:
-            lines.append(
-                self._indent()
-                + f"raise ValueError(f'No instance of {instance_name} for type {{type(arg).__name__}}')",
-            )
-        else:
-            lines.append(
-                self._indent()
-                + f"raise ValueError(f'No instances of {instance_name}')",
-            )
-
-        self.indent_level -= 1
-        lines.append("")
-        return "\n".join(lines)
-
-    def _generate_typed_binary_dispatcher(
-        self,
-        instance_name: str,
-        instances: List["InstanceDeclaration"],
-        type_to_function: Dict[str, str],
-    ) -> str:
-        """Generate a typed binary dispatcher for operations with two arguments."""
-        prefixed_name = f"systemo_{instance_name}_binary"
-        lines = [f"def {prefixed_name}(arg_0: Any, arg_1: Any) -> Any:"]
-
-        self.indent_level += 1
-
-        # Filter to only binary instances (those with 2 patterns)
-        binary_instances = [
-            instance
-            for instance in instances
-            if len(instance.function_definition.patterns) == 2
-        ]
-
-        if not binary_instances:
-            lines.append(
-                self._indent()
-                + f"raise ValueError(f'No binary instances of {instance_name}')",
-            )
-            self.indent_level -= 1
-            lines.append("")
-            return "\n".join(lines)
-
-        # Generate type-based dispatch for binary operations
-        for instance in binary_instances:
-            type_sig = self._type_expression_to_string(instance.type_signature)
-            monomorphized_name = type_to_function[type_sig]
-
-            # For binary operations, extract both argument types from the type expression object
-            arg_types = self._extract_binary_param_types_from_type_expression(
-                instance.type_signature,
-            )
-
-            if len(arg_types) >= 2:
-                conditions = []
-                for i, arg_type in enumerate(arg_types[:2]):
-                    if arg_type in ["Int", "Float", "Bool", "String"]:
-                        python_type = {
-                            "Int": "int",
-                            "Float": "float",
-                            "Bool": "bool",
-                            "String": "str",
-                        }[arg_type]
-                        conditions.append(f"isinstance(arg_{i}, {python_type})")
-                    elif arg_type == "List":
-                        # List type - use isinstance for Python lists
-                        conditions.append(f"isinstance(arg_{i}, list)")
-                    elif arg_type == "Tuple":
-                        # Tuple type - use isinstance for Python tuples
-                        conditions.append(f"isinstance(arg_{i}, tuple)")
-                    elif arg_type in self.data_types:
-                        constructor_names = [
-                            ctor.name for ctor in self.data_types[arg_type].constructors
-                        ]
-                        type_checks = [
-                            f"type(arg_{i}).__name__ == '{ctor_name}'"
-                            for ctor_name in constructor_names
-                        ]
-                        conditions.append("(" + " or ".join(type_checks) + ")")
-                    else:
-                        # Avoid complex type expressions that can't be valid Python
-                        if arg_type in ["Unknown"]:
-                            conditions.append("True")  # Fallback that always matches
-                        else:
-                            conditions.append(f"type(arg_{i}).__name__ == '{arg_type}'")
-
-                condition = " and ".join(conditions)
-                lines.append(self._indent() + f"if {condition}:")
-                self.indent_level += 1
-                lines.append(
-                    self._indent() + f"return {monomorphized_name}(arg_0, arg_1)",
-                )
-                self.indent_level -= 1
-
-        # Add fallback
-        lines.append(
-            self._indent()
-            + f"raise ValueError(f'No binary instance of {instance_name} for types {{type(arg_0).__name__}}, {{type(arg_1).__name__}}')",
-        )
-
-        self.indent_level -= 1
-        lines.append("")
-        return "\n".join(lines)
-
-    def _extract_binary_param_types_from_type_expression(self, type_expr) -> List[str]:
-        """Extract parameter types from a binary function type expression."""
-        result = []
-        current = type_expr
-
-        # For ArrowType like "Int -> Int -> String", extract the first two types
-        while hasattr(current, "from_type") and len(result) < 2:
-            result.append(self._extract_type_name_from_expression(current.from_type))
-            if hasattr(current, "to_type"):
-                current = current.to_type
-            else:
-                break
-
-        return result
-
-    def _compile_grouped_instance_function(
-        self,
-        grouped_instances: List["InstanceDeclaration"],
-        function_name: str,
-    ) -> str:
-        """Compile multiple instance declarations with same type signature into one function."""
-        if not grouped_instances:
-            return ""
-
-        if len(grouped_instances) == 1:
-            # Single instance - use existing method based on number of patterns
-            instance = grouped_instances[0]
-            func_def = instance.function_definition
-            if len(func_def.patterns) == 2:
-                return self._compile_binary_instance_function(func_def, function_name)
-            else:
-                return self._compile_simple_function(func_def, function_name)
-
-        # Multiple instances - determine if they are binary or unary
-        first_instance = grouped_instances[0]
-        is_binary = len(first_instance.function_definition.patterns) == 2
-
-        if is_binary:
-            # Binary function with multiple patterns
-            lines = [
-                f"def {function_name}(arg_0: Any, arg_1: Any) -> Any:",
-            ]
-        else:
-            # Unary function with multiple patterns
-            lines = [f"def {function_name}(arg: Any) -> Any:"]
-
-        self.indent_level += 1
-
-        # Track pattern variables
-        old_local_vars = self.local_variables.copy()
-
-        # Generate pattern matching for each instance
-        for instance in grouped_instances:
-            func_def = instance.function_definition
-
-            # Extract variables from patterns
-            for pattern in func_def.patterns:
-                self.local_variables.update(self._extract_pattern_variables(pattern))
-
-            # Generate pattern matching for each function definition
-            if is_binary and len(func_def.patterns) >= 2:
-                # Binary function - generate proper pattern conditions
-                pattern_0 = func_def.patterns[0]
-                pattern_1 = func_def.patterns[1]
-
-                condition_0 = self._compile_pattern_condition(pattern_0, "arg_0")
-                condition_1 = self._compile_pattern_condition(pattern_1, "arg_1")
-                combined_condition = f"({condition_0}) and ({condition_1})"
-
-                lines.append(self._indent() + f"if {combined_condition}:")
-                self.indent_level += 1
-
-                # Add variable bindings
-                bindings_0 = self._compile_pattern_bindings(pattern_0, "arg_0")
-                bindings_1 = self._compile_pattern_bindings(pattern_1, "arg_1")
-
-                for binding in bindings_0 + bindings_1:
-                    lines.append(self._indent() + binding)
-
-                lines.append(
-                    self._indent()
-                    + f"return {self._compile_expression(func_def.body)}",
-                )
-                self.indent_level -= 1
-
-            elif not is_binary and len(func_def.patterns) >= 1:
-                # Unary function - generate proper pattern condition
-                pattern = func_def.patterns[0]
-                condition = self._compile_pattern_condition(pattern, "arg")
-
-                lines.append(self._indent() + f"if {condition}:")
-                self.indent_level += 1
-
-                # Add variable bindings
-                bindings = self._compile_pattern_bindings(pattern, "arg")
-                for binding in bindings:
-                    lines.append(self._indent() + binding)
-
-                lines.append(
-                    self._indent()
-                    + f"return {self._compile_expression(func_def.body)}",
-                )
-                self.indent_level -= 1
-
-        # Add fallback error
-        lines.append(self._indent() + f"raise ValueError('Pattern match failed')")
-
-        self.indent_level -= 1
-        # Restore local variables
-        self.local_variables = old_local_vars
-
-        lines.append("")
-        return "\n".join(lines)
-
-    def _extract_first_param_type_from_signature(self, type_sig: str) -> str:
-        """Extract the first parameter type from a type signature string."""
-        if " -> " in type_sig:
-            # Function type like "Int -> Int -> Int"
-            parts = type_sig.split(" -> ")
-            return parts[0].strip()
-        else:
-            # Simple type
-            return type_sig.strip()
-
-    def _extract_binary_param_types_from_signature(self, type_sig: str) -> List[str]:
-        """Extract parameter types from a binary function type signature."""
-        if " -> " in type_sig:
-            parts = type_sig.split(" -> ")
-            # For a binary function like "Int -> Int -> Int", we want the first two parts
-            return [part.strip() for part in parts[:2]]
-        else:
-            return [type_sig.strip()]
-
-    def _extract_first_param_type_name(self, type_expression) -> str:
-        """Extract the first parameter type name from a type expression object."""
-        # Handle ArrowType objects
-        if hasattr(type_expression, "from_type"):
-            return self._extract_type_name_from_expression(type_expression.from_type)
-        else:
-            return self._extract_type_name_from_expression(type_expression)
-
-    def _extract_type_name_from_expression(self, type_expr) -> str:
-        """Extract the type name from a type expression object."""
-        if hasattr(type_expr, "name"):
-            # TypeConstructor like Int, Float, Bool, String
-            return type_expr.name
-        elif hasattr(type_expr, "constructor"):
-            # TypeApplication like Either Int Bool
-            return self._extract_type_name_from_expression(type_expr.constructor)
-        elif hasattr(type_expr, "element_type"):
-            # ListType - return "List" as the type name
-            return "List"
-        elif hasattr(type_expr, "element_types"):
-            # TupleType - return "Tuple" as the type name
-            return "Tuple"
-        else:
-            # For any complex type, extract a safe name or fall back to a generic name
-            type_str = str(type_expr)
-            if "TupleType" in type_str:
-                return "Tuple"
-            elif "ListType" in type_str:
-                return "List"
-            else:
-                return "Unknown"
-
-    def _extract_tuple_length(self, type_signature) -> Optional[int]:
-        """Extract the length of a tuple type from a type signature."""
-        from lango.systemo.ast.nodes import ArrowType, TupleType
-
-        if isinstance(type_signature, ArrowType):
-            # For ArrowType, check the from_type
-            from_type = type_signature.from_type
-            if isinstance(from_type, TupleType):
-                return len(from_type.element_types)
-        elif isinstance(type_signature, TupleType):
-            # Direct tuple type
-            return len(type_signature.element_types)
-
-        return None
-
-    def _compile_pattern_condition(self, pattern, arg_name: str) -> str:
-        """Generate a Python condition to check if an argument matches a pattern."""
-        from lango.systemo.ast.nodes import (
-            ConsPattern,
-            ConstructorPattern,
-            ListPattern,
-            LiteralPattern,
-            TuplePattern,
-            VariablePattern,
-        )
-
-        if isinstance(pattern, LiteralPattern):
-            # Check if argument equals the literal value
-            return f"{arg_name} == {self._compile_literal(pattern.value)}"
-        elif isinstance(pattern, VariablePattern):
-            # Variable patterns always match
-            return "True"
-        elif isinstance(pattern, ListPattern):
-            if not pattern.patterns:
-                # Empty list pattern []
-                return f"isinstance({arg_name}, list) and len({arg_name}) == 0"
-            else:
-                # Non-empty list pattern [a, b, c] (rare)
-                conditions = [
-                    f"isinstance({arg_name}, list)",
-                    f"len({arg_name}) == {len(pattern.patterns)}",
-                ]
-                return " and ".join(conditions)
-        elif isinstance(pattern, ConsPattern):
-            # List cons pattern x:xs - check if it's a non-empty list
-            return f"isinstance({arg_name}, list) and len({arg_name}) > 0"
-        elif isinstance(pattern, TuplePattern):
-            # Tuple pattern (a, b, c)
-            conditions = [
-                f"isinstance({arg_name}, tuple)",
-                f"len({arg_name}) == {len(pattern.patterns)}",
-            ]
-            return " and ".join(conditions)
-        elif isinstance(pattern, ConstructorPattern):
-            # Constructor pattern like Just x, Left y
-            return f"type({arg_name}).__name__ == '{getattr(pattern, 'constructor', 'Unknown')}'"
-        else:
-            # Fallback for unknown patterns
-            return "True"
-
-    def _compile_pattern_bindings(self, pattern, arg_name: str) -> List[str]:
-        """Generate Python statements to bind variables from a pattern match."""
-        bindings = []
-
-        if isinstance(pattern, VariablePattern):
-            bindings.append(f"{pattern.name} = {arg_name}")
-        elif isinstance(pattern, ConsPattern):
-            # x:xs pattern - bind head and tail
-            if isinstance(pattern.head, VariablePattern):
-                bindings.append(f"{pattern.head.name} = {arg_name}[0]")
-            if isinstance(pattern.tail, VariablePattern):
-                bindings.append(f"{pattern.tail.name} = {arg_name}[1:]")
-        elif isinstance(pattern, TuplePattern):
-            # (a, b, c) pattern - bind each element
-            for i, subpattern in enumerate(pattern.patterns):
-                if isinstance(subpattern, VariablePattern):
-                    bindings.append(f"{subpattern.name} = {arg_name}[{i}]")
-        elif isinstance(pattern, ListPattern):
-            # [a, b, c] pattern - bind each element (rare)
-            for i, subpattern in enumerate(pattern.patterns):
-                if isinstance(subpattern, VariablePattern):
-                    bindings.append(f"{subpattern.name} = {arg_name}[{i}]")
-        # LiteralPattern and ConstructorPattern don't bind variables
-
-        return bindings
-
-    def _compile_literal(self, value) -> str:
-        """Compile a literal value to Python code."""
-        if isinstance(value, bool):
-            return str(value)
-        elif isinstance(value, int):
-            return str(value)
-        elif isinstance(value, float):
-            return str(value)
-        elif isinstance(value, str):
-            return repr(value)
-        else:
-            return str(value)
 
 
 def compile_program(program: Program) -> str:
