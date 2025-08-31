@@ -39,19 +39,3 @@ def minio_putStr(s: Any) -> None:
 
 def minio_error(message: str) -> Any:
     raise RuntimeError(f"Runtime error: {message}")
-
-
-# Built-in mathematical functions
-def minio_mod(x: int, y: int) -> int:
-    if y == 0:
-        raise RuntimeError("Runtime error: divide by zero")
-    return x % y
-
-
-def minio_elem(value: Any, lst: List[Any]) -> bool:
-    return value in lst
-
-
-def minio_map(func: Callable[[Any], Any], lst: list) -> list:
-    """Built-in map function - applies function to each element of list."""
-    return [func(item) for item in lst]
