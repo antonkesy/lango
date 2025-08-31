@@ -9,9 +9,7 @@ from lango.shared.compiler.python import (
     build_record_pattern_match,
     build_simple_pattern_match,
     build_tuple_pattern_match,
-    compile_expression_safe,
     compile_literal_value,
-    is_expression_systemo,
 )
 from lango.shared.typechecker.lango_types import (
     DataType,
@@ -53,6 +51,7 @@ from lango.systemo.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
+    is_expression,
 )
 
 
@@ -1177,7 +1176,7 @@ class systemoCompiler:
                     lines.append(
                         f"    {prefixed_var} = {self._compile_expression(value)}",
                     )
-                case _ if self._is_expression(stmt):
+                case _ if is_expression(stmt):
                     # Handle expression statements (like putStr calls)
                     lines.append(f"    {self._compile_expression_safe(stmt)}")
                 case _:
@@ -1192,7 +1191,7 @@ class systemoCompiler:
                     f"    {prefixed_var} = {self._compile_expression(value)}",
                 )
                 lines.append(f"    return {prefixed_var}")
-            case _ if self._is_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
             case _:
                 lines.append("    return None")
@@ -1623,7 +1622,7 @@ class systemoCompiler:
             match stmt:
                 case LetStatement(value=value):
                     return f"(lambda: {self._compile_expression(value)})()"
-                case _ if self._is_expression(stmt):
+                case _ if is_expression(stmt):
                     return self._compile_expression_safe(stmt)
                 case _:
                     return "None"
@@ -1638,7 +1637,7 @@ class systemoCompiler:
                     parts.append(
                         f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
                     )
-                case _ if self._is_expression(stmt):
+                case _ if is_expression(stmt):
                     parts.append(self._compile_expression_safe(stmt))
                 case _:
                     pass
@@ -1649,7 +1648,7 @@ class systemoCompiler:
             case LetStatement(variable=variable, value=value):
                 prefixed_var = self._prefix_name(variable)
                 final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
-            case _ if self._is_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 final_expr = self._compile_expression_safe(last_stmt)
             case _:
                 final_expr = "None"
@@ -1659,13 +1658,9 @@ class systemoCompiler:
         else:
             return final_expr
 
-    def _is_expression(self, stmt: Any) -> bool:
-        """Check if a statement is an expression."""
-        return is_expression_systemo(stmt)
-
     def _compile_expression_safe(self, stmt: Any) -> str:
         """Safely compile a statement as an expression."""
-        return compile_expression_safe(stmt, self._compile_expression)
+        return self._compile_expression(stmt) if is_expression(stmt) else "None"
 
     def _type_expression_to_string(self, type_expr) -> str:
         """Convert a type expression to a string representation."""
@@ -2116,15 +2111,6 @@ class systemoCompiler:
 
     def _compile_pattern_bindings(self, pattern, arg_name: str) -> List[str]:
         """Generate Python statements to bind variables from a pattern match."""
-        from lango.systemo.ast.nodes import (
-            ConsPattern,
-            ConstructorPattern,
-            ListPattern,
-            LiteralPattern,
-            TuplePattern,
-            VariablePattern,
-        )
-
         bindings = []
 
         if isinstance(pattern, VariablePattern):

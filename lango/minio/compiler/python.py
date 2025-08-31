@@ -48,6 +48,7 @@ from lango.minio.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
+    is_expression,
 )
 from lango.shared.compiler.python import (
     build_cons_pattern_match,
@@ -58,9 +59,7 @@ from lango.shared.compiler.python import (
     build_record_pattern_match,
     build_simple_pattern_match,
     build_tuple_pattern_match,
-    compile_expression_safe,
     compile_literal_value,
-    is_expression_minio,
 )
 from lango.shared.typechecker.lango_types import (
     DataType,
@@ -81,7 +80,6 @@ class MinioCompiler:
         self.function_arities: Dict[str, int] = {}  # Track function parameter counts
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
-        self.do_block_counter = 0  # Counter for unique do block function names
 
         # Initialize built-in function arities
         self.function_arities.update(
@@ -204,128 +202,6 @@ class MinioCompiler:
                 # Other pattern types don't contain variables
                 pass
         return variables
-
-    def _build_record_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        field_name: str,
-        var_name: str,
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for record constructors."""
-        return build_record_pattern_match(
-            value_expr,
-            constructor,
-            field_name,
-            var_name,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_positional_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        var_name: str,
-        body: Expression,
-        arg_index: int = 0,
-    ) -> str:
-        return build_positional_pattern_match(
-            value_expr,
-            constructor,
-            var_name,
-            body,
-            self._compile_expression,
-            arg_index,
-        )
-
-    def _build_multi_arg_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        assignments: List[str],
-        body: Expression,
-    ) -> str:
-        return build_multi_arg_pattern_match(
-            value_expr,
-            constructor,
-            assignments,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_literal_pattern_match(
-        self,
-        value_expr: str,
-        value: Any,
-        body: Expression,
-    ) -> str:
-        return build_literal_pattern_match(
-            value_expr,
-            value,
-            body,
-            self._compile_expression,
-            self._compile_literal_value,
-        )
-
-    def _build_cons_pattern_match(
-        self,
-        value_expr: str,
-        head_var: Optional[str],
-        tail_var: Optional[str],
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for cons patterns (x:xs)."""
-        return build_cons_pattern_match(
-            value_expr,
-            head_var,
-            tail_var,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_tuple_pattern_match(
-        self,
-        value_expr: str,
-        tuple_vars: List[str],
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for tuple patterns."""
-        return build_tuple_pattern_match(
-            value_expr,
-            tuple_vars,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_list_pattern_match(
-        self,
-        value_expr: str,
-        list_vars: List[str],
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for list patterns."""
-        return build_list_pattern_match(
-            value_expr,
-            list_vars,
-            body,
-            self._compile_expression,
-        )
-
-    def _build_simple_pattern_match(
-        self,
-        value_expr: str,
-        constructor: str,
-        body: Expression,
-    ) -> str:
-        """Build a readable pattern match for constructors with no arguments."""
-        return build_simple_pattern_match(
-            value_expr,
-            constructor,
-            body,
-            self._compile_expression,
-        )
 
     def compile(self, program: Program) -> str:
         lines = []
@@ -757,7 +633,7 @@ class MinioCompiler:
                     lines.append(
                         f"    {prefixed_var} = {self._compile_expression(value)}",
                     )
-                case _ if self._is_expression(stmt):
+                case _ if is_expression(stmt):
                     # Handle expression statements (like putStr calls)
                     lines.append(f"    {self._compile_expression_safe(stmt)}")
                 case _:
@@ -772,7 +648,7 @@ class MinioCompiler:
                     f"    {prefixed_var} = {self._compile_expression(value)}",
                 )
                 lines.append(f"    return {prefixed_var}")
-            case _ if self._is_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
             case _:
                 lines.append("    return None")
@@ -790,7 +666,13 @@ class MinioCompiler:
                 self.local_variables.add(name)
                 return f"{name} = {value_expr}\n    return {self._compile_expression(body)}"
             case LiteralPattern(value=value):
-                return self._build_literal_pattern_match(value_expr, value, body)
+                return build_literal_pattern_match(
+                    value_expr,
+                    value,
+                    body,
+                    self._compile_expression,
+                    self._compile_literal_value,
+                )
             case ConsPattern(head=head, tail=tail):
                 # Cons pattern (x:xs) - destructure list
                 head_var = None
@@ -808,11 +690,12 @@ class MinioCompiler:
                     case _:
                         pass
 
-                return self._build_cons_pattern_match(
+                return build_cons_pattern_match(
                     value_expr,
                     head_var,
                     tail_var,
                     body,
+                    self._compile_expression,
                 )
             case TuplePattern(patterns=patterns):
                 # Tuple pattern - destructure tuple
@@ -825,10 +708,11 @@ class MinioCompiler:
                         case _:
                             tuple_vars.append(f"_tuple_elem_{i}")
 
-                return self._build_tuple_pattern_match(
+                return build_tuple_pattern_match(
                     value_expr,
                     tuple_vars,
                     body,
+                    self._compile_expression,
                 )
             case ConstructorPattern(constructor=constructor, patterns=patterns):
                 # Extract variables from constructor pattern
@@ -848,28 +732,31 @@ class MinioCompiler:
                                 field_name = constructor_def.record_constructor.fields[
                                     0
                                 ].name
-                                return self._build_record_pattern_match(
+                                return build_record_pattern_match(
                                     value_expr,
                                     constructor,
                                     field_name,
                                     var_name,
                                     body,
+                                    self._compile_expression,
                                 )
                             else:
                                 # Positional constructor - use arg_ access
-                                return self._build_positional_pattern_match(
+                                return build_positional_pattern_match(
                                     value_expr,
                                     constructor,
                                     var_name,
                                     body,
-                                    arg_index=0,
+                                    self._compile_expression,
+                                    0,
                                 )
                         case _:
                             # Handle non-variable patterns with single argument
-                            return self._build_simple_pattern_match(
+                            return build_simple_pattern_match(
                                 value_expr,
                                 constructor,
                                 body,
+                                self._compile_expression,
                             )
                 elif len(patterns) > 1:
                     # Multiple variables in constructor pattern
@@ -902,18 +789,20 @@ class MinioCompiler:
                                 case _:
                                     pass
 
-                    return self._build_multi_arg_pattern_match(
+                    return build_multi_arg_pattern_match(
                         value_expr,
                         constructor,
                         assignments,
                         body,
+                        self._compile_expression,
                     )
                 else:
                     # Constructor with no arguments
-                    return self._build_simple_pattern_match(
+                    return build_simple_pattern_match(
                         value_expr,
                         constructor,
                         body,
+                        self._compile_expression,
                     )
             case ListPattern(patterns=patterns):
                 # List pattern - destructure list
@@ -926,10 +815,11 @@ class MinioCompiler:
                         case _:
                             list_vars.append(f"_list_elem_{i}")
 
-                return self._build_list_pattern_match(
+                return build_list_pattern_match(
                     value_expr,
                     list_vars,
                     body,
+                    self._compile_expression,
                 )
             case _:
                 return f"return {self._compile_expression(body)}"
@@ -1168,7 +1058,7 @@ class MinioCompiler:
             match stmt:
                 case LetStatement(value=value):
                     return f"(lambda: {self._compile_expression(value)})()"
-                case _ if self._is_expression(stmt):
+                case _ if is_expression(stmt):
                     return self._compile_expression_safe(stmt)
                 case _:
                     return "None"
@@ -1183,7 +1073,7 @@ class MinioCompiler:
                     parts.append(
                         f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
                     )
-                case _ if self._is_expression(stmt):
+                case _ if is_expression(stmt):
                     parts.append(self._compile_expression_safe(stmt))
                 case _:
                     pass
@@ -1194,7 +1084,7 @@ class MinioCompiler:
             case LetStatement(variable=variable, value=value):
                 prefixed_var = self._prefix_name(variable)
                 final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
-            case _ if self._is_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 final_expr = self._compile_expression_safe(last_stmt)
             case _:
                 final_expr = "None"
@@ -1204,13 +1094,9 @@ class MinioCompiler:
         else:
             return final_expr
 
-    def _is_expression(self, stmt: Any) -> bool:
-        """Check if a statement is an expression."""
-        return is_expression_minio(stmt)
-
     def _compile_expression_safe(self, stmt: Any) -> str:
         """Safely compile a statement as an expression."""
-        return compile_expression_safe(stmt, self._compile_expression)
+        return self._compile_expression(stmt) if is_expression(stmt) else "None"
 
 
 def compile_program(program: Program) -> str:

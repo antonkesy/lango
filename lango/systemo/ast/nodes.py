@@ -355,3 +355,26 @@ type Statement = Union[
     LetStatement,
     Expression,
 ]
+
+
+def is_expression(stmt: Any) -> bool:
+    match stmt:
+        case (
+            IntLiteral()
+            | FloatLiteral()
+            | StringLiteral()
+            | CharLiteral()
+            | BoolLiteral()
+            | ListLiteral()
+            | Variable()
+            | Constructor()
+            | SymbolicOperation()
+            | FunctionApplication()
+            | ConstructorExpression()
+            | DoBlock()
+            | GroupedExpression()
+            | IfElse()
+        ):
+            return True
+        case _:
+            return False
