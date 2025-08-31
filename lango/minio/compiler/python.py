@@ -83,15 +83,27 @@ class MinioCompiler:
         self.local_variables: Set[str] = set()  # Track local pattern variables
         self.do_block_counter = 0  # Counter for unique do block function names
 
-        # Set up built-in function arities
+        # Initialize built-in function arities
         self.function_arities.update(
             {
-                "show": 1,
-                "putStr": 1,
-                "error": 1,
                 "mod": 2,
                 "elem": 2,
                 "map": 2,
+                "show": 1,
+                "putStr": 1,
+                "error": 1,
+            },
+        )
+
+        # Add built-in functions to defined functions
+        self.defined_functions.update(
+            {
+                "mod",
+                "elem",
+                "map",
+                "show",
+                "putStr",
+                "error",
             },
         )
 
@@ -100,9 +112,6 @@ class MinioCompiler:
 
     def _prefix_name(self, name: str) -> str:
         """Add minio_ prefix to user-defined names, but not built-ins, constructors, or pattern variables."""
-        # Don't prefix built-in functions
-        if name in ["show", "putStr", "error", "mod", "elem", "map"]:
-            return name
         # Don't prefix local pattern variables
         if name in self.local_variables:
             return name
@@ -350,9 +359,7 @@ class MinioCompiler:
 
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
-            # Skip built-in functions to avoid conflicts
-            if func_name not in ["show", "putStr", "error", "mod", "elem", "map"]:
-                lines.append(self._compile_function_group(func_name, definitions))
+            lines.append(self._compile_function_group(func_name, definitions))
 
         # Add main execution
         if "main" in function_definitions:
@@ -963,18 +970,6 @@ class MinioCompiler:
                 return f"({', '.join(compiled_elements)})"
 
             # Variables and constructors
-            case Variable(name="show"):
-                return "minio_show"
-            case Variable(name="putStr"):
-                return "minio_put_str"
-            case Variable(name="error"):
-                return "minio_error"
-            case Variable(name="mod"):
-                return "minio_mod"
-            case Variable(name="elem"):
-                return "minio_elem"
-            case Variable(name="map"):
-                return "minio_map"
             case Variable(name=name):
                 prefixed_name = self._prefix_name(name)
                 if name in self.nullary_functions:

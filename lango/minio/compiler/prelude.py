@@ -26,7 +26,7 @@ def minio_show(value: Any) -> str:
             return str(value)
 
 
-def minio_put_str(s: Any) -> None:
+def minio_putStr(s: Any) -> None:
     match s:
         case ("char", char_value):
             print(char_value, end="")
@@ -55,12 +55,3 @@ def minio_elem(value: Any, lst: List[Any]) -> bool:
 def minio_map(func: Callable[[Any], Any], lst: list) -> list:
     """Built-in map function - applies function to each element of list."""
     return [func(item) for item in lst]
-
-
-# Aliases for built-in functions so they can be called by their original names
-show = minio_show
-putStr = minio_put_str
-error = minio_error
-mod = minio_mod
-elem = minio_elem
-map = minio_map

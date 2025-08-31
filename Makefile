@@ -78,11 +78,14 @@ systemo-compile-python: install
 	python3.13 build/example.py
 
 
-
 # Quality
 test: install
 	. .venv/bin/activate && \
 	pytest -vvs
+
+test-minio: install
+	. .venv/bin/activate && \
+	pytest -vvs test/test_minio.py
 
 test-systemo: install
 	. .venv/bin/activate && \
