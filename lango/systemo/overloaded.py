@@ -1,57 +1,28 @@
-from typing import Any, Dict, List, Optional, Set
-
-from lango.systemo.ast.nodes import (
-    BoolLiteral,
-    CharLiteral,
-    ConsPattern,
-    Constructor,
-    ConstructorExpression,
-    ConstructorPattern,
-    DataConstructor,
-    DataDeclaration,
-    DoBlock,
-    Expression,
-    FloatLiteral,
-    FunctionApplication,
-    FunctionDefinition,
-    GroupedExpression,
-    IfElse,
-    InstanceDeclaration,
-    IntLiteral,
-    LetStatement,
-    ListLiteral,
-    ListPattern,
-    LiteralPattern,
-    NegativeFloat,
-    NegativeInt,
-    Pattern,
-    Program,
-    StringLiteral,
-    SymbolicOperation,
-    TupleLiteral,
-    TuplePattern,
-    Variable,
-    VariablePattern,
-    ArrowType,
-    TypeConstructor,
-    TypeVariable,
-    TypeApplication,
-    GroupedType,
-    ListType,
-)
-from lango.systemo.ast.nodes import TupleType as ASTTupleType
+from typing import Dict, Optional
 
 from lango.shared.typechecker.lango_types import (
     DataType,
     FunctionType,
+    TupleType,
     Type,
     TypeApp,
     TypeCon,
     TypeVar,
-    TupleType,
 )
-
-from dataclasses import dataclass
+from lango.systemo.ast.nodes import (
+    ArrowType,
+    FunctionDefinition,
+    GroupedType,
+    InstanceDeclaration,
+    ListType,
+    Program,
+)
+from lango.systemo.ast.nodes import TupleType as ASTTupleType
+from lango.systemo.ast.nodes import (
+    TypeApplication,
+    TypeConstructor,
+    TypeVariable,
+)
 
 
 def parse_type_expr(node) -> Optional[Type]:
@@ -110,40 +81,45 @@ def parse_type_expr(node) -> Optional[Type]:
             return None
 
 
-def collect_overloaded_functions(
+def collect_all_functions(
     program: Program,
 ) -> Dict[str, Dict[str, FunctionDefinition]]:
-    """Collect overloaded functions from the program, returning a dict of function names to type-signature-keyed function definitions."""
-    overloaded_functions: Dict[str, Dict[str, FunctionDefinition]] = {}
+    """Collect all functions from the program, including both regular and overloaded functions."""
+    functions: Dict[str, Dict[str, FunctionDefinition]] = {}
 
     for stmt in program.statements:
         if isinstance(stmt, FunctionDefinition):
             func_name = stmt.function_name
             func_type = stmt.ty
-            if func_type is None:
-                continue
-            # Only accept FunctionType objects
-            if not isinstance(func_type, FunctionType):
-                raise NotImplementedError("TODO")
-                continue
 
-            if func_name not in overloaded_functions:
-                overloaded_functions[func_name] = {}
-            overloaded_functions[func_name][str(func_type)] = stmt
+            # For functions without explicit types, use "no type" as the key
+            if func_type is None:
+                type_key = ""
+            elif isinstance(func_type, FunctionType):
+                type_key = str(func_type)
+            else:
+                # For non-function types, convert to string
+                type_key = str(func_type) if func_type else ""
+
+            if func_name not in functions:
+                functions[func_name] = {}
+            functions[func_name][type_key] = stmt
+
         elif isinstance(stmt, InstanceDeclaration):
             func_name = stmt.instance_name
             func_type_expr = stmt.type_signature
-            if func_type_expr is None:
-                continue
-            # Convert TypeExpression to Type
-            func_type = parse_type_expr(func_type_expr)
-            if func_type is None:
-                continue
-            # Only accept FunctionType objects
-            if not isinstance(func_type, FunctionType):
-                continue
 
-            if func_name not in overloaded_functions:
-                overloaded_functions[func_name] = {}
-            overloaded_functions[func_name][str(func_type)] = stmt.function_definition
-    return overloaded_functions
+            if func_type_expr is None:
+                type_key = "no type annotation"
+            else:
+                # Convert TypeExpression to Type
+                func_type = parse_type_expr(func_type_expr)
+                if func_type is None:
+                    type_key = "invalid type"
+                else:
+                    type_key = str(func_type)
+
+            if func_name not in functions:
+                functions[func_name] = {}
+            functions[func_name][type_key] = stmt.function_definition
+    return functions
