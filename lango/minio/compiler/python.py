@@ -75,7 +75,6 @@ class MinioCompiler:
     def __init__(self) -> None:
         self.indent_level = 0
         self.defined_functions: Set[str] = set()
-        self.nullary_functions: Set[str] = set()  # Functions with no parameters
         self.function_types: Dict[str, Type] = {}  # Track function types
         self.function_arities: Dict[str, int] = {}  # Track function parameter counts
         self.data_types: Dict[str, DataDeclaration] = {}
@@ -342,10 +341,6 @@ class MinioCompiler:
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
         self.function_arities[func_name] = max_params
-
-        # Check if any definition is nullary
-        if any(len(defn.patterns) == 0 for defn in definitions):
-            self.nullary_functions.add(func_name)
 
         if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
             return self._compile_simple_function(definitions[0], prefixed_func_name)
@@ -862,7 +857,8 @@ class MinioCompiler:
             # Variables and constructors
             case Variable(name=name):
                 prefixed_name = self._prefix_name(name)
-                if name in self.nullary_functions:
+                # Check if this is a nullary function (0 parameters) and automatically call it
+                if name in self.function_arities and self.function_arities[name] == 0:
                     return f"{prefixed_name}()"
                 else:
                     return prefixed_name
