@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from lango.minio.ast.nodes import (
@@ -71,38 +72,33 @@ from lango.shared.typechecker.lango_types import (
 )
 
 
+@dataclass
+class FunctionInfo:
+    """Consolidated information about a function."""
+
+    arity: int
+    type_info: Optional[Type] = None
+
+
 class MinioCompiler:
     def __init__(self) -> None:
         self.indent_level = 0
-        self.defined_functions: Set[str] = set()
-        self.function_types: Dict[str, Type] = {}  # Track function types
-        self.function_arities: Dict[str, int] = {}  # Track function parameter counts
+        self.functions: Dict[str, FunctionInfo] = (
+            {}
+        )  # Consolidated function information
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
 
-        # Initialize built-in function arities
-        self.function_arities.update(
-            {
-                "mod": 2,
-                "elem": 2,
-                "map": 2,
-                "show": 1,
-                "putStr": 1,
-                "error": 1,
-            },
-        )
-
-        # Add built-in functions to defined functions
-        self.defined_functions.update(
-            {
-                "mod",
-                "elem",
-                "map",
-                "show",
-                "putStr",
-                "error",
-            },
-        )
+        # Initialize built-in function information
+        builtin_functions = {
+            "mod": FunctionInfo(arity=2),
+            "elem": FunctionInfo(arity=2),
+            "map": FunctionInfo(arity=2),
+            "show": FunctionInfo(arity=1),
+            "putStr": FunctionInfo(arity=1),
+            "error": FunctionInfo(arity=1),
+        }
+        self.functions.update(builtin_functions)
 
     def _indent(self) -> str:
         return "    " * self.indent_level
@@ -330,17 +326,18 @@ class MinioCompiler:
     ) -> str:
         """Compile function definitions with pattern matching."""
         prefixed_func_name = f"minio_{func_name}"
-        self.defined_functions.add(func_name)
-
-        # Store function type information
-        if definitions and definitions[0].ty:
-            self.function_types[func_name] = definitions[0].ty
 
         # Track function arity (number of parameters)
         max_params = (
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
-        self.function_arities[func_name] = max_params
+
+        # Store function information
+        function_type = definitions[0].ty if definitions and definitions[0].ty else None
+        self.functions[func_name] = FunctionInfo(
+            arity=max_params,
+            type_info=function_type,
+        )
 
         if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
             return self._compile_simple_function(definitions[0], prefixed_func_name)
@@ -858,7 +855,7 @@ class MinioCompiler:
             case Variable(name=name):
                 prefixed_name = self._prefix_name(name)
                 # Check if this is a nullary function (0 parameters) and automatically call it
-                if name in self.function_arities and self.function_arities[name] == 0:
+                if name in self.functions and self.functions[name].arity == 0:
                     return f"{prefixed_name}()"
                 else:
                     return prefixed_name
@@ -946,16 +943,16 @@ class MinioCompiler:
                         prefixed_name = self._prefix_name(name)
 
                         # Get the expected arity for this function
-                        expected_arity = self.function_arities.get(name, 1)
+                        expected_arity = self.functions.get(
+                            name,
+                            FunctionInfo(arity=1),
+                        ).arity
 
                         if len(args) == expected_arity:
                             # Full application - call function directly
                             arg_exprs = [self._compile_expression(arg) for arg in args]
                             return f"{prefixed_name}({', '.join(arg_exprs)})"
-                        elif (
-                            len(args) < expected_arity
-                            and name in self.defined_functions
-                        ):
+                        elif len(args) < expected_arity and name in self.functions:
                             # Partial application - create lambda for remaining args
                             arg_exprs = [self._compile_expression(arg) for arg in args]
                             remaining_params = expected_arity - len(args)
