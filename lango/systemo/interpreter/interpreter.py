@@ -34,9 +34,9 @@ from lango.systemo.ast.nodes import (
     Statement,
     StringLiteral,
     SymbolicOperation,
-    TupleType,
     TupleLiteral,
     TuplePattern,
+    TupleType,
     TypeApplication,
     TypeConstructor,
     TypeExpression,
@@ -233,7 +233,7 @@ def build_environment(
 
                 # Append to typed environment with type signature
                 typed_env[func_name][type_key][1].append(
-                    (fixed_patterns, func_def.body)
+                    (fixed_patterns, func_def.body),
                 )
 
                 # Also add to regular environment for backward compatibility (all clauses together)
@@ -409,7 +409,9 @@ class Interpreter:
         self.variables: Dict[str, Value] = {}
 
     def _find_matching_implementation(
-        self, func_name: str, args: List[Value]
+        self,
+        func_name: str,
+        args: List[Value],
     ) -> Optional[FunctionValue]:
         """Find the best matching implementation for a function call based on argument types."""
         if func_name not in self.typed_env:
@@ -426,11 +428,14 @@ class Interpreter:
                 if len(parts) >= 2:
                     # Extract all input types (everything except the last part which is the return type)
                     input_types = [part.strip() for part in parts[:-1]]
-                    
+
                     # Check if the number of arguments matches the number of input types
                     if len(arg_types) == len(input_types):
                         # Check if all argument types match the input types
-                        if all(arg_type == input_type for arg_type, input_type in zip(arg_types, input_types)):
+                        if all(
+                            arg_type == input_type
+                            for arg_type, input_type in zip(arg_types, input_types)
+                        ):
                             return implementation
 
         return None
@@ -589,7 +594,8 @@ class Interpreter:
                         return op_func(operand_val)
                     elif operator in self.env:
                         return self._apply_function_with_typed_dispatch(
-                            operator, [operand_val]
+                            operator,
+                            [operand_val],
                         )
                     else:
                         raise RuntimeError(f"Unknown unary operator: {operator}")
