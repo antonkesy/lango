@@ -571,6 +571,30 @@ class systemoCompiler:
                 func_type = self._infer_expression_type(function)
                 arg_type = self._infer_expression_type(argument)
                 
+                # Special handling for monomorphized function calls
+                if isinstance(function, Variable):
+                    func_name = function.name
+                    # If this is a monomorphized function name, look it up directly
+                    if func_name.startswith("systemo_"):
+                        # Find the function info that matches this monomorphized name
+                        for base_name, func_info in self.functions.items():
+                            for overload in func_info.overloads:
+                                if overload.monomorphized_name == func_name and overload.type_info:
+                                    # Extract the return type from the function type
+                                    current_type = overload.type_info
+                                    while isinstance(current_type, FunctionType):
+                                        current_type = current_type.result
+                                    return current_type
+                    # Try regular function lookup
+                    elif func_name in self.functions and self.functions[func_name].overloads:
+                        # Use the first overload for now - in a full implementation we'd match arg types
+                        overload = self.functions[func_name].overloads[0]
+                        if overload.type_info:
+                            current_type = overload.type_info
+                            while isinstance(current_type, FunctionType):
+                                current_type = current_type.result
+                            return current_type
+                
                 if isinstance(func_type, FunctionType):
                     # Return the result type of the function
                     return func_type.result
@@ -622,21 +646,26 @@ class systemoCompiler:
         if func_name not in self.functions:
             # Unknown function, use default naming
             prefixed_name = self._prefix_name(func_name)
+            print(f"DEBUG: Unknown function '{func_name}', using '{prefixed_name}'")
             return prefixed_name
         
         func_info = self.functions[func_name]
         
         # Infer argument types
         arg_types = [self._infer_expression_type(arg) for arg in args]
+        print(f"DEBUG: Resolving '{func_name}' with inferred arg types: {[str(t) if t else 'None' for t in arg_types]}")
         
         # Find best matching overload
         best_overload = func_info.find_best_overload(arg_types)
         
         if best_overload and best_overload.monomorphized_name:
+            print(f"DEBUG: Selected overload: {best_overload.monomorphized_name}")
             return best_overload.monomorphized_name
         else:
             # Fallback to default naming
-            return self._prefix_name(func_name)
+            fallback = self._prefix_name(func_name)
+            print(f"DEBUG: No matching overload, using fallback: {fallback}")
+            return fallback
 
     def _extract_pattern_variables(self, pattern: Pattern) -> Set[str]:
         """Extract all variable names from a pattern recursively."""
@@ -673,6 +702,8 @@ class systemoCompiler:
 
         # Group function definitions by name
         function_definitions: Dict[str, List[FunctionDefinition]] = {}
+        # Group instance declarations by name and type for proper pattern matching
+        instance_groups: Dict[str, Dict[str, List[tuple]]] = {}  # name -> type_key -> [(func_def, type_info, monomorphized_name)]
 
         for stmt in program.statements:
             match stmt:
@@ -683,35 +714,66 @@ class systemoCompiler:
                         function_definitions[function_name] = []
                     function_definitions[function_name].append(stmt)
                 case InstanceDeclaration(instance_name=instance_name, function_definition=func_def, ty=instance_ty, type_signature=type_sig):
-                    # Handle instance declarations as separate overloaded functions
-                    # Each instance gets its own monomorphized name based on type signature
+                    # Group instance declarations by name and type
                     func_def.function_name = instance_name  # Ensure the name matches
                     
-                    # Use the type from the instance declaration, not the function definition
+                    # Use the type from the instance declaration
                     type_info = instance_ty if instance_ty is not None else self._convert_type_expression_to_type(type_sig)
+                    type_key = str(type_info) if type_info else "unknown"
                     
-                    # Create a unique function definition for this specific overload
-                    # Use the type signature to create a monomorphized name
+                    # Create monomorphized name
                     monomorphized_name = self._create_monomorphized_name(instance_name, type_info)
                     
-                    # Add this as a single function definition with monomorphized name
-                    lines.append(self._compile_simple_function(func_def, monomorphized_name))
-                    
-                    # Also add to the function registry for call resolution
-                    if instance_name not in self.functions:
-                        self.functions[instance_name] = FunctionInfo()
-                    
-                    max_params = len(func_def.patterns) if func_def.patterns else 0
-                    self.functions[instance_name].add_overload(max_params, type_info, monomorphized_name)
+                    # Group by name and type
+                    if instance_name not in instance_groups:
+                        instance_groups[instance_name] = {}
+                    if type_key not in instance_groups[instance_name]:
+                        instance_groups[instance_name][type_key] = []
+                    instance_groups[instance_name][type_key].append((func_def, type_info, monomorphized_name))
                 case LetStatement(variable=variable, value=value):
                     prefixed_var = self._prefix_name(variable)
                     lines.append(
                         f"{prefixed_var} = {self._compile_expression(value)}",
                     )
 
+        # First pass: Register all instance functions in the function registry
+        for instance_name, type_groups in instance_groups.items():
+            if instance_name not in self.functions:
+                self.functions[instance_name] = FunctionInfo()
+                
+            for type_key, func_data_list in type_groups.items():
+                for func_def, type_info, monomorphized_name in func_data_list:
+                    max_params = len(func_def.patterns) if func_def.patterns else 0
+                    self.functions[instance_name].add_overload(max_params, type_info, monomorphized_name)
+
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
             lines.append(self._compile_function_group(func_name, definitions))
+
+        # Generate instance declarations
+        for instance_name, type_groups in instance_groups.items():
+            print(f"DEBUG: Generating instances for '{instance_name}' with {len(type_groups)} type groups")
+            for type_key, func_data_list in type_groups.items():
+                print(f"  Type group '{type_key}' has {len(func_data_list)} functions")
+                # Extract the function definitions and type info
+                func_defs = []
+                type_info = None
+                monomorphized_name = None
+                
+                for func_def, t_info, m_name in func_data_list:
+                    func_defs.append(func_def)
+                    if type_info is None:
+                        type_info = t_info
+                        monomorphized_name = m_name
+                
+                # Function registry already updated in first pass
+                
+                # If multiple function definitions with the same type, use pattern matching
+                if len(func_defs) > 1:
+                    lines.append(self._compile_pattern_matching_function_with_custom_name(monomorphized_name or f"systemo_{instance_name}", instance_name, func_defs))
+                else:
+                    # Single function definition - use simple compilation
+                    lines.append(self._compile_simple_function(func_defs[0], monomorphized_name or f"systemo_{instance_name}"))
 
         # Add main execution
         if "main" in function_definitions:
@@ -797,13 +859,43 @@ class systemoCompiler:
         func_name: str,
         definitions: List[FunctionDefinition],
     ) -> str:
-        """Compile function definitions with pattern matching."""
+        """Compile function definitions, grouping by type signature for overloading."""
+        # Group definitions by their type signature to create separate overloads
+        type_groups: Dict[str, List[FunctionDefinition]] = {}
+        
+        for func_def in definitions:
+            # Convert AST type to internal type if available
+            type_info = None
+            if func_def.ty:
+                type_info = func_def.ty
+            
+            # Use type signature as the key for grouping
+            type_key = str(type_info) if type_info else "unknown"
+            if type_key not in type_groups:
+                type_groups[type_key] = []
+            type_groups[type_key].append(func_def)
+        
+        # Generate code for each type group (each becomes a separate overload)
+        compiled_functions = []
+        for type_key, group_definitions in type_groups.items():
+            compiled_functions.append(
+                self._compile_pattern_matching_function(func_name, group_definitions)
+            )
+        
+        return "\n\n".join(compiled_functions)
+
+    def _compile_pattern_matching_function(
+        self,
+        func_name: str,
+        definitions: List[FunctionDefinition],
+    ) -> str:
+        """Compile function definitions with pattern matching for a single type signature."""
         # Track function arity (number of parameters)
         max_params = (
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Store function information
+        # Store function information - use the type from the first definition
         function_type = definitions[0].ty if definitions and definitions[0].ty else None
         if func_name not in self.functions:
             self.functions[func_name] = FunctionInfo()
@@ -1010,6 +1102,147 @@ class systemoCompiler:
                 error_msg = f"raise ValueError(f'No matching pattern for {monomorphized_name} with args: {{arg_0}}')"
             else:
                 error_msg = f"raise ValueError(f'No matching pattern for {monomorphized_name} with args: {{{arg_names}}}')"
+
+            lines.append(self._indent() + error_msg)
+        self.indent_level -= 1
+
+        # Restore local variables
+        self.local_variables = old_local_vars
+
+        lines.append("")
+        return "\n".join(lines)
+
+    def _compile_pattern_matching_function_with_custom_name(
+        self,
+        custom_name: str,
+        func_name: str,
+        definitions: List[FunctionDefinition],
+    ) -> str:
+        """Compile function definitions with pattern matching using a custom function name."""
+        # Track function arity (number of parameters)
+        max_params = (
+            max(len(defn.patterns) for defn in definitions) if definitions else 0
+        )
+
+        # Get return type hint from the first function definition
+        return_type_hint = "Any"
+        if definitions and definitions[0].ty:
+            # For function types, extract the final return type
+            current_type = definitions[0].ty
+            while isinstance(current_type, FunctionType):
+                current_type = current_type.result
+            return_type_hint = self._systemo_type_to_python_hint(current_type)
+
+        # Create parameter list with type hints for multi-parameter functions
+        param_list = []
+        if max_params > 1:
+            # For multi-parameter functions, get parameter types from the function type
+            param_types: List[str] = []
+            if definitions and definitions[0].ty:
+                current_type = definitions[0].ty
+                while (
+                    isinstance(current_type, FunctionType)
+                    and len(param_types) < max_params
+                ):
+                    param_type_hint = self._systemo_type_to_python_hint(
+                        current_type.param,
+                    )
+                    param_types.append(param_type_hint)
+                    current_type = current_type.result
+
+            # Fill remaining with Any if we don't have enough type information
+            while len(param_types) < max_params:
+                param_types.append("Any")
+
+            param_list = [f"arg_{i}: {param_types[i]}" for i in range(max_params)]
+        else:
+            # For single parameter functions, try to get the parameter type
+            param_type = "Any"
+            if (
+                definitions
+                and definitions[0].ty
+                and isinstance(definitions[0].ty, FunctionType)
+            ):
+                param_type = self._systemo_type_to_python_hint(definitions[0].ty.param)
+            param_list = [f"arg_0: {param_type}"]
+
+        lines = [
+            f"def {custom_name}({', '.join(param_list)}) -> {return_type_hint}:",
+        ]
+
+        self.indent_level += 1
+
+        # Collect all pattern variables from all definitions
+        old_local_vars = self.local_variables.copy()
+        for func_def in definitions:
+            for pattern in func_def.patterns:
+                self.local_variables.update(self._extract_pattern_variables(pattern))
+
+        # Track if we have exhaustive patterns (ending with catch-all)
+        has_exhaustive_patterns = False
+
+        for i, func_def in enumerate(definitions):
+            if len(func_def.patterns) == 0:
+                # Nullary function - no arguments expected
+                lines.append(
+                    self._indent()
+                    + f"return {self._compile_expression(func_def.body)}",
+                )
+                has_exhaustive_patterns = True  # Nullary is always exhaustive
+            else:
+                # Pattern matching - check each pattern
+                pattern_matches = []
+                assignments = []
+
+                for j, pattern in enumerate(func_def.patterns):
+                    arg_name = f"arg_{j}"
+                    match pattern:
+                        case VariablePattern(name=name):
+                            assignments.append(f"{name} = {arg_name}")
+                        case LiteralPattern(value=value):
+                            pattern_matches.append(
+                                f"{arg_name} == {self._compile_literal_value(value)}",
+                            )
+                        case _:
+                            # Add other pattern types as needed
+                            pass
+
+                # Generate pattern matching condition
+                if pattern_matches:
+                    condition = " and ".join(pattern_matches)
+                    lines.append(self._indent() + f"if {condition}:")
+                    self.indent_level += 1
+                    for assignment in assignments:
+                        lines.append(self._indent() + assignment)
+                    lines.append(
+                        self._indent()
+                        + f"return {self._compile_expression(func_def.body)}",
+                    )
+                    self.indent_level -= 1
+                else:
+                    # Only variable patterns, always matches - this is a catch-all
+                    for assignment in assignments:
+                        lines.append(self._indent() + assignment)
+                    lines.append(
+                        self._indent()
+                        + f"return {self._compile_expression(func_def.body)}",
+                    )
+                    # If this is the last definition and only has variable patterns, it's exhaustive
+                    if i == len(definitions) - 1:
+                        has_exhaustive_patterns = True
+
+        # Only add fallback error if patterns are not exhaustive
+        if not has_exhaustive_patterns:
+            # Show all arguments in error message
+            arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
+            if max_params == 0:
+                error_msg = (
+                    f"raise ValueError('No matching pattern for {custom_name}')"
+                )
+            elif max_params == 1:
+                error_msg = f"raise ValueError(f'No matching pattern for {custom_name} with args: {{arg_0}}')"
+            else:
+                error_msg = f"raise ValueError(f'No matching pattern for {custom_name} with args: {{{arg_names}}}')"
 
             lines.append(self._indent() + error_msg)
         self.indent_level -= 1
