@@ -149,6 +149,7 @@ class systemoCompiler:
         )  # Consolidated function information
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()  # Track local pattern variables
+        self.variable_types: Dict[str, Type] = {}  # Track variable assignments and their types
 
         # Initialize built-in function information
         self._initialize_builtin_functions()
@@ -172,11 +173,30 @@ class systemoCompiler:
         def type_name(t: Type) -> str:
             match t:
                 case TypeCon(name=name):
-                    return name.lower()
+                    # Handle tuple types by arity
+                    if name == "Tuple2":
+                        return "tuple2"
+                    elif name == "Tuple3":
+                        return "tuple3"
+                    elif name.startswith("Tuple"):
+                        # Extract arity from TupleN
+                        arity = name[5:]  # Remove "Tuple" prefix
+                        return f"tuple{arity}"
+                    else:
+                        return name.lower()
                 case FunctionType(param=param, result=result):
                     return f"{type_name(param)}_to_{type_name(result)}"
                 case TypeApp(constructor=TypeCon(name=name), argument=arg):
                     return f"{name.lower()}_{type_name(arg)}"
+                case TypeApp(constructor=TypeApp(constructor=TypeCon(name="Tuple2"), argument=arg1), argument=arg2):
+                    # Handle Tuple2 structure: ((Tuple2 a) b) -> tuple2_a_b
+                    return f"tuple2_{type_name(arg1)}_{type_name(arg2)}"
+                case TypeApp(constructor=TypeApp(constructor=TypeApp(constructor=TypeCon(name="Tuple3"), argument=arg1), argument=arg2), argument=arg3):
+                    # Handle Tuple3 structure: (((Tuple3 a) b) c) -> tuple3_a_b_c
+                    return f"tuple3_{type_name(arg1)}_{type_name(arg2)}_{type_name(arg3)}"
+                case TypeApp(constructor=constructor, argument=arg):
+                    # Generic TypeApp case
+                    return f"{type_name(constructor)}_{type_name(arg)}"
                 case TypeVar(name=name):
                     return name.lower()
                 case _:
@@ -591,9 +611,20 @@ class systemoCompiler:
                     )
                 return TypeApp(constructor=TypeCon("List"), argument=TypeVar("a"))
             case TupleLiteral(elements=elements):
-                # For tuples, we could create a proper tuple type, but for now return generic
-                return None
+                # Create simple tuple type based on element count
+                arity = len(elements)
+                if arity == 2:
+                    return TypeCon("Tuple2")
+                elif arity == 3:
+                    return TypeCon("Tuple3")
+                else:
+                    return TypeCon(f"Tuple{arity}")
             case Variable(name=name):
+                # First, try to get type from variable type tracker
+                if name in self.variable_types:
+                    print(f"DEBUG: Found tracked variable '{name}' with type: {self.variable_types[name]}")
+                    return self.variable_types[name]
+                
                 # Try to get type from function info
                 if name in self.functions and self.functions[name].overloads:
                     overload = self.functions[name].overloads[0]
@@ -804,6 +835,12 @@ class systemoCompiler:
                         (func_def, type_info, monomorphized_name)
                     )
                 case LetStatement(variable=variable, value=value):
+                    # Infer the type of the assigned value and track it
+                    value_type = self._infer_expression_type(value)
+                    if value_type:
+                        self.variable_types[variable] = value_type
+                        print(f"DEBUG: Tracked variable '{variable}' with type: {value_type}")
+                    
                     prefixed_var = self._prefix_name(variable)
                     lines.append(
                         f"{prefixed_var} = {self._compile_expression(value)}",
