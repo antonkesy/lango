@@ -65,25 +65,36 @@ from lango.shared.typechecker.lango_types import (
 @dataclass
 class FunctionOverload:
     """Represents a single overloaded version of a function."""
+
     arity: int
     type_info: Optional[Type] = None
     monomorphized_name: Optional[str] = None
 
+
 @dataclass
 class FunctionInfo:
     """Represents all overloaded versions of a function."""
+
     overloads: List[FunctionOverload] = field(default_factory=list)
-    
-    def add_overload(self, arity: int, type_info: Optional[Type], monomorphized_name: str) -> None:
+
+    def add_overload(
+        self, arity: int, type_info: Optional[Type], monomorphized_name: str
+    ) -> None:
         """Add a new overloaded version of this function."""
-        overload = FunctionOverload(arity=arity, type_info=type_info, monomorphized_name=monomorphized_name)
+        overload = FunctionOverload(
+            arity=arity, type_info=type_info, monomorphized_name=monomorphized_name
+        )
         self.overloads.append(overload)
-    
-    def find_best_overload(self, arg_types: List[Optional[Type]]) -> Optional[FunctionOverload]:
+
+    def find_best_overload(
+        self, arg_types: List[Optional[Type]]
+    ) -> Optional[FunctionOverload]:
         """Find the best matching overload for the given argument types."""
         # For now, do simple matching based on arity and type compatibility
         for overload in self.overloads:
-            if overload.arity == len(arg_types) and self._types_match(overload.type_info, arg_types):
+            if overload.arity == len(arg_types) and self._types_match(
+                overload.type_info, arg_types
+            ):
                 return overload
         # Fallback to first overload with matching arity
         for overload in self.overloads:
@@ -91,29 +102,31 @@ class FunctionInfo:
                 return overload
         # Fallback to first overload
         return self.overloads[0] if self.overloads else None
-    
-    def _types_match(self, func_type: Optional[Type], arg_types: List[Optional[Type]]) -> bool:
+
+    def _types_match(
+        self, func_type: Optional[Type], arg_types: List[Optional[Type]]
+    ) -> bool:
         """Check if function type matches the argument types."""
         if func_type is None or not arg_types:
             return True
-        
+
         # Extract parameter types from function type
         param_types = []
         current_type = func_type
         while isinstance(current_type, FunctionType):
             param_types.append(current_type.param)
             current_type = current_type.result
-        
+
         if len(param_types) != len(arg_types):
             return False
-        
+
         # Simple type matching (can be enhanced later)
         for param_type, arg_type in zip(param_types, arg_types):
             if arg_type is not None and not self._type_compatible(param_type, arg_type):
                 return False
-        
+
         return True
-    
+
     def _type_compatible(self, expected: Type, actual: Type) -> bool:
         """Check if actual type is compatible with expected type."""
         # Simple equality check for now - can be enhanced for subtyping
@@ -121,7 +134,7 @@ class FunctionInfo:
             return expected.name == actual.name
         # Add more sophisticated type checking as needed
         return True
-    
+
     @property
     def arity(self) -> int:
         """Get the arity of the first overload (for backward compatibility)."""
@@ -140,19 +153,22 @@ class systemoCompiler:
         # Initialize built-in function information
         self._initialize_builtin_functions()
 
-    def _create_monomorphized_name(self, base_name: str, func_type: Optional[Type]) -> str:
+    def _create_monomorphized_name(
+        self, base_name: str, func_type: Optional[Type]
+    ) -> str:
         """Create a monomorphized function name based on the type signature."""
         # Sanitize the base name first
         sanitized_base_name = self._sanitize_operator_name(base_name)
-        
+
         if func_type is None:
             return f"systemo_{sanitized_base_name}"
-        
+
         type_suffix = self._type_to_suffix(func_type)
         return f"systemo_{sanitized_base_name}_{type_suffix}"
 
     def _type_to_suffix(self, func_type: Type) -> str:
         """Convert a type to a suffix for monomorphized names."""
+
         def type_name(t: Type) -> str:
             match t:
                 case TypeCon(name=name):
@@ -165,14 +181,14 @@ class systemoCompiler:
                     return name.lower()
                 case _:
                     return "any"
-        
+
         # For function types, extract parameter types
         param_types = []
         current_type = func_type
         while isinstance(current_type, FunctionType):
             param_types.append(current_type.param)
             current_type = current_type.result
-        
+
         if param_types:
             return "_".join(type_name(pt) for pt in param_types)
         else:
@@ -182,7 +198,7 @@ class systemoCompiler:
         """Add a builtin function with its type information."""
         if name not in self.functions:
             self.functions[name] = FunctionInfo()
-        
+
         monomorphized_name = self._create_monomorphized_name(name, type_info)
         self.functions[name].add_overload(arity, type_info, monomorphized_name)
 
@@ -247,7 +263,9 @@ class systemoCompiler:
             param=TypeCon("String"),
             result=FunctionType(param=TypeCon("String"), result=TypeCon("Bool")),
         )
-        string_to_string = FunctionType(param=TypeCon("String"), result=TypeCon("String"))
+        string_to_string = FunctionType(
+            param=TypeCon("String"), result=TypeCon("String")
+        )
 
         self._add_builtin_function("primStringConcat", 2, string_string_to_string)
         self._add_builtin_function("primStringEq", 2, string_string_to_bool)
@@ -282,7 +300,6 @@ class systemoCompiler:
             param=TypeCon("String"),
             result=TypeApp(constructor=TypeCon("IO"), argument=TypeCon("()")),
         )
-        self._add_builtin_function("putStr", 1, string_to_io_unit)
 
         # List operations
         list_a = TypeApp(constructor=TypeCon("List"), argument=TypeVar("a"))
@@ -374,7 +391,7 @@ class systemoCompiler:
         """Convert a TypeExpression AST node to a Type object."""
         if hasattr(type_expr, "ty") and type_expr.ty is not None:
             return type_expr.ty
-        
+
         # Convert from AST type expression nodes to Type objects
         match type_expr:
             case ArrowType(from_type=from_type, to_type=to_type):
@@ -407,8 +424,12 @@ class systemoCompiler:
                     if elem1_type and elem2_type:
                         # Create a type application: Tuple2 a b
                         tuple_con = TypeCon("Tuple2")
-                        tuple_with_first = TypeApp(constructor=tuple_con, argument=elem1_type)
-                        return TypeApp(constructor=tuple_with_first, argument=elem2_type)
+                        tuple_with_first = TypeApp(
+                            constructor=tuple_con, argument=elem1_type
+                        )
+                        return TypeApp(
+                            constructor=tuple_with_first, argument=elem2_type
+                        )
                 elif len(element_types) == 3:
                     # Triple tuple (a, b, c)
                     elem1_type = self._convert_type_expression_to_type(element_types[0])
@@ -417,21 +438,30 @@ class systemoCompiler:
                     if elem1_type and elem2_type and elem3_type:
                         # Create a type application: Tuple3 a b c
                         tuple_con = TypeCon("Tuple3")
-                        tuple_with_first = TypeApp(constructor=tuple_con, argument=elem1_type)
-                        tuple_with_second = TypeApp(constructor=tuple_with_first, argument=elem2_type)
-                        return TypeApp(constructor=tuple_with_second, argument=elem3_type)
+                        tuple_with_first = TypeApp(
+                            constructor=tuple_con, argument=elem1_type
+                        )
+                        tuple_with_second = TypeApp(
+                            constructor=tuple_with_first, argument=elem2_type
+                        )
+                        return TypeApp(
+                            constructor=tuple_with_second, argument=elem3_type
+                        )
                 else:
                     # Generic tuple type for other arities
                     return TypeCon("Tuple")
                 return None
-            case list() if all(hasattr(elem, 'name') or hasattr(elem, '__class__') for elem in type_expr):
+            case list() if all(
+                hasattr(elem, "name") or hasattr(elem, "__class__")
+                for elem in type_expr
+            ):
                 # Handle list of type expressions (for complex types)
                 converted_types = []
                 for elem in type_expr:
                     converted = self._convert_type_expression_to_type(elem)
                     if converted:
                         converted_types.append(converted)
-                
+
                 if len(converted_types) == 1:
                     return converted_types[0]
                 elif len(converted_types) > 1:
@@ -447,12 +477,12 @@ class systemoCompiler:
                 return TypeCon(type_expr)
             case _:
                 # Unknown type expression - try to extract name if available
-                if hasattr(type_expr, 'name'):
+                if hasattr(type_expr, "name"):
                     return TypeCon(str(type_expr.name))
-                elif hasattr(type_expr, '__class__'):
+                elif hasattr(type_expr, "__class__"):
                     # Last resort: use the class name
                     class_name = type_expr.__class__.__name__
-                    if class_name.endswith('Type'):
+                    if class_name.endswith("Type"):
                         return TypeCon(class_name[:-4])  # Remove 'Type' suffix
                     return TypeCon(class_name)
                 return None
@@ -485,12 +515,25 @@ class systemoCompiler:
             case TypeApp(constructor=TypeCon(name="IO"), argument=arg_type):
                 # IO types typically don't have meaningful return types in our compiled Python
                 return "None"
-            case TypeApp(constructor=TypeApp(constructor=TypeCon(name="Tuple2"), argument=arg1_type), argument=arg2_type):
+            case TypeApp(
+                constructor=TypeApp(
+                    constructor=TypeCon(name="Tuple2"), argument=arg1_type
+                ),
+                argument=arg2_type,
+            ):
                 # Binary tuple type: Tuple2 A B -> Tuple[A, B]
                 type1_hint = self._systemo_type_to_python_hint(arg1_type)
                 type2_hint = self._systemo_type_to_python_hint(arg2_type)
                 return f"Tuple[{type1_hint}, {type2_hint}]"
-            case TypeApp(constructor=TypeApp(constructor=TypeApp(constructor=TypeCon(name="Tuple3"), argument=arg1_type), argument=arg2_type), argument=arg3_type):
+            case TypeApp(
+                constructor=TypeApp(
+                    constructor=TypeApp(
+                        constructor=TypeCon(name="Tuple3"), argument=arg1_type
+                    ),
+                    argument=arg2_type,
+                ),
+                argument=arg3_type,
+            ):
                 # Triple tuple type: Tuple3 A B C -> Tuple[A, B, C]
                 type1_hint = self._systemo_type_to_python_hint(arg1_type)
                 type2_hint = self._systemo_type_to_python_hint(arg2_type)
@@ -541,7 +584,11 @@ class systemoCompiler:
             case ListLiteral(elements=elements):
                 if elements:
                     elem_type = self._infer_expression_type(elements[0])
-                    return TypeApp(constructor=TypeCon("List"), argument=elem_type) if elem_type else None
+                    return (
+                        TypeApp(constructor=TypeCon("List"), argument=elem_type)
+                        if elem_type
+                        else None
+                    )
                 return TypeApp(constructor=TypeCon("List"), argument=TypeVar("a"))
             case TupleLiteral(elements=elements):
                 # For tuples, we could create a proper tuple type, but for now return generic
@@ -570,7 +617,7 @@ class systemoCompiler:
                 # Infer function type and apply argument type
                 func_type = self._infer_expression_type(function)
                 arg_type = self._infer_expression_type(argument)
-                
+
                 # Special handling for monomorphized function calls
                 if isinstance(function, Variable):
                     func_name = function.name
@@ -579,14 +626,20 @@ class systemoCompiler:
                         # Find the function info that matches this monomorphized name
                         for base_name, func_info in self.functions.items():
                             for overload in func_info.overloads:
-                                if overload.monomorphized_name == func_name and overload.type_info:
+                                if (
+                                    overload.monomorphized_name == func_name
+                                    and overload.type_info
+                                ):
                                     # Extract the return type from the function type
                                     current_type = overload.type_info
                                     while isinstance(current_type, FunctionType):
                                         current_type = current_type.result
                                     return current_type
                     # Try regular function lookup
-                    elif func_name in self.functions and self.functions[func_name].overloads:
+                    elif (
+                        func_name in self.functions
+                        and self.functions[func_name].overloads
+                    ):
                         # Use the first overload for now - in a full implementation we'd match arg types
                         overload = self.functions[func_name].overloads[0]
                         if overload.type_info:
@@ -594,7 +647,7 @@ class systemoCompiler:
                             while isinstance(current_type, FunctionType):
                                 current_type = current_type.result
                             return current_type
-                
+
                 if isinstance(func_type, FunctionType):
                     # Return the result type of the function
                     return func_type.result
@@ -604,7 +657,10 @@ class systemoCompiler:
                 constructor_def = self._find_constructor_def(constructor_name)
                 if constructor_def:
                     for data_type_name, data_decl in self.data_types.items():
-                        if any(ctor.name == constructor_name for ctor in data_decl.constructors):
+                        if any(
+                            ctor.name == constructor_name
+                            for ctor in data_decl.constructors
+                        ):
                             return TypeCon(data_type_name)
                 return None
             case SymbolicOperation(operator=operator, operands=operands):
@@ -640,24 +696,26 @@ class systemoCompiler:
     def _resolve_function_call(self, func_name: str, args: List[Expression]) -> str:
         """Resolve function call to the appropriate monomorphized version."""
         # Check if this is a primitive function - don't monomorphize these
-        if func_name.startswith("prim") or func_name in ["error", "putStr"]:
+        if func_name.startswith("prim"):
             return func_name
-        
+
         if func_name not in self.functions:
             # Unknown function, use default naming
             prefixed_name = self._prefix_name(func_name)
             print(f"DEBUG: Unknown function '{func_name}', using '{prefixed_name}'")
             return prefixed_name
-        
+
         func_info = self.functions[func_name]
-        
+
         # Infer argument types
         arg_types = [self._infer_expression_type(arg) for arg in args]
-        print(f"DEBUG: Resolving '{func_name}' with inferred arg types: {[str(t) if t else 'None' for t in arg_types]}")
-        
+        print(
+            f"DEBUG: Resolving '{func_name}' with inferred arg types: {[str(t) if t else 'None' for t in arg_types]}"
+        )
+
         # Find best matching overload
         best_overload = func_info.find_best_overload(arg_types)
-        
+
         if best_overload and best_overload.monomorphized_name:
             print(f"DEBUG: Selected overload: {best_overload.monomorphized_name}")
             return best_overload.monomorphized_name
@@ -703,7 +761,9 @@ class systemoCompiler:
         # Group function definitions by name
         function_definitions: Dict[str, List[FunctionDefinition]] = {}
         # Group instance declarations by name and type for proper pattern matching
-        instance_groups: Dict[str, Dict[str, List[tuple]]] = {}  # name -> type_key -> [(func_def, type_info, monomorphized_name)]
+        instance_groups: Dict[str, Dict[str, List[tuple]]] = (
+            {}
+        )  # name -> type_key -> [(func_def, type_info, monomorphized_name)]
 
         for stmt in program.statements:
             match stmt:
@@ -713,23 +773,36 @@ class systemoCompiler:
                     if function_name not in function_definitions:
                         function_definitions[function_name] = []
                     function_definitions[function_name].append(stmt)
-                case InstanceDeclaration(instance_name=instance_name, function_definition=func_def, ty=instance_ty, type_signature=type_sig):
+                case InstanceDeclaration(
+                    instance_name=instance_name,
+                    function_definition=func_def,
+                    ty=instance_ty,
+                    type_signature=type_sig,
+                ):
                     # Group instance declarations by name and type
                     func_def.function_name = instance_name  # Ensure the name matches
-                    
+
                     # Use the type from the instance declaration
-                    type_info = instance_ty if instance_ty is not None else self._convert_type_expression_to_type(type_sig)
+                    type_info = (
+                        instance_ty
+                        if instance_ty is not None
+                        else self._convert_type_expression_to_type(type_sig)
+                    )
                     type_key = str(type_info) if type_info else "unknown"
-                    
+
                     # Create monomorphized name
-                    monomorphized_name = self._create_monomorphized_name(instance_name, type_info)
-                    
+                    monomorphized_name = self._create_monomorphized_name(
+                        instance_name, type_info
+                    )
+
                     # Group by name and type
                     if instance_name not in instance_groups:
                         instance_groups[instance_name] = {}
                     if type_key not in instance_groups[instance_name]:
                         instance_groups[instance_name][type_key] = []
-                    instance_groups[instance_name][type_key].append((func_def, type_info, monomorphized_name))
+                    instance_groups[instance_name][type_key].append(
+                        (func_def, type_info, monomorphized_name)
+                    )
                 case LetStatement(variable=variable, value=value):
                     prefixed_var = self._prefix_name(variable)
                     lines.append(
@@ -740,11 +813,36 @@ class systemoCompiler:
         for instance_name, type_groups in instance_groups.items():
             if instance_name not in self.functions:
                 self.functions[instance_name] = FunctionInfo()
-                
+
             for type_key, func_data_list in type_groups.items():
                 for func_def, type_info, monomorphized_name in func_data_list:
                     max_params = len(func_def.patterns) if func_def.patterns else 0
-                    self.functions[instance_name].add_overload(max_params, type_info, monomorphized_name)
+                    self.functions[instance_name].add_overload(
+                        max_params, type_info, monomorphized_name
+                    )
+
+        # First pass: Register all regular function definitions in the function registry
+        for func_name, definitions in function_definitions.items():
+            if func_name not in self.functions:
+                self.functions[func_name] = FunctionInfo()
+
+            # Group definitions by their type signature to create separate overloads
+            for func_def in definitions:
+                # Convert AST type to internal type if available
+                type_info = func_def.ty if func_def.ty else None
+
+                # Calculate arity
+                max_params = len(func_def.patterns) if func_def.patterns else 0
+
+                # Create monomorphized name
+                monomorphized_name = self._create_monomorphized_name(
+                    func_name, type_info
+                )
+
+                # Add overload
+                self.functions[func_name].add_overload(
+                    max_params, type_info, monomorphized_name
+                )
 
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
@@ -752,28 +850,41 @@ class systemoCompiler:
 
         # Generate instance declarations
         for instance_name, type_groups in instance_groups.items():
-            print(f"DEBUG: Generating instances for '{instance_name}' with {len(type_groups)} type groups")
+            print(
+                f"DEBUG: Generating instances for '{instance_name}' with {len(type_groups)} type groups"
+            )
             for type_key, func_data_list in type_groups.items():
                 print(f"  Type group '{type_key}' has {len(func_data_list)} functions")
                 # Extract the function definitions and type info
                 func_defs = []
                 type_info = None
                 monomorphized_name = None
-                
+
                 for func_def, t_info, m_name in func_data_list:
                     func_defs.append(func_def)
                     if type_info is None:
                         type_info = t_info
                         monomorphized_name = m_name
-                
+
                 # Function registry already updated in first pass
-                
+
                 # If multiple function definitions with the same type, use pattern matching
                 if len(func_defs) > 1:
-                    lines.append(self._compile_pattern_matching_function_with_custom_name(monomorphized_name or f"systemo_{instance_name}", instance_name, func_defs))
+                    lines.append(
+                        self._compile_pattern_matching_function_with_custom_name(
+                            monomorphized_name or f"systemo_{instance_name}",
+                            instance_name,
+                            func_defs,
+                        )
+                    )
                 else:
                     # Single function definition - use simple compilation
-                    lines.append(self._compile_simple_function(func_defs[0], monomorphized_name or f"systemo_{instance_name}"))
+                    lines.append(
+                        self._compile_simple_function(
+                            func_defs[0],
+                            monomorphized_name or f"systemo_{instance_name}",
+                        )
+                    )
 
         # Add main execution
         if "main" in function_definitions:
@@ -862,26 +973,26 @@ class systemoCompiler:
         """Compile function definitions, grouping by type signature for overloading."""
         # Group definitions by their type signature to create separate overloads
         type_groups: Dict[str, List[FunctionDefinition]] = {}
-        
+
         for func_def in definitions:
             # Convert AST type to internal type if available
             type_info = None
             if func_def.ty:
                 type_info = func_def.ty
-            
+
             # Use type signature as the key for grouping
             type_key = str(type_info) if type_info else "unknown"
             if type_key not in type_groups:
                 type_groups[type_key] = []
             type_groups[type_key].append(func_def)
-        
+
         # Generate code for each type group (each becomes a separate overload)
         compiled_functions = []
         for type_key, group_definitions in type_groups.items():
             compiled_functions.append(
                 self._compile_pattern_matching_function(func_name, group_definitions)
             )
-        
+
         return "\n\n".join(compiled_functions)
 
     def _compile_pattern_matching_function(
@@ -895,18 +1006,16 @@ class systemoCompiler:
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Store function information - use the type from the first definition
+        # Get function type from the first definition
         function_type = definitions[0].ty if definitions and definitions[0].ty else None
-        if func_name not in self.functions:
-            self.functions[func_name] = FunctionInfo()
-        
         monomorphized_name = self._create_monomorphized_name(func_name, function_type)
-        self.functions[func_name].add_overload(max_params, function_type, monomorphized_name)
 
         if len(definitions) == 1:
             # Single definition - use simple compilation if it doesn't have complex patterns
             func_def = definitions[0]
-            if len(func_def.patterns) <= 1 or all(isinstance(p, VariablePattern) for p in func_def.patterns):
+            if len(func_def.patterns) <= 1 or all(
+                isinstance(p, VariablePattern) for p in func_def.patterns
+            ):
                 return self._compile_simple_function(func_def, monomorphized_name)
 
         # Get return type hint from the first function definition
@@ -1236,9 +1345,7 @@ class systemoCompiler:
             # Show all arguments in error message
             arg_names = ", ".join([f"arg_{i}" for i in range(max_params)])
             if max_params == 0:
-                error_msg = (
-                    f"raise ValueError('No matching pattern for {custom_name}')"
-                )
+                error_msg = f"raise ValueError('No matching pattern for {custom_name}')"
             elif max_params == 1:
                 error_msg = f"raise ValueError(f'No matching pattern for {custom_name} with args: {{arg_0}}')"
             else:
@@ -1274,10 +1381,12 @@ class systemoCompiler:
             # Extract parameter types from function type chain
             current_type = func_def.ty
             while isinstance(current_type, FunctionType):
-                param_type_hints.append(self._systemo_type_to_python_hint(current_type.param))
+                param_type_hints.append(
+                    self._systemo_type_to_python_hint(current_type.param)
+                )
                 current_type = current_type.result
             return_type_hint = self._systemo_type_to_python_hint(current_type)
-        
+
         # Ensure we have at least as many type hints as patterns
         while len(param_type_hints) < len(func_def.patterns):
             param_type_hints.append("Any")
@@ -1297,7 +1406,7 @@ class systemoCompiler:
             # Single parameter function
             pattern = func_def.patterns[0]
             param_type_hint = param_type_hints[0] if param_type_hints else "Any"
-            
+
             match pattern:
                 case VariablePattern(name=name):
                     # Check if the body is a do block with multiple statements
@@ -1323,13 +1432,15 @@ class systemoCompiler:
             # Multiple parameter function - handle all patterns as parameters
             param_list = []
             for i, pattern in enumerate(func_def.patterns):
-                param_type_hint = param_type_hints[i] if i < len(param_type_hints) else "Any"
+                param_type_hint = (
+                    param_type_hints[i] if i < len(param_type_hints) else "Any"
+                )
                 match pattern:
                     case VariablePattern(name=name):
                         param_list.append(f"{name}: {param_type_hint}")
                     case _:
                         param_list.append(f"arg_{i}: {param_type_hint}")
-            
+
             # Check if the body is a do block with multiple statements
             match func_def.body:
                 case DoBlock(statements=statements) if len(statements) > 1:
