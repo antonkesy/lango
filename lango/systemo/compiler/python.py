@@ -129,11 +129,30 @@ class FunctionInfo:
 
     def _type_compatible(self, expected: Type, actual: Type) -> bool:
         """Check if actual type is compatible with expected type."""
-        # Simple equality check for now - can be enhanced for subtyping
+        # Handle tuple type compatibility
+        if isinstance(actual, TypeCon) and actual.name.startswith("Tuple"):
+            # Check if expected is a nested tuple TypeApp structure
+            if isinstance(expected, TypeApp):
+                # Extract the base tuple constructor from nested structure
+                base_constructor = self._extract_tuple_base(expected)
+                if (isinstance(base_constructor, TypeCon) and 
+                    base_constructor.name.startswith("Tuple")):
+                    return actual.name == base_constructor.name
+            elif isinstance(expected, TypeCon) and expected.name.startswith("Tuple"):
+                return actual.name == expected.name
+        
+        # Simple equality check for non-tuple types
         if isinstance(expected, TypeCon) and isinstance(actual, TypeCon):
             return expected.name == actual.name
         # Add more sophisticated type checking as needed
         return True
+
+    def _extract_tuple_base(self, type_app: Type) -> Optional[Type]:
+        """Extract the base tuple constructor from a nested TypeApp structure."""
+        current = type_app
+        while isinstance(current, TypeApp):
+            current = current.constructor
+        return current
 
     @property
     def arity(self) -> int:
@@ -1510,6 +1529,13 @@ class systemoCompiler:
                     lines.append(
                         f"    {prefixed_var} = {self._compile_expression(value)}",
                     )
+                    # Track the variable type for tuple resolution
+                    inferred_type = self._infer_expression_type(value)
+                    if inferred_type:
+                        # Store both prefixed and original variable names for lookup
+                        self.variable_types[variable] = inferred_type
+                        self.variable_types[prefixed_var] = inferred_type
+                        print(f"DEBUG: Tracked variable '{variable}' (prefixed: '{prefixed_var}') with type: {inferred_type}")
                 case _ if is_expression(stmt):
                     # Handle expression statements (like putStr calls)
                     lines.append(f"    {self._compile_expression_safe(stmt)}")
@@ -1524,6 +1550,13 @@ class systemoCompiler:
                 lines.append(
                     f"    {prefixed_var} = {self._compile_expression(value)}",
                 )
+                # Track the variable type for tuple resolution
+                inferred_type = self._infer_expression_type(value)
+                if inferred_type:
+                    # Store both prefixed and original variable names for lookup
+                    self.variable_types[variable] = inferred_type
+                    self.variable_types[prefixed_var] = inferred_type
+                    print(f"DEBUG: Tracked variable '{variable}' (prefixed: '{prefixed_var}') with type: {inferred_type}")
                 lines.append(f"    return {prefixed_var}")
             case _ if is_expression(last_stmt):
                 lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
@@ -1920,6 +1953,7 @@ class systemoCompiler:
             return f"{resolved_name}({', '.join(compiled_operands)})"
 
     def _compile_do_block(self, do_block: DoBlock) -> str:
+        print(f"DEBUG: _compile_do_block called with {len(do_block.statements)} statements")
         # For single statements, we can still inline them
         if len(do_block.statements) == 1:
             stmt = do_block.statements[0]
@@ -1941,6 +1975,13 @@ class systemoCompiler:
                     parts.append(
                         f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
                     )
+                    # Track the variable type for tuple resolution
+                    inferred_type = self._infer_expression_type(value)
+                    if inferred_type:
+                        # Store both prefixed and original variable names for lookup
+                        self.variable_types[variable] = inferred_type
+                        self.variable_types[prefixed_var] = inferred_type
+                        print(f"DEBUG: Tracked variable '{variable}' (prefixed: '{prefixed_var}') with type: {inferred_type}")
                 case _ if is_expression(stmt):
                     parts.append(self._compile_expression_safe(stmt))
                 case _:
@@ -1952,6 +1993,13 @@ class systemoCompiler:
             case LetStatement(variable=variable, value=value):
                 prefixed_var = self._prefix_name(variable)
                 final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
+                # Track the variable type for tuple resolution
+                inferred_type = self._infer_expression_type(value)
+                if inferred_type:
+                    # Store both prefixed and original variable names for lookup
+                    self.variable_types[variable] = inferred_type
+                    self.variable_types[prefixed_var] = inferred_type
+                    print(f"DEBUG: Tracked variable '{variable}' (prefixed: '{prefixed_var}') with type: {inferred_type}")
             case _ if is_expression(last_stmt):
                 final_expr = self._compile_expression_safe(last_stmt)
             case _:
