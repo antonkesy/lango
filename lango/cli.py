@@ -35,8 +35,10 @@ def parse(
     match lang:
         case "systemo":
             ast = systemo_parse(input_file)
+            systemo_type_check(ast)
         case "minio":
             ast = minio_parse(input_file)
+            minio_type_check(ast)
         case _:
             console.print(f"Unknown language: {lang}", style="bold red")
             return 1
