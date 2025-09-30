@@ -1,5 +1,5 @@
-from lango.minio.ast.nodes import Program
 from lango.minio.typechecker.infer import type_check_ast as type_check_ast_impl
+from lango.shared.ast.nodes import Program
 from lango.shared.typechecker.lango_types import normalize_type_scheme
 
 

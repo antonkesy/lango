@@ -1,8 +1,8 @@
 from collections import defaultdict
 from pathlib import Path
 
+from lango.shared.ast.nodes import FunctionDefinition, Program
 from lango.shared.parser import parse_lark
-from lango.systemo.ast.nodes import FunctionDefinition, Program
 from lango.systemo.ast.precedence_rewriter import rewrite_precedence
 from lango.systemo.ast.transformer import transform_parse_tree
 

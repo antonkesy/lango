@@ -1,8 +1,8 @@
 from collections import defaultdict
 from pathlib import Path
 
-from lango.minio.ast.nodes import FunctionDefinition, Program
 from lango.minio.ast.transformer import transform_parse_tree
+from lango.shared.ast.nodes import FunctionDefinition, Program
 from lango.shared.parser import parse_lark
 
 

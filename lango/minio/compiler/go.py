@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set
 
-from lango.minio.ast.nodes import (
+from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
@@ -49,7 +49,7 @@ from lango.minio.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
-    is_expression,
+    is_minio_expression,
 )
 from lango.shared.typechecker.lango_types import (
     DataType,
@@ -1272,7 +1272,7 @@ class MinioGoCompiler:
                     lines.append(
                         f"\t_ = {prefixed_var}",
                     )  # This suppresses unused variable warnings
-                case _ if is_expression(stmt):
+                case _ if is_minio_expression(stmt):
                     lines.append(f"\t{self._compile_expression(stmt)}")  # type: ignore
 
         # Handle the last statement (which becomes the return value)
@@ -1282,7 +1282,7 @@ class MinioGoCompiler:
                 prefixed_var = self._prefix_name(variable)
                 lines.append(f"\t{prefixed_var} := {self._compile_expression(value)}")
                 lines.append(f"\treturn {prefixed_var}")
-            case _ if is_expression(last_stmt):
+            case _ if is_minio_expression(last_stmt):
                 # Check if it's a statement that doesn't return a value (like putStr)
                 expr_str = self._compile_expression(last_stmt)  # type: ignore
                 if "minioPutStr(" in expr_str:

@@ -1,5 +1,5 @@
+from lango.shared.ast.nodes import Program
 from lango.shared.typechecker.lango_types import TypeScheme, normalize_type_scheme
-from lango.systemo.ast.nodes import Program
 from lango.systemo.typechecker.infer import TypeInferrer
 from lango.systemo.typechecker.infer import type_check_ast as type_check_ast_impl
 

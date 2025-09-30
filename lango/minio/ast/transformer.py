@@ -2,7 +2,7 @@ from typing import Any, List, Union
 
 from lark import Token, Transformer, Tree
 
-from lango.minio.ast.nodes import (
+from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     ArrowType,

@@ -1,6 +1,6 @@
 from typing import Dict
 
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import (
     BoolLiteral,
     Constructor,
     DataDeclaration,

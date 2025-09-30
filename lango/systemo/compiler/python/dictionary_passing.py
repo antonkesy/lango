@@ -2,27 +2,7 @@ import hashlib
 import re
 from typing import Any, Dict, List, Optional, Set
 
-from lango.shared.compiler.python import (
-    build_cons_pattern_match,
-    build_list_pattern_match,
-    build_literal_pattern_match,
-    build_multi_arg_pattern_match,
-    build_positional_pattern_match,
-    build_record_pattern_match,
-    build_simple_pattern_match,
-    build_tuple_pattern_match,
-    compile_literal_value,
-)
-from lango.shared.typechecker.lango_types import (
-    DataType,
-    FunctionType,
-    TupleType,
-    Type,
-    TypeApp,
-    TypeCon,
-    TypeVar,
-)
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import (
     ArrowType,
     BoolLiteral,
     CharLiteral,
@@ -60,7 +40,27 @@ from lango.systemo.ast.nodes import (
     TypeVariable,
     Variable,
     VariablePattern,
-    is_expression,
+    is_systemo_expression,
+)
+from lango.shared.compiler.python import (
+    build_cons_pattern_match,
+    build_list_pattern_match,
+    build_literal_pattern_match,
+    build_multi_arg_pattern_match,
+    build_positional_pattern_match,
+    build_record_pattern_match,
+    build_simple_pattern_match,
+    build_tuple_pattern_match,
+    compile_literal_value,
+)
+from lango.shared.typechecker.lango_types import (
+    DataType,
+    FunctionType,
+    TupleType,
+    Type,
+    TypeApp,
+    TypeCon,
+    TypeVar,
 )
 
 
@@ -322,8 +322,6 @@ class SystemoCompiler:
         expr: Any,
         substitutions: dict,
     ) -> str:
-        from lango.systemo.ast.nodes import FunctionApplication, Variable
-
         if isinstance(expr, Variable):
             if expr.name in substitutions and substitutions[expr.name]:
                 return substitutions[expr.name]
@@ -367,12 +365,6 @@ class SystemoCompiler:
                 self.local_variables = old_local_vars
 
     def _substitute_variables_in_ast(self, expr: Any, substitutions: dict) -> Any:
-        from lango.systemo.ast.nodes import (
-            FunctionApplication,
-            SymbolicOperation,
-            Variable,
-        )
-
         if isinstance(expr, Variable):
             if expr.name in substitutions:
                 # Create a new Variable node with the substituted name
@@ -449,12 +441,6 @@ class SystemoCompiler:
             return None
 
     def _generate_pattern_matching_lambda(self, pattern_cases: List) -> str:
-        from lango.systemo.ast.nodes import (
-            ConstructorPattern,
-            LiteralPattern,
-            VariablePattern,
-        )
-
         # Start building the lambda
         lambda_body_parts = []
         default_case = None
@@ -540,12 +526,6 @@ class SystemoCompiler:
         return "lambda arg: None"  # Fallback
 
     def _generate_binary_pattern_matching_lambda(self, pattern_cases: List) -> str:
-        from lango.systemo.ast.nodes import (
-            ConstructorPattern,
-            LiteralPattern,
-            VariablePattern,
-        )
-
         # For now, handle simple variable patterns in binary operations
         # More complex pattern matching can be added later
         if len(pattern_cases) == 1:
@@ -2474,17 +2454,6 @@ class SystemoCompiler:
         if hasattr(operand, "ty") and operand.ty:
             return self._type_expression_to_string(operand.ty)
 
-        # Try to infer from literal values
-        from lango.systemo.ast.nodes import (
-            BoolLiteral,
-            CharLiteral,
-            FloatLiteral,
-            IntLiteral,
-            NegativeFloat,
-            NegativeInt,
-            StringLiteral,
-        )
-
         if isinstance(operand, (IntLiteral, NegativeInt)):
             return "Int"
         elif isinstance(operand, (FloatLiteral, NegativeFloat)):
@@ -2939,7 +2908,7 @@ class SystemoCompiler:
             return final_expr
 
     def _is_expression(self, stmt: Any) -> bool:
-        return is_expression(stmt)
+        return is_systemo_expression(stmt)
 
     def _compile_expression_safe(self, stmt: Any) -> str:
         return self._compile_expression(stmt)
@@ -3137,7 +3106,6 @@ class SystemoCompiler:
         if function_name == "show" and len(args) == 1:
             arg = args[0]
             if hasattr(arg, "ty") and hasattr(arg.ty, "__class__"):
-                from lango.systemo.ast.nodes import TupleType
 
                 if isinstance(arg.ty, TupleType):
                     # Generate specialized tuple show function name
@@ -3657,8 +3625,6 @@ class SystemoCompiler:
                 return "Unknown"
 
     def _extract_tuple_length(self, type_signature: Any) -> Optional[int]:
-        from lango.systemo.ast.nodes import ArrowType, TupleType
-
         if isinstance(type_signature, ArrowType):
             # For ArrowType, check the from_type
             from_type = type_signature.from_type
@@ -3671,15 +3637,6 @@ class SystemoCompiler:
         return None
 
     def _compile_pattern_condition(self, pattern: Any, arg_name: str) -> str:
-        from lango.systemo.ast.nodes import (
-            ConsPattern,
-            ConstructorPattern,
-            ListPattern,
-            LiteralPattern,
-            TuplePattern,
-            VariablePattern,
-        )
-
         if isinstance(pattern, LiteralPattern):
             # Check if argument equals the literal value
             return f"{arg_name} == {self._compile_literal(pattern.value)}"
@@ -3715,15 +3672,6 @@ class SystemoCompiler:
             return "True"
 
     def _compile_pattern_bindings(self, pattern: Any, arg_name: str) -> List[str]:
-        from lango.systemo.ast.nodes import (
-            ConsPattern,
-            ConstructorPattern,
-            ListPattern,
-            LiteralPattern,
-            TuplePattern,
-            VariablePattern,
-        )
-
         bindings = []
 
         if isinstance(pattern, VariablePattern):
@@ -3802,12 +3750,10 @@ class SystemoCompiler:
 
             case DoBlock(statements=stmts):
                 for stmt in stmts:
-                    from lango.systemo.ast.nodes import LetStatement
-
                     if isinstance(stmt, LetStatement):
                         self._collect_concrete_polymorphic_instantiations(stmt.value)
                     # Skip non-expression statements
-                    elif isinstance(
+                    elif isinstance(  # TODO: replace with is_expression
                         stmt,
                         (
                             IntLiteral,

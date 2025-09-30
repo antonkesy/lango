@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import (
     ArrowType,
     BoolLiteral,
     CharLiteral,
@@ -43,9 +43,8 @@ from lango.systemo.ast.nodes import (
     TypeExpression,
     TypeVariable,
     Variable,
+    VariablePattern,
 )
-from lango.systemo.ast.nodes import VariablePattern
-from lango.systemo.ast.nodes import VariablePattern as VP
 from lango.systemo.typechecker.typecheck import type_check
 
 # Type aliases for the interpreter

@@ -1,5 +1,19 @@
 from typing import Dict, Optional
 
+from lango.shared.ast.nodes import (
+    ArrowType,
+    FunctionDefinition,
+    GroupedType,
+    InstanceDeclaration,
+    ListType,
+    Program,
+)
+from lango.shared.ast.nodes import TupleType as ASTTupleType
+from lango.shared.ast.nodes import (
+    TypeApplication,
+    TypeConstructor,
+    TypeVariable,
+)
 from lango.shared.typechecker.lango_types import (
     DataType,
     FunctionType,
@@ -8,20 +22,6 @@ from lango.shared.typechecker.lango_types import (
     TypeApp,
     TypeCon,
     TypeVar,
-)
-from lango.systemo.ast.nodes import (
-    ArrowType,
-    FunctionDefinition,
-    GroupedType,
-    InstanceDeclaration,
-    ListType,
-    Program,
-)
-from lango.systemo.ast.nodes import TupleType as ASTTupleType
-from lango.systemo.ast.nodes import (
-    TypeApplication,
-    TypeConstructor,
-    TypeVariable,
 )
 
 

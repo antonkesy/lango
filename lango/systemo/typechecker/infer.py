@@ -2,27 +2,7 @@ import re
 from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
-from lango.shared.typechecker.lango_types import (
-    BOOL_TYPE,
-    CHAR_TYPE,
-    FLOAT_TYPE,
-    INT_TYPE,
-    STRING_TYPE,
-    UNIT_TYPE,
-    DataType,
-    FreshVarGenerator,
-    FunctionType,
-    TupleType,
-    Type,
-    TypeApp,
-    TypeCon,
-    TypeScheme,
-    TypeSubstitution,
-    TypeVar,
-    generalize,
-)
-from lango.shared.typechecker.unify import UnificationError, unify_one
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import (
     ArrowType,
     Associativity,
     ASTNode,
@@ -59,8 +39,8 @@ from lango.systemo.ast.nodes import (
     TupleLiteral,
     TuplePattern,
 )
-from lango.systemo.ast.nodes import TupleType as ASTTupleType
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import TupleType as ASTTupleType
+from lango.shared.ast.nodes import (
     TypeApplication,
     TypeConstructor,
     TypeExpression,
@@ -68,6 +48,26 @@ from lango.systemo.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.shared.typechecker.lango_types import (
+    BOOL_TYPE,
+    CHAR_TYPE,
+    FLOAT_TYPE,
+    INT_TYPE,
+    STRING_TYPE,
+    UNIT_TYPE,
+    DataType,
+    FreshVarGenerator,
+    FunctionType,
+    TupleType,
+    Type,
+    TypeApp,
+    TypeCon,
+    TypeScheme,
+    TypeSubstitution,
+    TypeVar,
+    generalize,
+)
+from lango.shared.typechecker.unify import UnificationError, unify_one
 
 TypeBindings = Dict[str, TypeScheme]
 InferenceResult = Tuple[Type, TypeSubstitution]

@@ -1,6 +1,6 @@
 from typing import Dict
 
-from lango.minio.ast.nodes import (
+from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,

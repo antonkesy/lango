@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import (
     Associativity,
     BoolLiteral,
     Constructor,

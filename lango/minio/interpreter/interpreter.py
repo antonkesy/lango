@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from lango.minio.ast.nodes import (
+from lango.minio.typechecker.typecheck import type_check
+from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
@@ -52,7 +53,6 @@ from lango.minio.ast.nodes import (
     Variable,
     VariablePattern,
 )
-from lango.minio.typechecker.typecheck import type_check
 
 # Type aliases for the interpreter
 Value = Any  # Any runtime value

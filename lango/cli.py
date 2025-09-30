@@ -5,14 +5,14 @@ from typing import Any, Union
 import typer
 from rich.console import Console
 
-from lango.minio.ast.nodes import Program as MinioProgram
 from lango.minio.compiler.go import compile_program as minio_go_compile_program
 from lango.minio.compiler.python import compile_program as minio_python_compile_program
 from lango.minio.interpreter.interpreter import interpret as minio_interpret
 from lango.minio.parser.parser import parse as minio_parse
 from lango.minio.typechecker.typecheck import get_type_str as minio_get_type_str
 from lango.minio.typechecker.typecheck import type_check as minio_type_check
-from lango.systemo.ast.nodes import Program as SystemoProgram
+from lango.shared.ast.nodes import Program as MinioProgram
+from lango.shared.ast.nodes import Program as SystemoProgram
 from lango.systemo.compiler.python.dictionary_passing import (
     compile_program as systemo_python_dp_compile_program,
 )

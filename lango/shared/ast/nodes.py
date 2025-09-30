@@ -6,12 +6,6 @@ from typing import Any, List, Optional, Union
 from lango.shared.typechecker.lango_types import Type
 
 
-class Associativity(Enum):
-    LEFT = "left"
-    RIGHT = "right"
-    NONE = "none"
-
-
 @dataclass
 class ASTNode(ABC):
     pass
@@ -71,11 +65,127 @@ class Constructor(ASTNode):
     ty: Optional[Type] = None
 
 
-# Generic Symbolic Operations
 @dataclass
-class SymbolicOperation(ASTNode):
-    operator: str  # The operator symbol, e.g., "+", "(@)", "(?)", etc.
-    operands: List["Expression"]  # List of operands (1 for unary, 2 for binary)
+class AddOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class SubOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class MulOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class DivOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class PowIntOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class PowFloatOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class EqualOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class NotEqualOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class LessThanOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class LessEqualOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class GreaterThanOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class GreaterEqualOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class AndOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class OrOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class NotOperation(ASTNode):
+    operand: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class NegOperation(ASTNode):
+    operand: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class ConcatOperation(ASTNode):
+    left: "Expression"
+    right: "Expression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class IndexOperation(ASTNode):
+    list_expr: "Expression"
+    index_expr: "Expression"
     ty: Optional[Type] = None
 
 
@@ -100,7 +210,6 @@ class LetStatement(ASTNode):
     ty: Optional[Type] = None
 
 
-# Function Application
 @dataclass
 class FunctionApplication(ASTNode):
     function: "Expression"
@@ -108,7 +217,6 @@ class FunctionApplication(ASTNode):
     ty: Optional[Type] = None
 
 
-# Constructor Expressions
 @dataclass
 class FieldAssignment(ASTNode):
     field_name: str
@@ -123,14 +231,12 @@ class ConstructorExpression(ASTNode):
     ty: Optional[Type] = None
 
 
-# Grouping
 @dataclass
 class GroupedExpression(ASTNode):
     expression: "Expression"
     ty: Optional[Type] = None
 
 
-# Negative numbers
 @dataclass
 class NegativeInt(ASTNode):
     value: int
@@ -143,7 +249,6 @@ class NegativeFloat(ASTNode):
     ty: Optional[Type] = None
 
 
-# Type System
 @dataclass
 class TypeConstructor(ASTNode):
     name: str
@@ -177,18 +282,11 @@ class GroupedType(ASTNode):
 
 
 @dataclass
-class ListType(ASTNode):
-    element_type: "TypeExpression"
-    ty: Optional[Type] = None
-
-
-@dataclass
 class TupleType(ASTNode):
     element_types: List["TypeExpression"]
     ty: Optional[Type] = None
 
 
-# Patterns
 @dataclass
 class ConstructorPattern(ASTNode):
     constructor: str
@@ -200,12 +298,6 @@ class ConstructorPattern(ASTNode):
 class ConsPattern(ASTNode):
     head: "Pattern"
     tail: "Pattern"
-    ty: Optional[Type] = None
-
-
-@dataclass
-class TuplePattern(ASTNode):
-    patterns: List["Pattern"]
     ty: Optional[Type] = None
 
 
@@ -222,12 +314,6 @@ class LiteralPattern(ASTNode):
 
 
 @dataclass
-class ListPattern(ASTNode):
-    patterns: List["Pattern"]
-    ty: Optional[Type] = None
-
-
-@dataclass
 class NegativeIntPattern(ASTNode):
     value: int
     ty: Optional[Type] = None
@@ -239,7 +325,18 @@ class NegativeFloatPattern(ASTNode):
     ty: Optional[Type] = None
 
 
-# Top-level Declarations
+@dataclass
+class TuplePattern(ASTNode):
+    patterns: List["Pattern"]
+    ty: Optional[Type] = None
+
+
+@dataclass
+class ListPattern(ASTNode):
+    patterns: List["Pattern"]
+    ty: Optional[Type] = None
+
+
 @dataclass
 class TypeParameter(ASTNode):
     name: str
@@ -262,7 +359,6 @@ class RecordConstructor(ASTNode):
 @dataclass
 class DataConstructor(ASTNode):
     name: str
-    # Either record_constructor or list of type atoms
     record_constructor: Optional[RecordConstructor] = None
     type_atoms: Optional[List["TypeExpression"]] = None
     ty: Optional[Type] = None
@@ -285,6 +381,70 @@ class FunctionDefinition(ASTNode):
 
 
 @dataclass
+class Program(ASTNode):
+    statements: List["Statement"]
+    ty: Optional[Type] = None
+
+
+def is_minio_expression(stmt: Any) -> bool:
+    match stmt:
+        case (
+            IntLiteral()
+            | FloatLiteral()
+            | StringLiteral()
+            | CharLiteral()
+            | BoolLiteral()
+            | ListLiteral()
+            | Variable()
+            | Constructor()
+            | AddOperation()
+            | SubOperation()
+            | MulOperation()
+            | DivOperation()
+            | EqualOperation()
+            | NotEqualOperation()
+            | LessThanOperation()
+            | LessEqualOperation()
+            | GreaterThanOperation()
+            | GreaterEqualOperation()
+            | ConcatOperation()
+            | AndOperation()
+            | OrOperation()
+            | NotOperation()
+            | NegOperation()
+            | IndexOperation()
+            | IfElse()
+            | FunctionApplication()
+            | ConstructorExpression()
+            | DoBlock()
+            | GroupedExpression()
+        ):
+            return True
+        case _:
+            return False
+
+
+# SystemO
+class Associativity(Enum):
+    LEFT = "left"
+    RIGHT = "right"
+    NONE = "none"
+
+
+@dataclass
+class SymbolicOperation(ASTNode):
+    operator: str
+    operands: List["Expression"]  # List of operands (1 for unary, 2 for binary)
+    ty: Optional[Type] = None
+
+
+@dataclass
+class ListType(ASTNode):
+    element_type: "TypeExpression"
+    ty: Optional[Type] = None
+
+
+@dataclass
 class InstanceDeclaration(ASTNode):
     instance_name: str
     type_signature: "TypeExpression"
@@ -297,12 +457,6 @@ class PrecedenceDeclaration(ASTNode):
     precedence: int
     associativity: Associativity
     operator: str
-    ty: Optional[Type] = None
-
-
-@dataclass
-class Program(ASTNode):
-    statements: List["Statement"]
     ty: Optional[Type] = None
 
 
@@ -357,7 +511,7 @@ type Statement = Union[
 ]
 
 
-def is_expression(stmt: Any) -> bool:
+def is_systemo_expression(stmt: Any) -> bool:
     match stmt:
         case (
             IntLiteral()

@@ -2,27 +2,7 @@ import hashlib
 import re
 from typing import Any, Dict, List, Optional, Set
 
-from lango.shared.compiler.python import (
-    build_cons_pattern_match,
-    build_list_pattern_match,
-    build_literal_pattern_match,
-    build_multi_arg_pattern_match,
-    build_positional_pattern_match,
-    build_record_pattern_match,
-    build_simple_pattern_match,
-    build_tuple_pattern_match,
-    compile_literal_value,
-)
-from lango.shared.typechecker.lango_types import (
-    DataType,
-    FunctionType,
-    TupleType,
-    Type,
-    TypeApp,
-    TypeCon,
-    TypeVar,
-)
-from lango.systemo.ast.nodes import (
+from lango.shared.ast.nodes import (
     ArrowType,
     BoolLiteral,
     CharLiteral,
@@ -54,13 +34,29 @@ from lango.systemo.ast.nodes import (
     TupleLiteral,
     TuplePattern,
     TupleType,
-    TypeApplication,
-    TypeConstructor,
-    TypeExpression,
-    TypeVariable,
     Variable,
     VariablePattern,
-    is_expression,
+    is_systemo_expression,
+)
+from lango.shared.compiler.python import (
+    build_cons_pattern_match,
+    build_list_pattern_match,
+    build_literal_pattern_match,
+    build_multi_arg_pattern_match,
+    build_positional_pattern_match,
+    build_record_pattern_match,
+    build_simple_pattern_match,
+    build_tuple_pattern_match,
+    compile_literal_value,
+)
+from lango.shared.typechecker.lango_types import (
+    DataType,
+    FunctionType,
+    TupleType,
+    Type,
+    TypeApp,
+    TypeCon,
+    TypeVar,
 )
 
 
@@ -2268,7 +2264,7 @@ class SystemoCompiler:
             return final_expr
 
     def _is_expression(self, stmt: Any) -> bool:
-        return is_expression(stmt)
+        return is_systemo_expression(stmt)
 
     def _compile_expression_safe(self, stmt: Any) -> str:
         return self._compile_expression(stmt)
@@ -2984,8 +2980,6 @@ class SystemoCompiler:
                 return "Unknown"
 
     def _extract_tuple_length(self, type_signature: Any) -> Optional[int]:
-        from lango.systemo.ast.nodes import ArrowType, TupleType
-
         if isinstance(type_signature, ArrowType):
             # For ArrowType, check the from_type
             from_type = type_signature.from_type
@@ -2998,15 +2992,6 @@ class SystemoCompiler:
         return None
 
     def _compile_pattern_condition(self, pattern: Any, arg_name: str) -> str:
-        from lango.systemo.ast.nodes import (
-            ConsPattern,
-            ConstructorPattern,
-            ListPattern,
-            LiteralPattern,
-            TuplePattern,
-            VariablePattern,
-        )
-
         if isinstance(pattern, LiteralPattern):
             # Check if argument equals the literal value
             return f"{arg_name} == {self._compile_literal(pattern.value)}"
@@ -3042,15 +3027,6 @@ class SystemoCompiler:
             return "True"
 
     def _compile_pattern_bindings(self, pattern: Any, arg_name: str) -> List[str]:
-        from lango.systemo.ast.nodes import (
-            ConsPattern,
-            ConstructorPattern,
-            ListPattern,
-            LiteralPattern,
-            TuplePattern,
-            VariablePattern,
-        )
-
         bindings = []
 
         if isinstance(pattern, VariablePattern):

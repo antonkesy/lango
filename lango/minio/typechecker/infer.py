@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
-from lango.minio.ast.nodes import (
+from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     ArrowType,

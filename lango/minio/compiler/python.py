@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
-from lango.minio.ast.nodes import (
+from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     BoolLiteral,
@@ -49,7 +49,7 @@ from lango.minio.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
-    is_expression,
+    is_minio_expression,
 )
 from lango.shared.compiler.python import (
     build_cons_pattern_match,
@@ -615,7 +615,7 @@ class MinioCompiler:
                     lines.append(
                         f"    {prefixed_var} = {self._compile_expression(value)}",
                     )
-                case _ if is_expression(stmt):
+                case _ if is_minio_expression(stmt):
                     # Handle expression statements (like putStr calls)
                     lines.append(f"    {self._compile_expression_safe(stmt)}")
                 case _:
@@ -630,7 +630,7 @@ class MinioCompiler:
                     f"    {prefixed_var} = {self._compile_expression(value)}",
                 )
                 lines.append(f"    return {prefixed_var}")
-            case _ if is_expression(last_stmt):
+            case _ if is_minio_expression(last_stmt):
                 lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
             case _:
                 lines.append("    return None")
@@ -1040,7 +1040,7 @@ class MinioCompiler:
             match stmt:
                 case LetStatement(value=value):
                     return f"(lambda: {self._compile_expression(value)})()"
-                case _ if is_expression(stmt):
+                case _ if is_minio_expression(stmt):
                     return self._compile_expression_safe(stmt)
                 case _:
                     return "None"
@@ -1055,7 +1055,7 @@ class MinioCompiler:
                     parts.append(
                         f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
                     )
-                case _ if is_expression(stmt):
+                case _ if is_minio_expression(stmt):
                     parts.append(self._compile_expression_safe(stmt))
                 case _:
                     pass
@@ -1066,7 +1066,7 @@ class MinioCompiler:
             case LetStatement(variable=variable, value=value):
                 prefixed_var = self._prefix_name(variable)
                 final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
-            case _ if is_expression(last_stmt):
+            case _ if is_minio_expression(last_stmt):
                 final_expr = self._compile_expression_safe(last_stmt)
             case _:
                 final_expr = "None"
@@ -1077,7 +1077,7 @@ class MinioCompiler:
             return final_expr
 
     def _compile_expression_safe(self, stmt: Any) -> str:
-        return self._compile_expression(stmt) if is_expression(stmt) else "None"
+        return self._compile_expression(stmt) if is_minio_expression(stmt) else "None"
 
 
 def compile_program(program: Program) -> str:
