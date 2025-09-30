@@ -1312,70 +1312,60 @@ class SystemoCompiler:
             self._generated_monomorphic_arithmetic.extend(func_body)
             return
 
-        if param1_type == "Int" and param2_type == "Int" and result_type == "Int":
-            # Map operator names to primitive function names
-            prim_name_map = {
-                "plus": "Add",
-                "minus": "Sub",
-                "star": "Mul",
-                "slash": "Div",
-            }
-            prim_suffix = prim_name_map.get(safe_op_name, safe_op_name.capitalize())
-            prim_func = f"primInt{prim_suffix}"
-        elif (
-            param1_type == "Float" and param2_type == "Float" and result_type == "Float"
-        ):
-            # Map operator names to primitive function names
-            prim_name_map = {
-                "plus": "Add",
-                "minus": "Sub",
-                "star": "Mul",
-                "slash": "Div",
-            }
-            prim_suffix = prim_name_map.get(safe_op_name, safe_op_name.capitalize())
-            prim_func = f"primFloat{prim_suffix}"
-        elif param1_type == "Int" and param2_type == "Float" and result_type == "Float":
-            prim_name_map = {
-                "plus": "Add",
-                "minus": "Sub",
-                "star": "Mul",
-                "slash": "Div",
-            }
-            prim_suffix = prim_name_map.get(safe_op_name, safe_op_name.capitalize())
-            prim_func = f"primFloat{prim_suffix}"
-            func_body = [
-                f"def {func_name}(x, y):",
-                f"    return {prim_func}(float(x), y)",
-                "",
-            ]
-            self._generated_monomorphic_arithmetic.extend(func_body)
-            return
-        elif param1_type == "Float" and param2_type == "Int" and result_type == "Float":
-            prim_name_map = {
-                "plus": "Add",
-                "minus": "Sub",
-                "star": "Mul",
-                "slash": "Div",
-            }
-            prim_suffix = prim_name_map.get(safe_op_name, safe_op_name.capitalize())
-            prim_func = f"primFloat{prim_suffix}"
-            func_body = [
-                f"def {func_name}(x, y):",
-                f"    return {prim_func}(x, float(y))",
-                "",
-            ]
-            self._generated_monomorphic_arithmetic.extend(func_body)
-            return
-        else:
-            return  # Skip unsupported combinations
+        # Normalize operator names to dictionary keys (prelude uses add/sub/mul/div)
+        op_name_map = {
+            "plus": "add",
+            "minus": "sub",
+            "star": "mul",
+            "slash": "div",
+        }
+        dict_key = op_name_map.get(safe_op_name, safe_op_name)
 
-        # Standard case without coercion
-        func_body = [
-            f"def {func_name}(x, y):",
-            f"    return {prim_func}(x, y)",
-            "",
-        ]
-        self._generated_monomorphic_arithmetic.extend(func_body)
+        # Look up primitive implementation from the type dictionaries
+        # Prefer exact-type primitive functions (strings that reference prelude prims)
+        def lookup_prim(tname: str) -> Optional[str]:
+            ops = self.type_dictionaries.get(tname, {})
+            prim = ops.get(dict_key)
+            if isinstance(prim, str) and not prim.strip().startswith("lambda"):
+                return prim
+            return None
+
+        # Exact same-type case
+        prim_func = lookup_prim(param1_type)
+        if prim_func and param1_type == param2_type == result_type:
+            func_body = [
+                f"def {func_name}(x, y):",
+                f"    return {prim_func}(x, y)",
+                "",
+            ]
+            self._generated_monomorphic_arithmetic.extend(func_body)
+            return
+
+        # Coercion cases: Int->Float or Float->Int
+        if param1_type == "Int" and param2_type == "Float" and result_type == "Float":
+            prim_func = lookup_prim("Float")
+            if prim_func:
+                func_body = [
+                    f"def {func_name}(x, y):",
+                    f"    return {prim_func}(float(x), y)",
+                    "",
+                ]
+                self._generated_monomorphic_arithmetic.extend(func_body)
+                return
+
+        if param1_type == "Float" and param2_type == "Int" and result_type == "Float":
+            prim_func = lookup_prim("Float")
+            if prim_func:
+                func_body = [
+                    f"def {func_name}(x, y):",
+                    f"    return {prim_func}(x, float(y))",
+                    "",
+                ]
+                self._generated_monomorphic_arithmetic.extend(func_body)
+                return
+
+        # If we couldn't find a suitable primitive, skip
+        return
 
     def _ensure_arithmetic_monomorphic_functions(
         self,
@@ -1406,92 +1396,59 @@ class SystemoCompiler:
                 if not hasattr(self, "_generated_monomorphic_arithmetic"):
                     self._generated_monomorphic_arithmetic = []
 
-                if (
-                    param1_type == "Int"
-                    and param2_type == "Int"
-                    and result_type == "Int"
-                ):
-                    # Map operator names to primitive function names
-                    prim_name_map = {
-                        "plus": "Add",
-                        "minus": "Sub",
-                        "star": "Mul",
-                        "slash": "Div",
-                    }
-                    prim_suffix = prim_name_map.get(
-                        safe_op_name,
-                        safe_op_name.capitalize(),
-                    )
-                    prim_func = f"primInt{prim_suffix}"
+                # Normalize operator name to dictionary key
+                op_name_map = {
+                    "plus": "add",
+                    "minus": "sub",
+                    "star": "mul",
+                    "slash": "div",
+                }
+                dict_key = op_name_map.get(safe_op_name, safe_op_name)
+
+                def lookup_prim(tname: str) -> Optional[str]:
+                    ops = self.type_dictionaries.get(tname, {})
+                    prim = ops.get(dict_key)
+                    if isinstance(prim, str) and not prim.strip().startswith("lambda"):
+                        return prim
+                    return None
+
+                func_body = None
+
+                # Exact same-type case
+                prim_func = lookup_prim(param1_type)
+                if prim_func and param1_type == param2_type == result_type:
                     func_body = [
                         f"def {func_name}(x, y):",
                         f"    return {prim_func}(x, y)",
                         "",
                     ]
-                elif (
-                    param1_type == "Float"
-                    and param2_type == "Float"
-                    and result_type == "Float"
-                ):
-                    prim_name_map = {
-                        "plus": "Add",
-                        "minus": "Sub",
-                        "star": "Mul",
-                        "slash": "Div",
-                    }
-                    prim_suffix = prim_name_map.get(
-                        safe_op_name,
-                        safe_op_name.capitalize(),
-                    )
-                    prim_func = f"primFloat{prim_suffix}"
-                    func_body = [
-                        f"def {func_name}(x, y):",
-                        f"    return {prim_func}(x, y)",
-                        "",
-                    ]
+                # Coercion cases
                 elif (
                     param1_type == "Int"
                     and param2_type == "Float"
                     and result_type == "Float"
                 ):
-                    prim_name_map = {
-                        "plus": "Add",
-                        "minus": "Sub",
-                        "star": "Mul",
-                        "slash": "Div",
-                    }
-                    prim_suffix = prim_name_map.get(
-                        safe_op_name,
-                        safe_op_name.capitalize(),
-                    )
-                    prim_func = f"primFloat{prim_suffix}"
-                    func_body = [
-                        f"def {func_name}(x, y):",
-                        f"    return {prim_func}(float(x), y)",
-                        "",
-                    ]
+                    prim_func = lookup_prim("Float")
+                    if prim_func:
+                        func_body = [
+                            f"def {func_name}(x, y):",
+                            f"    return {prim_func}(float(x), y)",
+                            "",
+                        ]
                 elif (
                     param1_type == "Float"
                     and param2_type == "Int"
                     and result_type == "Float"
                 ):
-                    prim_name_map = {
-                        "plus": "Add",
-                        "minus": "Sub",
-                        "star": "Mul",
-                        "slash": "Div",
-                    }
-                    prim_suffix = prim_name_map.get(
-                        safe_op_name,
-                        safe_op_name.capitalize(),
-                    )
-                    prim_func = f"primFloat{prim_suffix}"
-                    func_body = [
-                        f"def {func_name}(x, y):",
-                        f"    return {prim_func}(x, float(y))",
-                        "",
-                    ]
-                else:
+                    prim_func = lookup_prim("Float")
+                    if prim_func:
+                        func_body = [
+                            f"def {func_name}(x, y):",
+                            f"    return {prim_func}(x, float(y))",
+                            "",
+                        ]
+
+                if not func_body:
                     continue  # Skip unsupported combinations
 
                 self._generated_monomorphic_arithmetic.extend(func_body)
