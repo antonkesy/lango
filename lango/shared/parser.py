@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Set
 
@@ -35,9 +36,8 @@ def parse_lark(
 
     with open(f"./build/main.{file_extension}", "w") as f:
         f.write(main_content + prelude_content)
-    # Prevent user files from redefining prelude symbols
-    import re
 
+    # Prevent user files from redefining prelude symbols
     def _extract_top_level_names(src: str) -> Set[str]:
         # Capture likely top-level symbol definitions.
         # This intentionally favors simple, conservative matching.

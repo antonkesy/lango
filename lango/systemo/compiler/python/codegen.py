@@ -67,6 +67,7 @@ from lango.systemo.typechecker.infer import (
     InstanceInfo,
     ParamEvidence,
     TypedProgram,
+    UseKind,
     infer_program,
     resolve_evidence,
 )
@@ -178,8 +179,7 @@ class Context:
     body_evidence: Dict[Tuple[str, str], Constraint] = field(default_factory=dict)
     # skolem type constructor -> quantified variable of the declared scheme
     skolem_vars: Dict[str, str] = field(default_factory=dict)
-    # the binding being defined and the Python expression for a recursive use
-    self_name: Optional[str] = None
+    # the Python expression for a recursive occurrence of the binding being defined
     self_expr: str = ""
     # constrained local lets in scope (monomorphization)
     local_lets: Dict[str, "LocalLet"] = field(default_factory=dict)
@@ -247,57 +247,47 @@ class CodeGenerator:
             )
         for decl in self.typed.decls:
             self.module.add("")
-            match decl:
-                case FunctionDecl():
-                    self.generate_function_decl(decl)
-                case InstanceInfo():
-                    self.generate_instance_decl(decl)
+            self.generate_decl(decl)
         return "\n".join(self.module.lines) + "\n"
 
-    def generate_function_decl(self, decl: FunctionDecl) -> None:
+    def generate_decl(self, decl: Union[FunctionDecl, InstanceInfo]) -> None:
         if self.strategy == Strategy.MONOMORPHIZATION and decl.scheme.dictionary_params:
-            # generated on demand, once per tuple of dictionaries
+            # generated on demand, once per tuple of dictionaries (see flush_pending)
             return
         params = [dictionary_param(o, var) for o, var in decl.scheme.dictionary_params]
-        context = Context(
-            params={
-                (o, var): ParamTree(dictionary_param(o, var))
-                for o, var in decl.scheme.dictionary_params
-            },
-        )
+        trees = tuple(ParamTree(param) for param in params)
         lines = self.generate_binding(
-            mangle(decl.name),
-            decl.name,
-            decl.clauses,
-            decl.arity,
+            self.python_name(decl),
+            decl,
             params,
-            context,
+            self.context_for(decl, trees),
         )
         self.flush_pending()
         self.module.add_lines(lines)
 
-    def generate_instance_decl(self, decl: InstanceInfo) -> None:
-        if self.strategy == Strategy.MONOMORPHIZATION and decl.scheme.dictionary_params:
-            return
-        params = [dictionary_param(o, var) for o, var in decl.scheme.dictionary_params]
-        context = Context(
-            params={
-                (o, var): ParamTree(dictionary_param(o, var))
-                for o, var in decl.scheme.dictionary_params
-            },
-            body_evidence=decl.body_evidence,
-            skolem_vars=decl.skolem_vars,
-        )
-        lines = self.generate_binding(
-            instance_name(decl.name, decl.tycon),
-            decl.name,
-            decl.clauses,
-            decl.arity,
-            params,
-            context,
-        )
-        self.flush_pending()
-        self.module.add_lines(lines)
+    def python_name(self, decl: Union[FunctionDecl, InstanceInfo]) -> str:
+        match decl:
+            case FunctionDecl(name=name):
+                return mangle(name)
+            case InstanceInfo(name=name, tycon=tycon):
+                return instance_name(name, tycon)
+
+    def context_for(
+        self,
+        decl: Union[FunctionDecl, InstanceInfo],
+        trees: Tuple[Tree, ...],
+    ) -> Context:
+        """The evidence for the dictionary parameters of ``decl``."""
+        params = dict(zip(decl.scheme.dictionary_params, trees))
+        match decl:
+            case FunctionDecl():
+                return Context(params=params)
+            case InstanceInfo():
+                return Context(
+                    params=params,
+                    body_evidence=decl.body_evidence,
+                    skolem_vars=decl.skolem_vars,
+                )
 
     def flush_pending(self) -> None:
         """Emit the specializations requested while generating a declaration.
@@ -316,24 +306,11 @@ class CodeGenerator:
             self.module.add("")
 
     def generate_specialization(self, spec: Specialization) -> List[str]:
-        decl = spec.decl
-        params = dict(zip(decl.scheme.dictionary_params, spec.trees))
-        match decl:
-            case FunctionDecl():
-                context = Context(params=params)
-            case InstanceInfo():
-                context = Context(
-                    params=params,
-                    body_evidence=decl.body_evidence,
-                    skolem_vars=decl.skolem_vars,
-                )
         return self.generate_binding(
             spec.python_name,
-            decl.name,
-            decl.clauses,
-            decl.arity,
+            spec.decl,
             [],
-            context,
+            self.context_for(spec.decl, spec.trees),
         )
 
     # --- bindings --------------------------------------------------------------
@@ -341,35 +318,30 @@ class CodeGenerator:
     def generate_binding(
         self,
         python_name: str,
-        source_name: str,
-        clauses: Sequence[FunctionDefinition],
-        arity: int,
+        decl: Union[FunctionDecl, InstanceInfo],
         dictionary_params: List[str],
         context: Context,
     ) -> List[str]:
         """``python_name = \\d_1 ... d_k . \\a_1 ... a_n . match clauses``"""
-        self_expr = python_name
-        for param in dictionary_params:
-            self_expr += f"({param})"
-        context = replace(context, self_name=source_name, self_expr=self_expr)
-        total_arity = len(dictionary_params) + arity
+        self_expr = python_name + "".join(f"({param})" for param in dictionary_params)
+        context = replace(context, self_expr=self_expr)
+        total_arity = len(dictionary_params) + decl.arity
+        emitter = Emitter(0)
         if total_arity == 0:
-            emitter = Emitter(0)
-            value = self.compile_expression(clauses[0].body, context, emitter)
+            value = self.compile_expression(decl.clauses[0].body, context, emitter)
             emitter.add(f"{python_name} = {value}")
             return emitter.lines
         impl = self.fresh("impl")
-        args = [f"a{i}" for i in range(arity)]
-        emitter = Emitter(0)
+        args = [f"a{i}" for i in range(decl.arity)]
         emitter.add(f"def {impl}({', '.join(dictionary_params + args)}):")
         body = Emitter(1)
-        if arity == 0:
-            value = self.compile_expression(clauses[0].body, context, body)
+        if decl.arity == 0:
+            value = self.compile_expression(decl.clauses[0].body, context, body)
             body.add(f"return {value}")
         else:
-            for clause in clauses:
+            for clause in decl.clauses:
                 self.compile_clause(clause, args, context, body)
-            body.add(f"return pattern_match_failure({source_name!r})")
+            body.add(f"return pattern_match_failure({decl.name!r})")
         emitter.lines.extend(body.lines)
         emitter.add(f"{python_name} = curry({total_arity}, {impl})")
         return emitter.lines
@@ -517,27 +489,24 @@ class CodeGenerator:
                 raise CompileError(f"Unhandled expression {type(expr).__name__}")
 
     def compile_variable(
-        self,
-        node: Union[Variable, Constructor],
-        context: Context,
+        self, node: Union[Variable, Constructor], context: Context
     ) -> str:
         use = self.typed.var_use(node)
         match use.kind:
-            case "mono":
+            case UseKind.MONO:
                 return mangle(use.name)
-            case "prim":
+            case UseKind.PRIM:
                 return use.name
-            case "constructor":
+            case UseKind.CONSTRUCTOR:
                 return constructor_name(use.name)
-            case "self":
+            case UseKind.SELF:
                 return context.self_expr
-            case "overloaded":
+            case UseKind.OVERLOADED:
                 assert use.constraint is not None
                 return self.compile_tree(self.closed_tree(use.constraint, context))
-            case "let":
+            case UseKind.LET:
                 trees = tuple(self.closed_tree(c, context) for c in use.evidence)
                 return self.compile_let_use(use.name, trees, context)
-        raise CompileError(f"Unknown variable use {use.kind}")
 
     def compile_let_use(
         self,
@@ -638,7 +607,7 @@ class CodeGenerator:
         emitter.add(f"def {name}():")
         body = Emitter(emitter.indent + 1)
         local_lets: List[LocalLet] = []
-        result = "None"
+        result = "None"  # the unit value, when the block ends with a let
         for stmt in statements:
             match stmt:
                 case LetStatement(variable=var, value=value):
@@ -651,8 +620,7 @@ class CodeGenerator:
                         )
                     result = "None"
                 case _:
-                    result = self.compile_expression(stmt, context, body)  # type: ignore[arg-type]
-                    body.add(f"_ = {result}")
+                    body.add(f"_ = {self.compile_expression(stmt, context, body)}")  # type: ignore[arg-type]
                     result = "_"
         body.add(f"return {result}")
         # Constrained local lets (monomorphization): the uses in the rest of

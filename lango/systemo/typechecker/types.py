@@ -167,12 +167,30 @@ def _var_names() -> List[str]:
     return names + [f"{n}{i}" for i in range(1, 10) for n in names]
 
 
+def skolem_names(t: Type) -> List[str]:
+    """Lowercase type constructors are skolemised type variables of a
+    declared instance type (see ``TypeInferrer.skolemize``)."""
+    match t:
+        case TypeCon(name=name) if name[0].islower():
+            return [name]
+        case FunctionType(param=param, result=result):
+            return skolem_names(param) + skolem_names(result)
+        case DataType(type_args=args):
+            return [n for arg in args for n in skolem_names(arg)]
+        case TupleType(element_types=elems):
+            return [n for elem in elems for n in skolem_names(elem)]
+        case _:
+            return []
+
+
 def type_to_str(t: Type, names: Optional[Dict[str, str]] = None) -> str:
     names = names if names is not None else {}
+    reserved = set(skolem_names(t))
 
     def name_of(var: str) -> str:
         if var not in names:
-            names[var] = _var_names()[len(names)]
+            taken = reserved | set(names.values())
+            names[var] = next(n for n in _var_names() if n not in taken)
         return names[var]
 
     def go(t: Type, atom: bool) -> str:

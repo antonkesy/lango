@@ -25,6 +25,7 @@ of this evidence.
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from lango.shared.ast.nodes import (
@@ -40,6 +41,7 @@ from lango.shared.ast.nodes import (
     DataDeclaration,
     DoBlock,
     Expression,
+    FieldAssignment,
     FloatLiteral,
     FunctionApplication,
     FunctionDefinition,
@@ -93,6 +95,7 @@ from lango.systemo.typechecker.types import (
     PRIMITIVE_TYPES,
     ConstraintSet,
     Scheme,
+    display_name,
     free_vars,
     function,
     list_of,
@@ -218,14 +221,25 @@ class Env:
 # --------------------------------------------------------------------------
 
 
+class UseKind(Enum):
+    LET = "let"  # a generalised binding: pass the dictionaries in ``evidence``
+    MONO = "mono"  # a pattern bound variable
+    SELF = "self"  # recursive occurrence of the binding being defined
+    PRIM = "prim"  # primitive function or constant
+    CONSTRUCTOR = "constructor"
+    OVERLOADED = (
+        "overloaded"  # an overloaded identifier: ``constraint`` is its evidence
+    )
+
+
 @dataclass
 class VarUse:
     """How an occurrence of a variable was typed."""
 
-    kind: str  # "let" | "mono" | "self" | "prim" | "constructor" | "overloaded"
+    kind: UseKind
     name: str
-    evidence: List[Constraint] = field(default_factory=list)  # for "let"
-    constraint: Optional[Constraint] = None  # for "overloaded"
+    evidence: List[Constraint] = field(default_factory=list)
+    constraint: Optional[Constraint] = None
 
 
 @dataclass
@@ -269,14 +283,33 @@ class InstanceInfo:
     body_evidence: Dict[Tuple[str, str], Constraint] = field(default_factory=dict)
     # skolem type constructor -> quantified variable of the declared scheme
     skolem_vars: Dict[str, str] = field(default_factory=dict)
-    skolem: bool = False
 
 
 Decl = Union[FunctionDecl, InstanceInfo]
 
 
 @dataclass
+class DeclaredScheme:
+    """The parsed type scheme of ``inst o :: sigma_T``."""
+
+    scheme: Scheme
+    tycon: str
+    # internal name of each quantified variable -> the name the user wrote
+    names: Dict[str, str]
+
+
+def is_skolem(tycon: str) -> bool:
+    return tycon[0].islower()
+
+
+@dataclass
 class TypedProgram:
+    """The result of type inference.
+
+    Per-node information (``var_uses``, ``let_schemes``) is keyed by the
+    identity of the AST node, so the ``program`` must be kept alive together
+    with it; use ``var_use`` / ``let_scheme`` to look it up."""
+
     program: Program
     data_types: Dict[str, DataInfo]
     constructors: Dict[str, ConstructorInfo]
@@ -337,6 +370,12 @@ class TypeInferrer:
             case _:
                 return t
 
+    def prune(self, t: Type) -> Type:
+        """Follow the substitution at the root of ``t`` only."""
+        while isinstance(t, TypeVar) and t.name in self.subst:
+            t = self.subst[t.name]
+        return t
+
     def resolve_scheme(self, scheme: Scheme) -> Scheme:
         return Scheme(
             [
@@ -349,8 +388,8 @@ class TypeInferrer:
     # --- constrained unification (Figure 6) ----------------------------------
 
     def unify(self, t1: Type, t2: Type) -> None:
-        t1 = self.resolve(t1)
-        t2 = self.resolve(t2)
+        t1 = self.prune(t1)
+        t2 = self.prune(t2)
         match (t1, t2):
             case (TypeVar(name=a), TypeVar(name=b)):
                 if a != b:
@@ -360,19 +399,17 @@ class TypeInferrer:
             case (_, TypeVar(name=b)):
                 self.bind(b, t1)
             case _:
-                if tycon_name(t1) != tycon_name(t2):
-                    raise TypeInferenceError(
-                        f"Cannot unify {type_to_str(t1)} with {type_to_str(t2)}",
-                    )
                 args1, args2 = tycon_args(t1), tycon_args(t2)
-                if len(args1) != len(args2):
+                if tycon_name(t1) != tycon_name(t2) or len(args1) != len(args2):
                     raise TypeInferenceError(
-                        f"Cannot unify {type_to_str(t1)} with {type_to_str(t2)}",
+                        f"Cannot unify {type_to_str(self.resolve(t1))} "
+                        f"with {type_to_str(self.resolve(t2))}",
                     )
                 for arg1, arg2 in zip(args1, args2):
                     self.unify(arg1, arg2)
 
     def bind(self, var: str, t: Type) -> None:
+        t = self.resolve(t)
         if var in free_vars(t):
             raise TypeInferenceError(
                 f"Cannot construct the infinite type {var} = {type_to_str(t)}",
@@ -384,7 +421,7 @@ class TypeInferrer:
             self.mkinst(pending[o], t)
 
     def mkinst(self, constraint: Constraint, t: Type) -> None:
-        t = self.resolve(t)
+        t = self.prune(t)
         o = constraint.name
         match t:
             case TypeVar(name=beta):
@@ -401,9 +438,18 @@ class TypeInferrer:
                 tycon = tycon_name(t)
                 instance = self.instances[o].get(tycon)
                 if instance is None:
+                    required = type_to_str(
+                        FunctionType(t, self.resolve(constraint.result)),
+                    )
+                    if is_skolem(tycon):
+                        raise TypeInferenceError(
+                            f"The instance type does not declare a constraint "
+                            f"'{display_name(o)} :: {required}' on its type variable "
+                            f"'{tycon}'",
+                        )
                     raise TypeInferenceError(
-                        f"No instance of '{o}' for type constructor '{tycon}' "
-                        f"(required at type {type_to_str(FunctionType(t, self.resolve(constraint.result)))})",
+                        f"No instance of '{display_name(o)}' for type constructor "
+                        f"'{tycon}' (required at type {required})",
                     )
                 instance_type, arguments = self.newinst(instance.scheme)
                 constraint.evidence = InstanceEvidence(o, tycon, arguments)
@@ -474,14 +520,20 @@ class TypeInferrer:
             quantified.append((var, constraint_set))
         return Scheme(quantified, t)
 
-    def skolemize(self, scheme: Scheme) -> Tuple[Type, Dict[str, str]]:
+    def skolemize(
+        self,
+        scheme: Scheme,
+        names: Dict[str, str],
+    ) -> Tuple[Type, Dict[str, str]]:
         """Replace the quantified variables by fresh nullary type constructors
-        and turn their constraints into instances for those constructors."""
+        and turn their constraints into instances for those constructors.
+
+        The skolem constructors carry the type variable names the user wrote
+        (``names``); being lowercase they cannot clash with datatypes."""
         skolems: Dict[str, str] = {}
         mapping: Dict[str, Type] = {}
         for var, _ in scheme.quantified:
-            self.counter += 1
-            name = f"$Sk{self.counter}"
+            name = names[var]
             mapping[var] = TypeCon(name)
             skolems[name] = var
         for var, constraints in scheme.quantified:
@@ -493,7 +545,6 @@ class TypeInferrer:
                     scheme=Scheme([], FunctionType(skolem, substitute(tau, mapping))),
                     clauses=[],
                     arity=0,
-                    skolem=True,
                 )
         return substitute(scheme.type, mapping), skolems
 
@@ -585,11 +636,7 @@ class TypeInferrer:
             case _:
                 pass
 
-    def parse_declared_scheme(
-        self,
-        node: ConstrainedType,
-        o: str,
-    ) -> Tuple[Scheme, str]:
+    def parse_declared_scheme(self, node: ConstrainedType, o: str) -> DeclaredScheme:
         """Translate the type scheme of ``inst o :: sigma_T`` and check that it
         has the form required by the paper:
 
@@ -652,21 +699,23 @@ class TypeInferrer:
                 )
             constraint_sets[var].append((constraint.name, tau))
         # rename the user's type variables to fresh internal ones
-        mapping: Dict[str, Type] = {var: self.fresh() for var in scheme_vars}
-        quantified: List[Tuple[str, ConstraintSet]] = []
-        for var in scheme_vars:
-            fresh_var = mapping[var]
-            assert isinstance(fresh_var, TypeVar)
-            quantified.append(
-                (
-                    fresh_var.name,
-                    sorted(
-                        (name, substitute(tau, mapping))
-                        for name, tau in constraint_sets[var]
-                    ),
+        fresh_vars = {var: self.fresh() for var in scheme_vars}
+        mapping: Dict[str, Type] = dict(fresh_vars)
+        quantified: List[Tuple[str, ConstraintSet]] = [
+            (
+                fresh_vars[var].name,
+                sorted(
+                    (name, substitute(tau, mapping))
+                    for name, tau in constraint_sets[var]
                 ),
             )
-        return Scheme(quantified, substitute(body, mapping)), tycon
+            for var in scheme_vars
+        ]
+        return DeclaredScheme(
+            Scheme(quantified, substitute(body, mapping)),
+            tycon,
+            {fresh_vars[var].name: var for var in scheme_vars},
+        )
 
     # --- data declarations -----------------------------------------------------
 
@@ -774,7 +823,7 @@ class TypeInferrer:
             case DoBlock(statements=statements):
                 return self.infer_block(statements, env)
             case ConstructorExpression(constructor_name=name, fields=fields):
-                return self.infer_record(expr, name, fields, env)
+                return self.infer_record(name, fields, env)
             case _:
                 raise TypeInferenceError(f"Unhandled expression: {type(expr).__name__}")
 
@@ -790,37 +839,36 @@ class TypeInferrer:
                 if name in self.overloaded:
                     t, constraint = self.overloaded_use(name)
                     self.var_uses[id(node)] = VarUse(
-                        "overloaded",
+                        UseKind.OVERLOADED,
                         name,
                         constraint=constraint,
                     )
                     return t
                 raise TypeInferenceError(f"Unknown variable '{name}'")
             case MonoBinding(type=t):
-                self.var_uses[id(node)] = VarUse("mono", name)
+                self.var_uses[id(node)] = VarUse(UseKind.MONO, name)
                 return t
             case RecBinding(type=t):
-                self.var_uses[id(node)] = VarUse("self", name)
+                self.var_uses[id(node)] = VarUse(UseKind.SELF, name)
                 return t
             case LetBinding(scheme=scheme):
                 t, evidence = self.newinst(scheme)
-                self.var_uses[id(node)] = VarUse("let", name, evidence=evidence)
+                self.var_uses[id(node)] = VarUse(UseKind.LET, name, evidence=evidence)
                 return t
             case PrimBinding(scheme=scheme):
                 t, _ = self.newinst(scheme)
-                self.var_uses[id(node)] = VarUse("prim", name)
+                self.var_uses[id(node)] = VarUse(UseKind.PRIM, name)
                 return t
             case ConBinding(scheme=scheme):
                 t, _ = self.newinst(scheme)
-                self.var_uses[id(node)] = VarUse("constructor", name)
+                self.var_uses[id(node)] = VarUse(UseKind.CONSTRUCTOR, name)
                 return t
         raise TypeInferenceError(f"Unknown variable '{name}'")
 
     def infer_record(
         self,
-        node: ConstructorExpression,
         name: str,
-        fields: Sequence[object],
+        fields: Sequence[FieldAssignment],
         env: Env,
     ) -> Type:
         binding = env.lookup(name)
@@ -830,7 +878,7 @@ class TypeInferrer:
             raise TypeInferenceError(f"Constructor '{name}' has no named fields")
         t, _ = self.newinst(binding.scheme)
         params, result = unfold_function(t)
-        given = {f.field_name: f.value for f in fields}  # type: ignore[attr-defined]
+        given = {f.field_name: f.value for f in fields}
         if set(given) != set(binding.field_names):
             raise TypeInferenceError(
                 f"Constructor '{name}' expects fields {binding.field_names}, "
@@ -838,7 +886,6 @@ class TypeInferrer:
             )
         for field_name, param in zip(binding.field_names, params):
             self.unify(self.infer(given[field_name], env), param)
-        self.var_uses[id(node)] = VarUse("constructor", name)
         return result
 
     def infer_block(self, statements: Sequence[Statement], env: Env) -> Type:
@@ -933,6 +980,10 @@ class TypeInferrer:
     ) -> None:
         """Every clause ``f p_1 ... p_n = e`` has the type ``function_type``."""
         arity = len(clauses[0].patterns)
+        if arity == 0 and len(clauses) > 1:
+            raise TypeInferenceError(
+                f"'{clauses[0].function_name}' is bound more than once",
+            )
         for clause in clauses:
             if len(clause.patterns) != arity:
                 raise TypeInferenceError(
@@ -972,7 +1023,8 @@ class TypeInferrer:
     def check_instance(self, decl: InstanceDeclaration, env: Env) -> InstanceInfo:
         o = decl.instance_name
         assert isinstance(decl.type_signature, ConstrainedType)
-        declared, tycon = self.parse_declared_scheme(decl.type_signature, o)
+        parsed = self.parse_declared_scheme(decl.type_signature, o)
+        declared, tycon = parsed.scheme, parsed.tycon
         if tycon in self.instances[o]:
             raise TypeInferenceError(
                 f"'{o}' already has an instance for type constructor '{tycon}'",
@@ -982,7 +1034,7 @@ class TypeInferrer:
         self.infer_clauses(decl.clauses, env, function_type)
         inferred = self.gen(function_type, env)
         # the inferred scheme must be at least as general as the declared one
-        skolem_type, skolems = self.skolemize(declared)
+        skolem_type, skolems = self.skolemize(declared, parsed.names)
         instance_type, copies = self.newinst(inferred)
         try:
             self.unify(skolem_type, instance_type)
@@ -1024,29 +1076,11 @@ class TypeInferrer:
         }
         env = self.initial_env()
         decls: List[Decl] = []
-        statements = list(program.statements)
-        index = 0
-        while index < len(statements):
-            stmt = statements[index]
-            match stmt:
-                case DataDeclaration():
-                    index += 1
+        for item in group_clauses(program.statements):
+            match item:
                 case InstanceDeclaration():
-                    decls.append(self.check_instance(stmt, env))
-                    self.discard_ambiguous_constraints()
-                    index += 1
-                case FunctionDefinition(function_name=name):
-                    clauses = [stmt]
-                    while (
-                        index + len(clauses) < len(statements)
-                        and isinstance(
-                            statements[index + len(clauses)],
-                            FunctionDefinition,
-                        )
-                        and statements[index + len(clauses)].function_name == name  # type: ignore[union-attr]
-                    ):
-                        clauses.append(statements[index + len(clauses)])  # type: ignore[arg-type]
-                    index += len(clauses)
+                    decls.append(self.check_instance(item, env))
+                case (name, clauses):
                     if name in self.overloaded:
                         raise TypeInferenceError(
                             f"'{name}' is overloaded and cannot also be defined as a function",
@@ -1054,15 +1088,12 @@ class TypeInferrer:
                     if env.lookup(name) is not None:
                         raise TypeInferenceError(f"'{name}' is bound more than once")
                     scheme = self.infer_function(name, clauses, env)
-                    self.discard_ambiguous_constraints()
                     env = env.extend(name, LetBinding(scheme))
                     decls.append(
                         FunctionDecl(name, clauses, scheme, len(clauses[0].patterns)),
                     )
-                case _:
-                    raise TypeInferenceError(
-                        f"Unexpected statement: {type(stmt).__name__}",
-                    )
+            # the environment is closed at top level: whatever is left is ambiguous
+            self.discard_ambiguous_constraints()
         for node in self.typed_nodes:
             node.ty = self.resolve(node.ty)  # type: ignore[attr-defined]
         for decl in decls:
@@ -1080,6 +1111,28 @@ class TypeInferrer:
             var_uses=self.var_uses,
             let_schemes=self.let_schemes,
         )
+
+
+def group_clauses(
+    statements: Sequence[Statement],
+) -> List[Union[InstanceDeclaration, Tuple[str, List[FunctionDefinition]]]]:
+    """Consecutive clauses of the same function form one binding."""
+    groups: List[Union[InstanceDeclaration, Tuple[str, List[FunctionDefinition]]]] = []
+    for stmt in statements:
+        match stmt:
+            case DataDeclaration():
+                continue
+            case InstanceDeclaration():
+                groups.append(stmt)
+            case FunctionDefinition(function_name=name):
+                last = groups[-1] if groups else None
+                if isinstance(last, tuple) and last[0] == name:
+                    last[1].append(stmt)
+                else:
+                    groups.append((name, [stmt]))
+            case _:
+                raise TypeInferenceError(f"Unexpected statement: {type(stmt).__name__}")
+    return groups
 
 
 def infer_program(program: Program) -> TypedProgram:

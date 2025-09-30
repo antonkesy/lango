@@ -39,9 +39,7 @@ class Con:
 
 
 def curry(arity: int, function: Callable[..., Any]) -> Any:
-    """Turn an n-ary Python function into a curried function value."""
-    if arity == 0:
-        return function()
+    """Turn an n-ary Python function (n >= 1) into a curried function value."""
 
     def collect(collected: tuple) -> Any:
         if len(collected) == arity:
