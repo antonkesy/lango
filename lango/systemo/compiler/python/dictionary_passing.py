@@ -77,7 +77,7 @@ class SystemoCompiler:
         self.local_variables: Set[str] = set()
         self.monomorphic_functions: Dict[str, str] = (
             {}
-        )  # Maps name+fulltype -> monomorphic function name (legacy compatibility)
+        )
         self.type_dictionaries: Dict[str, Dict[str, str]] = (
             {}
         )  # Maps type name -> {operation -> primitive function}
@@ -1249,7 +1249,6 @@ class SystemoCompiler:
         param2_type: str,
         result_type: str,
     ) -> None:
-        # Legacy compatibility - keep monomorphic function tracking
         type_signature = f"{param1_type} -> {param2_type} -> {result_type}"
         monomorphic_key = f"{safe_op_name}+{type_signature}"
 
@@ -3085,8 +3084,6 @@ class SystemoCompiler:
         if monomorphic_name:
             arg_exprs = [self._compile_expression(arg) for arg in args]
             return f"{monomorphic_name}({', '.join(arg_exprs)})"
-
-        # No legacy/special-case handling for tuple `show` here — rely on generic lookup
 
         return None
 

@@ -3052,10 +3052,6 @@ class TypeInferrer:
                                         except UnificationError:
                                             continue
 
-                                # Special handling for show function - it always returns string
-                                if func_name == "show" and expr.ty is None:
-                                    expr.ty = STRING_TYPE
-
                                 # Better fallback for built-in and recursive functions
                                 if expr.ty is None:
                                     # Try to look up function type in environment
@@ -3081,14 +3077,7 @@ class TypeInferrer:
 
                                     # Specific patterns for common functions
                                     if expr.ty is None:
-                                        if func_name == "show" and arg.ty is not None:
-                                            expr.ty = STRING_TYPE
-                                        elif func_name == "show":
-                                            # Even if arg.ty is None, show always returns string
-                                            expr.ty = STRING_TYPE
-                                        elif (
-                                            func_name == "length" and arg.ty is not None
-                                        ):
+                                        if func_name == "length" and arg.ty is not None:
                                             expr.ty = INT_TYPE
                                         elif func_name == "not" and arg.ty == BOOL_TYPE:
                                             expr.ty = BOOL_TYPE

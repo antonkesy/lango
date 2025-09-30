@@ -1045,8 +1045,7 @@ class MinioCompiler:
                 case _:
                     return "None"
 
-        # For multiple statements in expression context, fall back to sequential execution
-        # This is a bit hacky but works for simple cases
+        # For multiple statements in expression context, evaluate sequentially and return the final value
         parts = []
         for stmt in do_block.statements[:-1]:
             match stmt:
