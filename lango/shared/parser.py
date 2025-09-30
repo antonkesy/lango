@@ -33,12 +33,12 @@ def parse_lark(
 
     with open(f"./build/main.{file_extension}", "w") as f:
         f.write(main_content + prelude_content)
-    # Prevent user files from redefining prelude symbols (avoid "jailbreak")
+    # Prevent user files from redefining prelude symbols
     import re
 
     def _extract_top_level_names(src: str) -> Set[str]:
-        # crude but effective heuristic: capture identifiers at start of line
-        # followed by a type sig '::', a '(' (function args) or '=' (definition)
+        # Capture likely top-level symbol definitions.
+        # This intentionally favors simple, conservative matching.
         pattern = re.compile(r"(?m)^[ \t]*([A-Za-z_][\w']*)\s*(?:::|\(|=)")
         return set(pattern.findall(src))
 

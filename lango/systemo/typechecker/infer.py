@@ -409,7 +409,7 @@ class TypeInferrer:
         # Validate that the implementation matches the declared type
         inferred_type = None
         try:
-            # Create a temporary environment for validation
+            # Validate in a fresh environment
             temp_env = TypeEnvironment()
 
             # Infer the actual type of the function implementation
@@ -2729,8 +2729,8 @@ class TypeInferrer:
         # Set the function definition's type to match the instance type
         inst_decl.function_definition.ty = instance_type
 
-        # For instance declarations, we need to use the type signature to inform the function definition
-        # Create a temporary environment that includes the instance function with its type
+        # For instance declarations, use the type signature to inform the function definition
+        # Include the instance function in a temporary environment with its type
         temp_env = env.extend(inst_decl.instance_name, TypeScheme(set(), instance_type))
 
         # Propagate types to the function definition with this enhanced environment
@@ -3326,7 +3326,6 @@ class TypeInferrer:
                 for sub_pattern in patterns:
                     self._propagate_types_to_pattern(sub_pattern, env)
             case _:
-                # Literal patterns don't need special handling
                 pass
 
     def _resolve_monomorphic_function_name(

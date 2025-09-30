@@ -310,7 +310,7 @@ class MinioGoCompiler:
                 case LetStatement(variable=variable, value=value):
                     prefixed_var = self._prefix_name(variable)
 
-                    # Special handling for function applications that might be partial applications
+                    # Handle function applications that may be partial applications
                     match value:
                         case FunctionApplication(
                             function=Variable(name=func_name),
