@@ -1,0 +1,16 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Box(1)Box([True])Box((1, 'x'))"
+
+data Box a = MkBox a;
+
+-- The constraint says that `show` must be defined on the element type.
+inst show :: (show :: a -> String) => Box a -> String {
+  show (MkBox x) = "Box(" ++ show x ++ ")";
+};
+
+main = do {
+  putStr (show (MkBox 1));
+  putStr (show (MkBox [True]));
+  putStr (show (MkBox (1, 'x')));
+};

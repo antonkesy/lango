@@ -1,5 +1,5 @@
-inst (-) :: Int -> Int {
-  (-) x = primIntNeg x;
+inst negate :: Int -> Int {
+  negate x = primIntNeg x;
 };
 
 inst (+) :: Int -> Int -> Int {
@@ -12,12 +12,6 @@ inst (-) :: Int -> Int -> Int {
 
 inst (*) :: Int -> Int -> Int {
   (*) x y = primIntMul x y;
-};
-
-inst (/) :: Int -> Int -> Float {
-  (/) 0 0 = NaN;
-  (/) x 0 = if x >= 0 then Infinity else -Infinity;
-  (/) x y = primIntDiv x y;
 };
 
 inst (<) :: Int -> Int -> Bool {
@@ -42,6 +36,12 @@ inst (==) :: Int -> Int -> Bool {
 
 inst (/=) :: Int -> Int -> Bool {
   (/=) x y = not (x == y);
+};
+
+inst (/) :: Int -> Int -> Float {
+  (/) 0 0 = NaN;
+  (/) x 0 = if x >= 0 then Infinity else -Infinity;
+  (/) x y = primIntDiv x y;
 };
 
 inst (^) :: Int -> Int -> Int {

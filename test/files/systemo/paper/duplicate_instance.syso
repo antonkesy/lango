@@ -1,0 +1,14 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
+
+-- An overloaded identifier has at most one instance per type constructor.
+inst f :: Int -> Int {
+  f x = x;
+};
+
+inst f :: Int -> String {
+  f x = show x;
+};
+
+main = putStr (f 1);

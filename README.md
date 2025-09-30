@@ -65,6 +65,158 @@ main = do {
 
 > Int: 10True
 
+### System O in a nutshell
+
+The implementation follows the paper closely; the type checker is the
+constrained unification / type reconstruction algorithm of Section 6, the
+`dictionary_passing` compiler is the translation of Section 4, the
+`monomorphization` compiler resolves the same dictionaries at compile time,
+and the interpreter implements the untyped dynamic semantics of Section 3
+(overloaded functions dispatch on the type constructor of their first
+argument).
+
+- **Overloaded identifiers** have no class declaration. An identifier is
+  overloaded by giving it instances: `inst o :: sigma { clauses }`.
+  Every use of `o` has the type `(o :: a -> b) => a -> b`; the constraint is
+  discharged when `a` becomes known.
+- **Instance types** must have the form `T a1 ... an -> t` where the `ai` are
+  distinct type variables and `t` only mentions the `ai`: an instance works
+  uniformly for all values built from the type constructor `T`, and the
+  argument type determines the result type. `o` has at most one instance per
+  type constructor.
+- **Constraints** on the type variables of an instance are written in front
+  of the type, e.g. `inst show :: (show :: a -> String) => [a] -> String`.
+  A constraint `o :: a -> t` says that `o` must be defined at `a` with
+  result type `t`.
+- **Inferred types** are constrained type schemes, for example
+  `elem :: ((==) :: a -> b -> Bool) => a -> [b] -> Bool`
+  (`lango types systemo file.syso` prints them). No type annotations are
+  ever required: every typable program has a principal type and no program is
+  ambiguous (`[] == []` is `True`).
+- **Instance declarations are not recursive**: the body of an instance of `o`
+  for `T` cannot use `o` at `T` (use a helper function instead).
+- **Declarations are scoped sequentially**, like `let u = e in p` and
+  `inst o :: s = e in p` in the paper: a function or instance is visible in
+  the declarations that follow it. Functions may be recursive (monomorphic
+  recursion) and consist of several clauses.
+- **Numeric literals are not overloaded**: `1` is an `Int` and `1.0` a
+  `Float`. Prefix minus `-x` is sugar for the overloaded function `negate x`.
+- The [prelude](./lango/systemo/prelude/) is written in SystemO itself on top
+  of a few primitives (`primIntAdd`, ...); it is just a normal program
+  prefix.
+
+### Compiler strategies
+
+Both strategies start from the same type inference result: for every use of an
+overloaded identifier the type checker records which instance (or which
+dictionary parameter of the enclosing function) satisfies the constraint.
+
+```haskell
+inst show :: Int -> String { show x = primIntShow x; };
+
+twice x = show x ++ show x;   -- twice :: (show :: a -> String) => a -> String
+
+main = putStr (twice 1);
+```
+
+**Dictionary passing** (`--strategy dictionary_passing`, Section 4 of the
+paper): a constrained binding takes one extra argument per constraint, the
+"dictionary", i.e. the implementation of the overloaded identifier at the
+instance type. Overloaded identifiers at a constrained type variable become
+that parameter; at a known type they become the instance function.
+
+```python
+def twice(d_show):                        # dictionary for `show :: a -> String`
+    return lambda x: concat(d_show(x))(d_show(x))
+
+main = putStr(twice(show_Int)(1))         # the caller passes the instance
+```
+
+**Monomorphization** (`--strategy monomorphization`): the same translation,
+but every dictionary is known at compile time, so instead of passing it the
+compiler emits a copy of the binding per distinct tuple of dictionaries with
+the parameters substituted. System O has no polymorphic recursion, so the
+number of copies is finite.
+
+```python
+def twice__show_Int(x):
+    return concat(show_Int(x))(show_Int(x))
+
+main = putStr(twice__show_Int(1))
+```
+
+The interpreter (`lango run`) needs neither: following the dynamic semantics of
+Section 3, `show` is a single function that dispatches on the type constructor
+of its argument at run time.
+
+## Project structure
+
+```mermaid
+flowchart TB
+    cli["lango/cli.py<br/>CLI: parse, typecheck, types, run, compile"]
+    subgraph shared["lango/shared"]
+        nodes["ast/nodes.py<br/>AST node classes"]
+        ltypes["typechecker/lango_types.py<br/>monotypes"]
+        lparser["parser.py<br/>Lark front end + prelude loading"]
+    end
+    subgraph systemo["lango/systemo"]
+        grammar["parser/systemo.lark"]
+        transformer["ast/transformer.py<br/>parse tree to AST"]
+        desugar["ast/desugar.py<br/>operator precedence to applications"]
+        prelude["prelude/*.syso<br/>Bool, Int, Float, List, show, ..."]
+        infer["typechecker/infer.py<br/>type reconstruction + evidence"]
+        types["typechecker/types.py<br/>constrained type schemes"]
+        prims["typechecker/primitives.py<br/>initial typothesis"]
+        interp["interpreter/interpreter.py<br/>dynamic semantics"]
+        codegen["compiler/python/codegen.py<br/>dictionary passing / monomorphization"]
+        runtime["runtime.py<br/>primitives, curry, constructors"]
+    end
+    subgraph minio["lango/minio"]
+        minio_impl["parser, typechecker, interpreter,<br/>Python and Go compilers"]
+    end
+    cli --> systemo
+    cli --> minio
+    grammar --> transformer --> desugar --> infer
+    prelude --> lparser --> transformer
+    infer --> interp
+    infer --> codegen
+    runtime --> interp
+    runtime --> codegen
+    types --> infer
+    prims --> infer
+    nodes --> transformer
+    ltypes --> types
+    shared --> minio
+```
+
+### Example flow
+
+`lango compile systemo prog.syso --strategy monomorphization` for a program
+containing `main = putStr (show [1, 2])`:
+
+```mermaid
+flowchart LR
+    src["prelude + prog.syso"] -->|Lark| tree["parse tree"]
+    tree -->|transformer| ast["AST<br/>putStr (show [1,2])"]
+    ast -->|desugar| core["core terms<br/>operators are applications"]
+    core -->|infer| typed["typed program<br/>show at [Int]: evidence<br/>show_List(show_Int)"]
+    typed -->|interpreter| out1["dispatch on List at run time"]
+    typed -->|"dictionary passing"| out2["show_List(show_Int)([1, 2])"]
+    typed -->|monomorphization| out3["show_List__show_Int([1, 2])"]
+```
+
+1. The prelude files are prepended to the program and parsed with the LALR
+   grammar; the transformer builds the AST and the desugaring pass resolves
+   `infixl`/`infixr`/`infix` declarations into plain applications.
+2. The type checker infers `main :: ()`. The use of `show` creates the
+   constraint `show :: a -> b`; unifying `a` with `[Int]` finds the list
+   instance, whose own constraint `show :: Int -> String` is satisfied by the
+   `Int` instance. This evidence tree is attached to the `show` node.
+3. The interpreter ignores the evidence and dispatches at run time; the
+   dictionary passing compiler turns the evidence into the expression
+   `show_List(show_Int)`; the monomorphizing compiler requests a specialized
+   copy `show_List__show_Int` of the list instance and emits that.
+
 ## Installation
 
 ### Containerized Setup

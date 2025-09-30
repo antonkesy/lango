@@ -20,16 +20,21 @@ record_constructor: "{" [field ("," field)*] "}"
 field: ID "::" type_expr
 
 // --- Instance Declarations ---
-inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_body "}" ";"
+// inst o :: (o1 :: a -> t1, o2 :: b -> t2) => T a b -> t { clauses }
+inst_decl: "inst" inst_operator_name "::" type_scheme "{" inst_func_def+ "}" ";"
 
-inst_body: inst_func_def+
+type_scheme: constraints "=>" type_expr  -> constrained_type
+           | type_expr
+
+constraints: "(" constraint ("," constraint)* ")"
+constraint: inst_operator_name "::" type_expr
 
 // --- Precedence Declarations ---
 precedence_decl: "infixl" INT symbolic_operator ";"  -> infixl_decl
                | "infixr" INT symbolic_operator ";"  -> infixr_decl
                | "infix" INT symbolic_operator ";"   -> infix_decl
 
-// --- Function Signatures and Definitions ---
+// --- Function Definitions ---
 
 inst_operator_name: ID
                   | "(" symbolic_operator ")"
@@ -78,11 +83,11 @@ stmt_list: (do_stmt ";")+
 
 elsif_clauses: ("else" "if" expr "then" expr)+
 
-// Infix expressions
+// Infix expressions (re-associated later according to precedence declarations)
 ?infix_expr: app_expr
            | app_expr symbolic_operator infix_expr -> infix_op
 
-// Application expressions - fixed to avoid reduce/reduce conflicts
+// Application expressions
 ?app_expr: app_expr atom_expr -> app
          | prefix_expr
 
@@ -119,24 +124,27 @@ field_assign: ID "=" expr
 ?pattern: constructor_pattern
         | cons_pattern
         | tuple_pattern
+        | list_pattern
         | UIDENT                 -> constructor_pattern_bare
-        | "(" symbolic_operator ")" -> symbolic_operator_pattern
-        | ID
-        | literal
-        | "(" "-" INT ")"      -> neg_int
-        | "(" "-" FLOAT ")"    -> neg_float
+        | ID                     -> var_pattern
+        | atomic_literal         -> literal_pattern
+        | "(" "-" INT ")"      -> neg_int_pattern
+        | "(" "-" FLOAT ")"    -> neg_float_pattern
 
 constructor_pattern: "(" UIDENT pattern+ ")"
-cons_pattern: "(" pattern COLON pattern ")"   -> cons_pattern
+cons_pattern: "(" pattern COLON pattern ")"
 tuple_pattern: "(" pattern "," pattern ("," pattern)* ")"
+list_pattern: "[" [pattern ("," pattern)*] "]"
 
 // --- Literals ---
-?literal: INT     -> int
-        | FLOAT   -> float
-        | STRING  -> string
-        | CHAR    -> char
-        | "True"  -> true
-        | "False" -> false
+?atomic_literal: INT     -> int
+               | FLOAT   -> float
+               | STRING  -> string
+               | CHAR    -> char
+               | "True"  -> true
+               | "False" -> false
+
+?literal: atomic_literal
         | list
 
 list: "[" [expr ("," expr)*] "]"

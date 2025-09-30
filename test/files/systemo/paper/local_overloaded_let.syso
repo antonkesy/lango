@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "1True[1.5]"
+
+-- s :: (show :: a -> String) => a -> String is generalised in the let
+main = do {
+  let { s = show };
+  putStr (s 1);
+  putStr (s True);
+  putStr (s [1.5]);
+};

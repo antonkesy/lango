@@ -445,10 +445,30 @@ class ListType(ASTNode):
 
 
 @dataclass
+class TypeConstraint(ASTNode):
+    """A constraint ``o :: a -> t`` on a quantified type variable (System O)."""
+
+    name: str
+    type_expr: "TypeExpression"
+    ty: Optional[Type] = None
+
+
+@dataclass
+class ConstrainedType(ASTNode):
+    """A type scheme ``(o1 :: t1, ...) => t`` as written in an instance declaration."""
+
+    constraints: List[TypeConstraint]
+    type_expr: "TypeExpression"
+    ty: Optional[Type] = None
+
+
+@dataclass
 class InstanceDeclaration(ASTNode):
+    """``inst o :: sigma { clauses }`` -- overloads ``o`` at the type scheme ``sigma``."""
+
     instance_name: str
-    type_signature: "TypeExpression"
-    function_definition: FunctionDefinition
+    type_signature: Union["TypeExpression", ConstrainedType]
+    clauses: List[FunctionDefinition]
     ty: Optional[Type] = None
 
 

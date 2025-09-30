@@ -1,9 +1,9 @@
-import pprint
 from pathlib import Path
 from typing import Any, Union
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from lango.minio.compiler.go import compile_program as minio_go_compile_program
 from lango.minio.compiler.python import compile_program as minio_python_compile_program
@@ -20,10 +20,11 @@ from lango.systemo.compiler.python.monomorphization import (
     compile_program as systemo_python_mono_compile_program,
 )
 from lango.systemo.interpreter.interpreter import interpret as systemo_interpret
-from lango.systemo.overloaded import collect_all_functions
 from lango.systemo.parser.parser import parse as systemo_parse
+from lango.systemo.typechecker.infer import InstanceInfo
 from lango.systemo.typechecker.typecheck import get_type_str as systemo_get_type_str
 from lango.systemo.typechecker.typecheck import type_check as systemo_type_check
+from lango.systemo.typechecker.types import scheme_to_str
 
 app = typer.Typer(pretty_exceptions_enable=False)
 console = Console()
@@ -53,10 +54,16 @@ def parse(
 def functions(
     input_file: Path = typer.Argument(..., exists=True, help="Path to input file"),
 ) -> int:
-    ast = systemo_parse(input_file)
-
-    functions = collect_all_functions(ast)
-    pprint.pprint(functions, width=120, depth=10)
+    """List the overloaded identifiers of a SystemO program and their instances."""
+    typed = systemo_type_check(systemo_parse(input_file))
+    instances: dict[str, list[str]] = {}
+    for decl in typed.decls:
+        if isinstance(decl, InstanceInfo):
+            instances.setdefault(decl.name, []).append(scheme_to_str(decl.scheme))
+    for name, schemes in instances.items():
+        print(name)
+        for scheme in schemes:
+            print(f"  inst {name} :: {scheme}")
     return 0
 
 
@@ -105,7 +112,10 @@ def typecheck(
                 console.print("Type checking succeeded", style="bold green")
                 return 0
             except Exception as e:
-                console.print(f"Type checking failed: {e}", style="bold red")
+                console.print(
+                    f"Type checking failed: {escape(str(e))}",
+                    style="bold red",
+                )
                 return 1
         case "minio":
             try:

@@ -1,0 +1,12 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
+
+-- Instances must work uniformly for all arguments of a type constructor:
+-- the argument type must be `[a]`, not `[Int]`.
+inst sum :: [Int] -> Int {
+  sum [] = 0;
+  sum (x:xs) = x + sum xs;
+};
+
+main = putStr (show (sum [1, 2, 3]));

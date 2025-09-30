@@ -1,0 +1,12 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
+
+-- Instance declarations are not recursive: inside the body, `len` at list
+-- type is not yet defined.
+inst len :: [a] -> Int {
+  len [] = 0;
+  len (x:xs) = 1 + len xs;
+};
+
+main = putStr (show (len [1, 2, 3]));
