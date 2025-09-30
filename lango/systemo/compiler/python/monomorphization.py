@@ -1248,19 +1248,7 @@ class SystemoCompiler:
         for assignment in assignments:
             lines.append(f"{self._indent()}{assignment}")
 
-        # Workaround for parsing issue: if the body references variables that aren't assigned,
-        # try to map them from positional arguments. This handles cases like a (?) b = a + b
-        # where the pattern is parsed as [(?, b)] but the body uses [a, b]
-        body_text = str(func_def.body)
-        assigned_vars = {assignment.split(" = ")[0] for assignment in assignments}
-
-        # Common variable names that might be missing due to operator parsing issues
-        if "a" in body_text and "a" not in assigned_vars:
-            lines.append(f"{self._indent()}a = arg_0")
-            self.local_variables.add("a")
-        if "x" in body_text and "x" not in assigned_vars:
-            lines.append(f"{self._indent()}x = arg_0")
-            self.local_variables.add("x")
+        # Compile the function body
 
         # Compile the function body
         lines.append(
@@ -2441,20 +2429,7 @@ class SystemoCompiler:
             arg_exprs = [self._compile_expression(arg) for arg in args]
             return f"{monomorphic_name}({', '.join(arg_exprs)})"
 
-        # Legacy specific handling for show function on tuple types (can be removed when type info is complete)
-        if function_name == "show" and len(args) == 1:
-            arg = args[0]
-            if hasattr(arg, "ty") and hasattr(arg.ty, "__class__"):
-                if isinstance(arg.ty, TupleType):
-                    # Generate specialized tuple show function name
-                    tuple_type_str = self._tuple_type_to_string(arg.ty.element_types)
-                    specialized_func_name = f"systemo_show_{tuple_type_str}_str"
-
-                    # Check if we have this specialized function
-                    registry_key = f"show+{tuple_type_str} -> str"
-                    if registry_key in self.monomorphic_functions:
-                        arg_exprs = [self._compile_expression(arg) for arg in args]
-                        return f"{specialized_func_name}({', '.join(arg_exprs)})"
+        # No legacy/special-case handling for tuple `show` here — rely on generic lookup
 
         return None
 
@@ -2529,10 +2504,8 @@ class SystemoCompiler:
                     ]
                     condition = " or ".join(type_checks)
                 elif arg_type == "Char":
-                    # Special handling for Char - check for char tuples
-                    condition = (
-                        "isinstance(arg, tuple) and len(arg) == 2 and arg[0] == 'char'"
-                    )
+                    # Char is represented as Python `str` (single-character)
+                    condition = f"isinstance(arg, str) and len(arg) == 1"
                 else:
                     # Unknown type, try by name (but avoid complex expressions)
                     if arg_type in ["Unknown"]:
