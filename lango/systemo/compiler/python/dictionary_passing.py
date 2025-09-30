@@ -675,20 +675,37 @@ class SystemoCompiler:
         for func_name, op_symbol in binary_ops:
             lines.append(f"def {func_name}_runtime_dispatch(x, y):")
             lines.append(f"    # Try to infer type dictionary from operand types")
-            lines.append(f"    if isinstance(x, int) and isinstance(y, int):")
-            lines.append(f"        return {func_name}(int_dict, x, y)")
-            lines.append(f"    elif isinstance(x, float) and isinstance(y, float):")
-            lines.append(f"        return {func_name}(float_dict, x, y)")
-            lines.append(f"    elif isinstance(x, str) and isinstance(y, str):")
-            lines.append(f"        return {func_name}(string_dict, x, y)")
-            lines.append(f"    elif isinstance(x, bool) and isinstance(y, bool):")
-            lines.append(f"        return {func_name}(bool_dict, x, y)")
-            lines.append(f"    elif isinstance(x, list) and isinstance(y, list):")
-            lines.append(f"        return {func_name}(list_dict, x, y)")
-            lines.append(f"    else:")
-            lines.append(
-                f"        raise ValueError(f'Operation {op_symbol} not supported for types {{type(x).__name__}} and {{type(y).__name__}}')",
-            )
+
+            # Prefer Bool checks before Int because bool is a subclass of int in Python
+            type_order = list(self.type_dictionaries.keys())
+            if "Bool" in type_order:
+                type_order.remove("Bool")
+                type_order.insert(0, "Bool")
+
+            for type_name in type_order:
+                # Map common dictionary keys to the internal representations
+                check_type = type_name
+                if type_name.lower() == "list":
+                    check_type = "listtype"
+                if type_name == "List":
+                    check_type = "listtype"
+                if type_name.lower() == "tuple":
+                    check_type = "tuple"
+
+                # Generate a runtime condition for this type
+                cond_x = self._generate_type_check_condition("x", check_type)
+                cond_y = self._generate_type_check_condition("y", check_type)
+
+                # Skip overly generic catch-all conditions here
+                if cond_x.strip() == "True" or cond_y.strip() == "True":
+                    continue
+
+                dict_var = f"{type_name.lower()}_dict"
+                lines.append(f"    if {cond_x} and {cond_y}:")
+                lines.append(f"        return {func_name}({dict_var}, x, y)")
+
+            # Final fallback: raise informative error
+            lines.append(f"    raise ValueError(f'Operation {op_symbol} not supported for types {{type(x).__name__}} and {{type(y).__name__}}')")
             lines.append("")
 
         # Unary operations runtime dispatch
@@ -700,37 +717,57 @@ class SystemoCompiler:
         for func_name, op_symbol in unary_ops:
             lines.append(f"def {func_name}_runtime_dispatch(x):")
             lines.append(f"    # Try to infer type dictionary from operand type")
-            lines.append(f"    if isinstance(x, int):")
-            lines.append(f"        return {func_name}(int_dict, x)")
-            lines.append(f"    elif isinstance(x, float):")
-            lines.append(f"        return {func_name}(float_dict, x)")
-            lines.append(f"    elif isinstance(x, bool):")
-            lines.append(f"        return {func_name}(bool_dict, x)")
-            lines.append(f"    else:")
-            lines.append(
-                f"        raise ValueError(f'Operation {op_symbol} not supported for type {{type(x).__name__}}')",
-            )
+
+            type_order = list(self.type_dictionaries.keys())
+            if "Bool" in type_order:
+                type_order.remove("Bool")
+                type_order.insert(0, "Bool")
+
+            for type_name in type_order:
+                check_type = type_name
+                if type_name.lower() == "list":
+                    check_type = "listtype"
+                if type_name == "List":
+                    check_type = "listtype"
+                if type_name.lower() == "tuple":
+                    check_type = "tuple"
+
+                cond = self._generate_type_check_condition("x", check_type)
+                if cond.strip() == "True":
+                    continue
+                dict_var = f"{type_name.lower()}_dict"
+                lines.append(f"    if {cond}:")
+                lines.append(f"        return {func_name}({dict_var}, x)")
+
+            lines.append(f"    raise ValueError(f'Operation {op_symbol} not supported for type {{type(x).__name__}}')")
             lines.append("")
 
         # Add runtime dispatch for show function
         lines.append("def systemo_show_runtime_dispatch(x):")
         lines.append("    # Try to infer type dictionary from operand type")
-        lines.append("    if isinstance(x, int):")
-        lines.append("        return systemo_show(int_dict, x)")
-        lines.append("    elif isinstance(x, float):")
-        lines.append("        return systemo_show(float_dict, x)")
-        lines.append("    elif isinstance(x, bool):")
-        lines.append("        return systemo_show(bool_dict, x)")
-        lines.append("    elif isinstance(x, str):")
-        lines.append("        return systemo_show(string_dict, x)")
-        lines.append("    elif isinstance(x, list):")
-        lines.append("        return systemo_show(list_dict, x)")
-        lines.append("    elif isinstance(x, tuple):")
-        lines.append("        return systemo_show(tuple_dict, x)")
-        lines.append("    else:")
-        lines.append(
-            "        raise ValueError(f'Operation show not supported for type {type(x).__name__}')",
-        )
+
+        type_order = list(self.type_dictionaries.keys())
+        if "Bool" in type_order:
+            type_order.remove("Bool")
+            type_order.insert(0, "Bool")
+
+        for type_name in type_order:
+            check_type = type_name
+            if type_name.lower() == "list":
+                check_type = "listtype"
+            if type_name == "List":
+                check_type = "listtype"
+            if type_name.lower() == "tuple":
+                check_type = "tuple"
+
+            cond = self._generate_type_check_condition("x", check_type)
+            if cond.strip() == "True":
+                continue
+            dict_var = f"{type_name.lower()}_dict"
+            lines.append(f"    if {cond}:")
+            lines.append(f"        return systemo_show({dict_var}, x)")
+
+        lines.append("    raise ValueError(f'Operation show not supported for type {type(x).__name__}')")
         lines.append("")
 
         # Add runtime dispatch for map function
