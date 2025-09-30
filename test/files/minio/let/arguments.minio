@@ -1,0 +1,12 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "5"
+
+f x = do {
+  let { y = x };
+  x;
+};
+
+main = do {
+  putStr (show (f 5));
+};

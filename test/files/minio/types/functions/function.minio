@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "True"
+x = True;
+y = x;
+z = y;
+
+
+main = do {
+  putStr (show z);
+};

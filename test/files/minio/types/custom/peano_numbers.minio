@@ -1,0 +1,16 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Zero,Succ(Succ(Succ(Zero)))"
+data Nat = Zero | Succ Nat;
+
+showNat Zero = "Zero";
+showNat (Succ n) = "Succ(" ++ showNat n ++ ")";
+
+natFromInt 0 = Zero;
+natFromInt n = Succ (natFromInt (n-1));
+
+main = do {
+  putStr (showNat Zero);
+  putStr ",";
+  putStr (showNat (natFromInt 3));
+};

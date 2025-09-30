@@ -1,0 +1,14 @@
+length [] = 0;
+length (x:xs) = 1 + length xs;
+
+elem x []     = False;
+elem y (x:xs) =
+    if y == x
+        then True
+        else elem y xs;
+
+tail [] = error "empty list";
+tail (x:xs) = xs;
+
+map x [] = [];
+map f (x:xs) = [f x] ++ map f xs;

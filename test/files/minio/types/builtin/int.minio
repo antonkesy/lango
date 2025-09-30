@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42-1"
+s = 42;
+
+n = (-1);
+
+main = do {
+  putStr (show s);
+  putStr (show n);
+};

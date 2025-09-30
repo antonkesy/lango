@@ -1,0 +1,8 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "1"
+get = 1;
+
+main = do {
+  putStr (show get);
+};

@@ -1,0 +1,67 @@
+-- Person
+data Person = Person { id_ :: Int, name :: String };
+
+person1 = Person { id_ = 1, name = "Alice" };
+person2 = Person { name = "Bob", id_ = 2 };
+
+printPerson (Person id_ name) = "id_: " ++ show id_ ++ ", Name: " ++ name;
+
+-- Point
+data Point = MkPoint Float Float;
+
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
+
+-- Bool
+isTrue True = "True";
+isTrue False = "False";
+
+-- Int
+add1 x = x + 1;
+
+-- Float
+add2 x = x + 2.0;
+
+-- do
+t x = do {
+  let {y = x + 1};
+  "Result: " ++ show y;
+};
+
+-- no parameter
+t1 = 1;
+
+-- List
+l = [1, 2, 3];
+
+main = do {
+  putStr "Testing isTrue function:\n";
+  putStr ("\nisTrue True: " ++ isTrue True);
+  putStr ("\nisTrue False: " ++ isTrue False);
+
+  putStr "\nTesting Person data type:";
+  putStr ("\nPerson 1: " ++ printPerson person1);
+  putStr ("\nPerson 2: " ++ printPerson person2);
+
+  putStr "\nTesting Point data type:";
+  let { point = MkPoint 3.0 4.0};
+  putStr ("\nPoint: " ++ printPoint point);
+
+  putStr "\nTesting add1 function:";
+  let { number = 5 };
+  putStr ("\nadd1 " ++ show number ++ ": " ++ show (add1 number));
+
+  putStr "\nTesting add2 function:";
+  let { number1 = 5.0 };
+  putStr ("\nadd2 " ++ show number1 ++ ": " ++ show (add2 number1));
+
+
+  putStr "\nTesting t function:";
+  let { result = t 10 };
+  putStr result;
+
+  putStr "\nTesting t1 function:";
+  putStr ("t1: " ++ show t1);
+
+  putStr "\nTesting list length:";
+  putStr ("len(l): " ++ (show (length l)));
+};

@@ -1,0 +1,9 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42"Hello""
+identity x = x;
+
+main = do {
+    putStr (show (identity 42));
+    putStr (show (identity "Hello"));
+};

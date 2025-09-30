@@ -1,0 +1,16 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42,123"
+compose f g x = f (g x);
+
+addOne x = x + 1;
+double x = x * 2;
+
+addOneAndDouble = compose double addOne;
+doubleAndAddOne = compose addOne double;
+
+main = do {
+  putStr (show (addOneAndDouble 20));  -- (20+1)*2 = 42
+  putStr ",";
+  putStr (show (doubleAndAddOne 61)); -- 61*2+1 = 123
+};

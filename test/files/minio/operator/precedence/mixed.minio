@@ -1,0 +1,12 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "True,False,True,True"
+main = do {
+  putStr (show (2 + 3 > 4));      -- Should be True: 5 > 4
+  putStr ",";
+  putStr (show (2 * 3 < 5));      -- Should be False: 6 < 5
+  putStr ",";
+  putStr (show (10 - 5 == 5));    -- Should be True: 5 == 5
+  putStr ",";
+  putStr (show (2 ^ 3 >= 8));     -- Should be True: 8 >= 8
+};

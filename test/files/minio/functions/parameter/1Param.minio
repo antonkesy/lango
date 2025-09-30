@@ -1,0 +1,10 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "234"
+add1 x = x + 1;
+
+main = do {
+  putStr (show (add1 1));
+  putStr (show (add1 2));
+  putStr (show (add1 3));
+};

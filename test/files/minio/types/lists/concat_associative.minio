@@ -1,0 +1,9 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "[1,2,3,4,5,6]"
+main = do {
+  let { list1 = [1,2] };
+  let { list2 = [3,4] };
+  let { list3 = [5,6] };
+  putStr (show (list1 ++ list2 ++ list3));  -- Should be left-associative
+};

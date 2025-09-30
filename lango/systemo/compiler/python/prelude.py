@@ -1,0 +1,169 @@
+# NOTE: do not remove any imports, they are used in the generated code
+import math
+import sys
+from typing import Any, Callable, Dict, List, Optional, Union, cast
+
+# Mathematical constants used in systemo
+NaN = float("nan")
+Infinity = float("inf")
+
+
+def primError(message: str) -> Any:
+    raise RuntimeError(f"Runtime error: {message}")
+
+
+# Primitive integer functions
+def primIntAdd(x: int, y: int) -> int:
+    return x + y
+
+
+def primIntSub(x: int, y: int) -> int:
+    return x - y
+
+
+def primIntMul(x: int, y: int) -> int:
+    return x * y
+
+
+def primIntDiv(x: int, y: int) -> float:
+    if y == 0:
+        if x == 0:
+            return float("nan")  # NaN
+        return float("inf") if x > 0 else float("-inf")  # Infinity
+    return x / y
+
+
+def primIntPow(x: int, y: int) -> int:
+    return x**y
+
+
+def primIntNeg(x: int) -> int:
+    return -x
+
+
+def primIntLt(x: int, y: int) -> bool:
+    return x < y
+
+
+def primIntLe(x: int, y: int) -> bool:
+    return x <= y
+
+
+def primIntGt(x: int, y: int) -> bool:
+    return x > y
+
+
+def primIntGe(x: int, y: int) -> bool:
+    return x >= y
+
+
+def primIntEq(x: int, y: int) -> bool:
+    return x == y
+
+
+def primIntShow(x: int) -> str:
+    return str(x)
+
+
+# Primitive float functions
+def primFloatAdd(x: float, y: float) -> float:
+    return x + y
+
+
+def primFloatSub(x: float, y: float) -> float:
+    return x - y
+
+
+def primFloatMul(x: float, y: float) -> float:
+    return x * y
+
+
+def primFloatDiv(x: float, y: float) -> float:
+    if y == 0.0:
+        if x == 0.0:
+            return float("nan")  # NaN
+        return float("inf") if x > 0 else float("-inf")  # Infinity
+    return x / y
+
+
+def primFloatPow(x: float, y: float) -> float:
+    return x**y
+
+
+def primFloatNeg(x: float) -> float:
+    return -x
+
+
+def primFloatLt(x: float, y: float) -> bool:
+    return x < y
+
+
+def primFloatLe(x: float, y: float) -> bool:
+    return x <= y
+
+
+def primFloatGt(x: float, y: float) -> bool:
+    return x > y
+
+
+def primFloatGe(x: float, y: float) -> bool:
+    return x >= y
+
+
+def primFloatEq(x: float, y: float) -> bool:
+    return x == y
+
+
+def primFloatShow(x: float) -> str:
+    if x != x:  # NaN check (NaN != NaN is True)
+        return "NaN"
+    elif x == float("inf"):
+        return "Infinity"
+    elif x == float("-inf"):
+        return "-Infinity"
+    else:
+        return str(x)
+
+
+# Primitive boolean functions
+def primBoolAnd(x: bool, y: bool) -> bool:
+    return x and y
+
+
+def primBoolOr(x: bool, y: bool) -> bool:
+    return x or y
+
+
+def primBoolEq(x: bool, y: bool) -> bool:
+    return x == y
+
+
+def primBoolShow(x: bool) -> str:
+    return str(x)
+
+
+# Primitive string functions
+def primStringConcat(x: str, y: str) -> str:
+    return x + y
+
+
+def primStringEq(x: str, y: str) -> bool:
+    return x == y
+
+
+def primStringShow(x: str) -> str:
+    return f'"{x}"'
+
+
+def primCharShow(x: str) -> str:
+    # Characters are now simple strings, so just wrap in quotes
+    return f"'{x}'"
+
+
+def primPutStr(x: str) -> None:
+    print(x, end="")
+
+
+# Primitive list functions
+def primListConcat(x: list, y: list) -> list:
+    return x + y

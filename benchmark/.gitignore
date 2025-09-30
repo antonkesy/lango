@@ -1,0 +1,8 @@
+*.go
+minio.py
+syso_mono.py
+syso_dict.py
+fib
+fib.hi
+fib.o
+fibGo

@@ -1,0 +1,40 @@
+inst show :: Bool -> String {
+  show True = "True";
+  show False = "False";
+};
+
+inst show :: Int -> String {
+  show x = primIntShow x;
+};
+
+inst show :: Float -> String {
+  show x = primFloatShow x;
+};
+
+inst show :: String -> String {
+  show x = primStringShow x;
+};
+
+inst show :: Char -> String {
+  show x = primCharShow x;
+};
+
+showListHelper [] = "]";
+showListHelper (x:xs) = ("," ++ show x) ++ showListHelper xs;
+
+inst show :: [a] -> String {
+  show [] = "[]";
+  show (x:xs) = "[" ++ show x ++ showListHelper xs;
+};
+
+inst show :: (a, b) -> String {
+  show (x, y) = "(" ++ show x ++ ", " ++ show y ++ ")";
+};
+
+inst show :: (a, b, c) -> String {
+  show (x, y, z) = "(" ++ show x ++ ", " ++ show y ++ ", " ++ show z ++ ")";
+};
+
+inst show :: (a, b, c, d) -> String {
+  show (w, x, y, z) = "(" ++ show w ++ ", " ++ show x ++ ", " ++ show y ++ ", " ++ show z ++ ")";
+};

@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Point(3.0, 4.0)"
+data Point = MkPoint Float Float;
+
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
+
+main = do {
+  let { point = MkPoint 3.0 4.0 };
+  putStr (printPoint point);
+};

@@ -1,0 +1,10 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "0"
+
+rec 0 = 0;
+rec n = rec (n - 1);
+
+main = do {
+  putStr (show (rec (5)));
+};

@@ -1,0 +1,15 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- "1.0"
+data Point = MkPoint Float Int;
+
+inst xcoord :: Point -> Float {
+  xcoord (MkPoint x y) = x;
+};
+
+test_simple p = xcoord p;
+
+main = do {
+  let { point = MkPoint 1.0 2.0 };
+  putStr (show (test_simple point));
+};

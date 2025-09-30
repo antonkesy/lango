@@ -1,0 +1,7 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "15"
+main = do {
+  let { x = 5; y = 10; z = x + y };
+  putStr (show z);
+};

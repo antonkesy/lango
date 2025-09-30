@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "True,False,"
+-- "True,False,True"
+main = do {
+  putStr (show ([1,2,3] == [1,2,3]));
+  putStr ",";
+  putStr (show ([1,2,3] == [1,2,4]));
+  putStr ",";
+  -- putStr (show ([] == [])); -- Not supported in Haskell without type annotations
+};

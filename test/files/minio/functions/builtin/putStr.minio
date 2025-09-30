@@ -1,0 +1,6 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "TEST"
+main = do {
+  putStr "TEST";
+};

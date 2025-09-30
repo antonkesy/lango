@@ -1,0 +1,4 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "TA"
+main = do { putStr "T"; putStr "A"; };

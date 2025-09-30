@@ -1,0 +1,160 @@
+start: prelude stmt* postlude
+
+prelude: COMMENT*
+postlude: COMMENT*
+
+?stmt: data_decl
+     | inst_decl
+     | func_def
+     | precedence_decl
+
+// --- Data Declarations ---
+data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)* ";"
+
+type_param: ID
+
+constructor: UIDENT record_constructor
+           | UIDENT type_atom*
+
+record_constructor: "{" [field ("," field)*] "}"
+field: ID "::" type_expr
+
+// --- Instance Declarations ---
+inst_decl: "inst" inst_operator_name "::" type_expr "{" inst_body "}" ";"
+
+inst_body: inst_func_def+
+
+// --- Precedence Declarations ---
+precedence_decl: "infixl" INT symbolic_operator ";"  -> infixl_decl
+               | "infixr" INT symbolic_operator ";"  -> infixr_decl
+               | "infix" INT symbolic_operator ";"   -> infix_decl
+
+// --- Function Signatures and Definitions ---
+
+inst_operator_name: ID
+                  | "(" symbolic_operator ")"
+
+operator_name: ID
+
+symbolic_operator: SYMBOLIC_OP
+
+SYMBOLIC_OP: "?"
+           | "+"
+           | "++"
+           | "-"
+           | "*"
+           | "**"
+           | "/"
+           | "^"
+           | "^^"
+           | "=="
+           | "/="
+           | "<"
+           | "<="
+           | ">"
+           | ">="
+           | "&&"
+           | "||"
+           | "!!"
+           | "@"
+
+func_def: operator_name pattern* "=" expr ";"
+inst_func_def: inst_operator_name pattern* "=" expr ";"
+
+do_stmt: "let" "{" assignment_list "}"
+        | expr
+
+assignment_list: assignment ("," assignment)*
+               | assignment (";" assignment)*
+
+assignment: ID "=" expr
+
+stmt_list: (do_stmt ";")+
+
+?expr: "do" "{" stmt_list "}"          -> do_block
+     | "if" expr "then" expr elsif_clauses "else" expr -> if_else_extended
+     | "if" expr "then" expr "else" expr -> if_else
+     | infix_expr
+
+elsif_clauses: ("else" "if" expr "then" expr)+
+
+// Infix expressions
+?infix_expr: app_expr
+           | app_expr symbolic_operator infix_expr -> infix_op
+
+// Application expressions - fixed to avoid reduce/reduce conflicts
+?app_expr: app_expr atom_expr -> app
+         | prefix_expr
+
+?prefix_expr: "-" atom_expr        -> unary_minus
+            | atom_expr
+
+?atom_expr: "(" expr "," expr ("," expr)* ")" -> tuple_literal
+          | "(" expr ")"           -> grouped
+          | "(" "-" INT ")"      -> neg_int
+          | "(" "-" FLOAT ")"    -> neg_float
+          | constructor_expr
+          | UIDENT                 -> constructor
+          | operator_name          -> var
+          | symbolic_operator      -> symbolic_var
+          | literal
+
+constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
+field_assign: ID "=" expr
+
+// --- Types ---
+?type_expr: type_app
+          | type_app "->" type_expr   -> arrow_type
+
+?type_app: type_app type_atom         -> type_application
+         | type_atom
+
+?type_atom: TYPE                      -> type_constructor
+          | ID                        -> type_var
+          | "[" type_expr "]"         -> list_type
+          | "(" type_expr ")"         -> grouped_type
+          | "(" type_expr "," type_expr ("," type_expr)* ")" -> tuple_type
+
+// --- Patterns ---
+?pattern: constructor_pattern
+        | cons_pattern
+        | tuple_pattern
+        | UIDENT                 -> constructor_pattern_bare
+        | "(" symbolic_operator ")" -> symbolic_operator_pattern
+        | ID
+        | literal
+        | "(" "-" INT ")"      -> neg_int
+        | "(" "-" FLOAT ")"    -> neg_float
+
+constructor_pattern: "(" UIDENT pattern+ ")"
+cons_pattern: "(" pattern COLON pattern ")"   -> cons_pattern
+tuple_pattern: "(" pattern "," pattern ("," pattern)* ")"
+
+// --- Literals ---
+?literal: INT     -> int
+        | FLOAT   -> float
+        | STRING  -> string
+        | CHAR    -> char
+        | "True"  -> true
+        | "False" -> false
+        | list
+
+list: "[" [expr ("," expr)*] "]"
+
+// --- Tokens ---
+ID: /[a-z][a-zA-Z0-9_]*/
+TYPE: /[A-Z][a-zA-Z0-9_]*/
+UIDENT: TYPE
+STRING: /"[^"]*"/
+CHAR: /'[^']*'/
+INT: /[0-9]+/
+FLOAT: /[0-9]+\.[0-9]+/
+COLON: ":"
+
+COMMENT: /--.*/
+%ignore COMMENT
+%ignore /[ \t]+/
+%ignore /\n/
+
+%import common.WS
+%ignore WS

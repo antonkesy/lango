@@ -1,0 +1,8 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "True"
+s = True;
+
+main = do {
+  putStr (show s);
+};

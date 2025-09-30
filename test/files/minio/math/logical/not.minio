@@ -1,0 +1,7 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "FalseTrue"
+main = do {
+  putStr (show (not True));
+  putStr (show (not False));
+};

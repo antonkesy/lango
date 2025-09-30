@@ -1,0 +1,9 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "[2,3,4]"
+add x y = x + y;
+add1 = add 1;
+
+main = do {
+  putStr (show (map add1 [1,2,3]));
+};

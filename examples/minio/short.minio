@@ -1,0 +1,15 @@
+data Point = MkPoint Float Float;
+
+printPoint (MkPoint x y) = "Point(" ++ show x ++ ", " ++ show y ++ ")";
+
+isTrue True = "True";
+isTrue False = "False";
+
+main = do {
+  let { p = MkPoint 3.0 4.0 };
+  putStr ("Point p: " ++ printPoint p);
+  putStr ("\n");
+  putStr ("isTrue True: " ++ isTrue True);
+  putStr ("\n");
+  putStr ("isTrue False: " ++ isTrue False);
+};

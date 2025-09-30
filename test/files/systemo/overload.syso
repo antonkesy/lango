@@ -1,0 +1,20 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "42673.04.0"
+
+inst ol :: Int -> Int {
+  ol 0 = 42;
+  ol x = x + 1;
+};
+
+inst ol :: Float -> Float {
+  ol 0.0 = 73.0;
+  ol x = x - 1.0;
+};
+
+main = do {
+  putStr (show (ol 0));
+  putStr (show (ol 5));
+  putStr (show (ol 0.0));
+  putStr (show (ol 5.0));
+};

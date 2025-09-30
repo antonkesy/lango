@@ -1,0 +1,7 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "NaNNaN"
+main = do {
+  putStr (show (0 / 0));
+  putStr (show (0.0 / 0.0));
+};

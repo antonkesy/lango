@@ -1,0 +1,15 @@
+inst f :: Int -> String {
+  f x = "Int: " ++ show x;
+};
+
+inst f :: Bool -> String {
+  f True = "True";
+  f False = "False";
+};
+
+-- Overloaded functions
+main = do {
+    putStr (f 10);
+    putStr ("\n");
+    putStr (f True);
+};

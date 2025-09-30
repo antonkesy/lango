@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "-3"
+
+inst (?) :: Int -> Int {
+  (?) x = -x;
+};
+
+main = do {
+  putStr (show (? 3));
+};

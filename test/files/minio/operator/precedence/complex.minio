@@ -1,0 +1,12 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "True,False,True,True"
+main = do {
+  putStr (show (True && False || True));    -- Should be True: (False || True)
+  putStr ",";
+  putStr (show (False || True && False));   -- Should be False: (False || False)
+  putStr ",";
+  putStr (show (not False && True));        -- Should be True: (True && True)
+  putStr ",";
+  putStr (show (not (False && True)));      -- Should be False: not False
+};

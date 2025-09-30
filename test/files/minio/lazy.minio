@@ -1,0 +1,11 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Lazy"
+lazyEval cond = do {
+    let { expensive = "This will not be printed" };
+    if cond then "Lazy" else expensive;
+};
+
+main = do {
+    putStr (lazyEval True);
+};

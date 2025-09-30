@@ -1,0 +1,10 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- "main"
+main = do {
+  putStr "main";
+};
+
+main = do {
+  putStr "main";
+};

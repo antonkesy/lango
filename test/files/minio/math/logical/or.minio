@@ -1,0 +1,9 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "TrueTrueTrueFalse"
+main = do {
+  putStr (show (True || True));
+  putStr (show (True || False));
+  putStr (show (False || True));
+  putStr (show (False || False));
+};

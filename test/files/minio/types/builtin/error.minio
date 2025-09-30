@@ -1,0 +1,11 @@
+-- RUN: FAIL
+-- TYPECHECK: OK
+-- "1"
+
+f 0 = error "division by zero";
+f n = 10 / n;
+
+main = do {
+  putStr (show (f 1));
+  putStr (show (f 0));
+};

@@ -1,0 +1,8 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Hey"
+s = "Hey";
+
+main = do {
+  putStr s;
+};

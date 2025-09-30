@@ -1,0 +1,4 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "Hello, World!"
+main = putStr "Hello, World!";
