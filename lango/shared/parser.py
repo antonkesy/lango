@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Set
 
 from lark import Lark, ParseTree
 
@@ -32,7 +33,38 @@ def parse_lark(
 
     with open(f"./build/main.{file_extension}", "w") as f:
         f.write(main_content + prelude_content)
+    # Prevent user files from redefining prelude symbols (avoid "jailbreak")
+    import re
 
-    # TODO: stop jailbreaking by checking if user defines something with the same name as a prelude definition
+    def _extract_top_level_names(src: str) -> Set[str]:
+        # crude but effective heuristic: capture identifiers at start of line
+        # followed by a type sig '::', a '(' (function args) or '=' (definition)
+        pattern = re.compile(r"(?m)^[ \t]*([A-Za-z_][\w']*)\s*(?:::|\(|=)")
+        return set(pattern.findall(src))
 
+    prelude_names = _extract_top_level_names(prelude_content)
+    main_names = _extract_top_level_names(main_content)
+    # Filter out language keywords and common non-symbol tokens
+    reserved_keywords = {
+        "inst",
+        "data",
+        "let",
+        "do",
+        "if",
+        "case",
+        "module",
+        "where",
+        "import",
+        "type",
+        "precedence",
+    }
+    prelude_names = {n for n in prelude_names if n not in reserved_keywords}
+    main_names = {n for n in main_names if n not in reserved_keywords}
+    conflicts = prelude_names & main_names
+    if conflicts:
+        raise ValueError(
+            f"Prelude defines names {sorted(conflicts)}; user file must not redefine prelude symbols",
+        )
+
+    # Keep original parsing order (main then prelude) for backward compatibility
     return parser.parse(main_content + prelude_content)
