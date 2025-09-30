@@ -2034,7 +2034,6 @@ class SystemoCompiler:
                     return f"({compiled_elements[0]},)"
                 return f"({', '.join(compiled_elements)})"
             case Variable(name=name):
-                # TODO: just create a call to the exact name with type suffix
                 return self._compile_variable_expression(name)
             case Constructor(name=name):
                 return self._compile_constructor_expression(name)
@@ -2220,8 +2219,7 @@ class SystemoCompiler:
                 case _:
                     return "None"
 
-        # For multiple statements in expression context, fall back to sequential execution
-        # This is a bit hacky but works for simple cases
+        # For multiple statements in expression context, evaluate sequentially and return the final value
         parts = []
         for stmt in do_block.statements[:-1]:
             match stmt:
@@ -2428,8 +2426,6 @@ class SystemoCompiler:
         if monomorphic_name:
             arg_exprs = [self._compile_expression(arg) for arg in args]
             return f"{monomorphic_name}({', '.join(arg_exprs)})"
-
-        # No legacy/special-case handling for tuple `show` here — rely on generic lookup
 
         return None
 

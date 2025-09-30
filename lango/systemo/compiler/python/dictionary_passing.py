@@ -2861,8 +2861,7 @@ class SystemoCompiler:
                 case _:
                     return "None"
 
-        # For multiple statements in expression context, fall back to sequential execution
-        # This is a bit hacky but works for simple cases
+        # For multiple statements in expression context, use sequential execution
         parts = []
         for stmt in do_block.statements[:-1]:
             match stmt:
@@ -2913,7 +2912,7 @@ class SystemoCompiler:
             case TupleType():
                 return "tuple"
             case _:
-                pass  # Fall through to legacy handling
+                pass
 
         if hasattr(type_expr, "__class__"):
             class_name = type_expr.__class__.__name__
@@ -3721,29 +3720,7 @@ class SystemoCompiler:
                 for stmt in stmts:
                     if isinstance(stmt, LetStatement):
                         self._collect_concrete_polymorphic_instantiations(stmt.value)
-                    # Skip non-expression statements
-                    elif isinstance(  # TODO: replace with is_expression
-                        stmt,
-                        (
-                            IntLiteral,
-                            FloatLiteral,
-                            StringLiteral,
-                            CharLiteral,
-                            BoolLiteral,
-                            ListLiteral,
-                            TupleLiteral,
-                            Variable,
-                            Constructor,
-                            SymbolicOperation,
-                            IfElse,
-                            DoBlock,
-                            FunctionApplication,
-                            ConstructorExpression,
-                            GroupedExpression,
-                            NegativeInt,
-                            NegativeFloat,
-                        ),
-                    ):
+                    elif self._is_expression(stmt):
                         self._collect_concrete_polymorphic_instantiations(stmt)
 
             case GroupedExpression(expression=inner_expr):
