@@ -10,6 +10,8 @@ def parse_lark(
     grammar: Path,
     prelude_dir: Path,
     file_extension: str,
+    prelude_first: bool = False,
+    check_prelude_conflicts: bool = True,
 ) -> ParseTree:
     parser = Lark.open(
         str(grammar),
@@ -61,10 +63,13 @@ def parse_lark(
     prelude_names = {n for n in prelude_names if n not in reserved_keywords}
     main_names = {n for n in main_names if n not in reserved_keywords}
     conflicts = prelude_names & main_names
-    if conflicts:
+    if conflicts and check_prelude_conflicts:
         raise ValueError(
             f"Prelude defines names {sorted(conflicts)}; user file must not redefine prelude symbols",
         )
 
-    # Keep original parsing order (main then prelude) for backward compatibility
+    if prelude_first:
+        # System O scopes declarations sequentially, so the prelude must
+        # precede the user program.
+        return parser.parse(prelude_content + main_content)
     return parser.parse(main_content + prelude_content)

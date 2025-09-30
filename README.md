@@ -65,6 +65,46 @@ main = do {
 
 > Int: 10True
 
+### System O in a nutshell
+
+The implementation follows the paper closely; the type checker is the
+constrained unification / type reconstruction algorithm of Section 6, the
+`dictionary_passing` compiler is the translation of Section 4, the
+`monomorphization` compiler resolves the same dictionaries at compile time,
+and the interpreter implements the untyped dynamic semantics of Section 3
+(overloaded functions dispatch on the type constructor of their first
+argument).
+
+- **Overloaded identifiers** have no class declaration. An identifier is
+  overloaded by giving it instances: `inst o :: sigma { clauses }`.
+  Every use of `o` has the type `(o :: a -> b) => a -> b`; the constraint is
+  discharged when `a` becomes known.
+- **Instance types** must have the form `T a1 ... an -> t` where the `ai` are
+  distinct type variables and `t` only mentions the `ai`: an instance works
+  uniformly for all values built from the type constructor `T`, and the
+  argument type determines the result type. `o` has at most one instance per
+  type constructor.
+- **Constraints** on the type variables of an instance are written in front
+  of the type, e.g. `inst show :: (show :: a -> String) => [a] -> String`.
+  A constraint `o :: a -> t` says that `o` must be defined at `a` with
+  result type `t`.
+- **Inferred types** are constrained type schemes, for example
+  `elem :: ((==) :: a -> b -> Bool) => a -> [b] -> Bool`
+  (`lango types systemo file.syso` prints them). No type annotations are
+  ever required: every typable program has a principal type and no program is
+  ambiguous (`[] == []` is `True`).
+- **Instance declarations are not recursive**: the body of an instance of `o`
+  for `T` cannot use `o` at `T` (use a helper function instead).
+- **Declarations are scoped sequentially**, like `let u = e in p` and
+  `inst o :: s = e in p` in the paper: a function or instance is visible in
+  the declarations that follow it. Functions may be recursive (monomorphic
+  recursion) and consist of several clauses.
+- **Numeric literals are not overloaded**: `1` is an `Int` and `1.0` a
+  `Float`. Prefix minus `-x` is sugar for the overloaded function `negate x`.
+- The [prelude](./lango/systemo/prelude/) is written in SystemO itself on top
+  of a few primitives (`primIntAdd`, ...); it is just a normal program
+  prefix.
+
 ## Installation
 
 ### Containerized Setup

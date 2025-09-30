@@ -1,5 +1,6 @@
-inst (-) :: Float -> Float {
-  (-) x = primFloatNeg x;
+-- Prefix minus `-x` is syntactic sugar for `negate x`.
+inst negate :: Float -> Float {
+  negate x = primFloatNeg x;
 };
 
 inst (+) :: Float -> Float -> Float {
@@ -12,12 +13,6 @@ inst (-) :: Float -> Float -> Float {
 
 inst (*) :: Float -> Float -> Float {
   (*) x y = primFloatMul x y;
-};
-
-inst (/) :: Float -> Float -> Float {
-  (/) 0.0 0.0 = NaN;
-  (/) x 0.0 = if x >= 0.0 then Infinity else -Infinity;
-  (/) x y = primFloatDiv x y;
 };
 
 inst (<) :: Float -> Float -> Bool {
@@ -42,6 +37,12 @@ inst (==) :: Float -> Float -> Bool {
 
 inst (/=) :: Float -> Float -> Bool {
   (/=) x y = not (x == y);
+};
+
+inst (/) :: Float -> Float -> Float {
+  (/) 0.0 0.0 = NaN;
+  (/) x 0.0 = if x >= 0.0 then Infinity else -Infinity;
+  (/) x y = primFloatDiv x y;
 };
 
 inst (^^) :: Float -> Float -> Float {

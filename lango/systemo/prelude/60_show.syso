@@ -22,19 +22,19 @@ inst show :: Char -> String {
 showListHelper [] = "]";
 showListHelper (x:xs) = ("," ++ show x) ++ showListHelper xs;
 
-inst show :: [a] -> String {
+inst show :: (show :: a -> String) => [a] -> String {
   show [] = "[]";
   show (x:xs) = "[" ++ show x ++ showListHelper xs;
 };
 
-inst show :: (a, b) -> String {
+inst show :: (show :: a -> String, show :: b -> String) => (a, b) -> String {
   show (x, y) = "(" ++ show x ++ ", " ++ show y ++ ")";
 };
 
-inst show :: (a, b, c) -> String {
+inst show :: (show :: a -> String, show :: b -> String, show :: c -> String) => (a, b, c) -> String {
   show (x, y, z) = "(" ++ show x ++ ", " ++ show y ++ ", " ++ show z ++ ")";
 };
 
-inst show :: (a, b, c, d) -> String {
+inst show :: (show :: a -> String, show :: b -> String, show :: c -> String, show :: d -> String) => (a, b, c, d) -> String {
   show (w, x, y, z) = "(" ++ show w ++ ", " ++ show x ++ ", " ++ show y ++ ", " ++ show z ++ ")";
 };

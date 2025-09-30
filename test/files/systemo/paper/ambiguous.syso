@@ -1,0 +1,7 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "True"
+
+-- `[] == []` is ambiguous in Haskell; System O gives it a meaning independent
+-- of the type of the elements, so no type annotation is needed.
+main = putStr (show ([] == []));

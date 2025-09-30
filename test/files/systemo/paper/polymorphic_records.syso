@@ -1,0 +1,27 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "("two", 1)(2, True)"
+
+inst first :: (a, b) -> a {
+  first (x, y) = x;
+};
+
+inst second :: (a, b) -> b {
+  second (x, y) = y;
+};
+
+inst first :: (a, b, c) -> a {
+  first (x, y, z) = x;
+};
+
+inst second :: (a, b, c) -> b {
+  second (x, y, z) = y;
+};
+
+-- demo :: (first :: a -> b, second :: a -> c) => a -> (c, b)
+demo r = (second r, first r);
+
+main = do {
+  putStr (show (demo (1, "two")));
+  putStr (show (demo (True, 2, 'c')));
+};

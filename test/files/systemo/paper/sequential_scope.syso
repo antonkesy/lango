@@ -1,0 +1,8 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
+
+-- Declarations are scoped sequentially: `helper` is not yet defined here.
+main = putStr (helper 1);
+
+helper x = show x;

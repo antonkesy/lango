@@ -1,0 +1,19 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "TrueFalseTrue"
+
+data Colour = Red | Green | Blue;
+
+inst (==) :: Colour -> Colour -> Bool {
+  (==) Red Red = True;
+  (==) Green Green = True;
+  (==) Blue Blue = True;
+  (==) x y = False;
+};
+
+-- elem :: ((==) :: a -> b -> Bool) => a -> [b] -> Bool is used at Colour
+main = do {
+  putStr (show (elem Red [Green, Red]));
+  putStr (show (elem Blue [Green, Red]));
+  putStr (show ([Red, Green] == [Red, Green]));
+};

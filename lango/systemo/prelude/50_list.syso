@@ -1,0 +1,36 @@
+inst (++) :: [a] -> [a] -> [a] {
+  (++) x y = primListConcat x y;
+};
+
+listEq [] [] = True;
+listEq (x:xs) (y:ys) = x == y && listEq xs ys;
+listEq xs ys = False;
+
+-- Instance declarations are not recursive, hence the helper `listEq`.
+inst (==) :: ((==) :: a -> a -> Bool) => [a] -> [a] -> Bool {
+  (==) x y = listEq x y;
+};
+
+inst (/=) :: ((==) :: a -> a -> Bool) => [a] -> [a] -> Bool {
+  (/=) x y = not (x == y);
+};
+
+length [] = 0;
+length (x:xs) = 1 + length xs;
+
+elem x []     = False;
+elem y (x:xs) = if y == x then True else elem y xs;
+
+tail [] = error "empty list";
+tail (x:xs) = xs;
+
+map f [] = [];
+map f (x:xs) = [f x] ++ map f xs;
+
+index [] n = error "index too large";
+index (x:xs) 0 = x;
+index (x:xs) n = if n < 0 then error "negative index" else index xs (n - 1);
+
+inst (!!) :: [a] -> Int -> a {
+  (!!) xs n = index xs n;
+};

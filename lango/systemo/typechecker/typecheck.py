@@ -1,34 +1,22 @@
 from lango.shared.ast.nodes import Program
-from lango.shared.typechecker.lango_types import TypeScheme, normalize_type_scheme
-from lango.systemo.typechecker.infer import TypeInferrer
-from lango.systemo.typechecker.infer import type_check_ast as type_check_ast_impl
+from lango.systemo.typechecker.infer import FunctionDecl, TypedProgram, infer_program
+from lango.systemo.typechecker.types import display_name, scheme_to_str
+
+
+def type_check(ast: Program) -> TypedProgram:
+    """Type check a program; raises ``TypeInferenceError`` if it is ill-typed."""
+    return infer_program(ast)
 
 
 def get_type_str(ast: Program) -> str:
-    res = ""
-
-    inferrer = TypeInferrer()
-    type_env = inferrer.infer_program(ast)
-
-    # Display regular functions and types
-    for name, scheme in type_env.items():
-        normalized_scheme = normalize_type_scheme(scheme)
-        res += f"  {name} :: {normalized_scheme}\n"
-
-    # Display overloaded functions
-    for instance_name, instances in inferrer.instances.items():
-        for instance_type, _ in instances:
-            # Normalize the instance type
-            free_vars = instance_type.free_vars()
-            scheme = TypeScheme(free_vars, instance_type)
-            normalized_scheme = normalize_type_scheme(scheme)
-            res += f"  {instance_name} :: {normalized_scheme}\n"
-    return res
-
-
-def type_check(ast: Program) -> bool:
-    try:
-        type_check_ast_impl(ast)
-        return True
-    except Exception as e:
-        raise e
+    typed = infer_program(ast)
+    lines = []
+    for decl in typed.decls:
+        match decl:
+            case FunctionDecl(name=name, scheme=scheme):
+                lines.append(f"  {name} :: {scheme_to_str(scheme)}")
+            case _:
+                lines.append(
+                    f"  inst {display_name(decl.name)} :: {scheme_to_str(decl.scheme)}",
+                )
+    return "\n".join(lines) + "\n"

@@ -1,0 +1,20 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "-3-2.5V(-4)"
+
+data V = MkV Int;
+
+-- Prefix minus is the overloaded function `negate`.
+inst negate :: V -> V {
+  negate (MkV x) = MkV (-x);
+};
+
+inst show :: V -> String {
+  show (MkV x) = "V(" ++ show x ++ ")";
+};
+
+main = do {
+  putStr (show (-(1 + 2)));
+  putStr (show (-2.5));
+  putStr (show (-(MkV 4)));
+};

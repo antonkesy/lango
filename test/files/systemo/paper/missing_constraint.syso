@@ -1,0 +1,12 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
+
+data Box a = MkBox a;
+
+-- The body needs `show :: a -> String`, which the declared type does not provide.
+inst show :: Box a -> String {
+  show (MkBox x) = "Box(" ++ show x ++ ")";
+};
+
+main = putStr (show (MkBox 1));

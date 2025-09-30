@@ -1,9 +1,9 @@
-from collections import defaultdict
 from pathlib import Path
+from typing import List
 
 from lango.shared.ast.nodes import FunctionDefinition, Program
 from lango.shared.parser import parse_lark
-from lango.systemo.ast.precedence_rewriter import rewrite_precedence
+from lango.systemo.ast.desugar import desugar_program
 from lango.systemo.ast.transformer import transform_parse_tree
 
 
@@ -14,48 +14,51 @@ def parse(path: Path) -> Program:
             grammar=Path("./lango/systemo/parser/systemo.lark"),
             prelude_dir=Path("./lango/systemo/prelude"),
             file_extension="syso",
+            prelude_first=True,
+            # rebinding a unique variable is a type error (checked by the type checker)
+            check_prelude_conflicts=False,
         ),
     )
-    program = rewrite_precedence(program)
-
+    program = desugar_program(program)
     _validate_program(program)
-
     return program
 
 
 def _validate_program(program: Program) -> None:
-    # at least one main
-    if not any(
-        isinstance(stmt, FunctionDefinition) and stmt.function_name == "main"
-        for stmt in program.statements
-    ):
-        raise RuntimeError("No main function defined")
-
-    # only one main
-    main_functions = [
+    mains = [
         stmt
         for stmt in program.statements
         if isinstance(stmt, FunctionDefinition) and stmt.function_name == "main"
     ]
-    if len(main_functions) > 1:
+    if not mains:
+        raise RuntimeError("No main function defined")
+    if len(mains) > 1:
         raise RuntimeError("Multiple main functions defined")
+    _validate_function_clauses(program)
 
-    _validate_function_pattern_consistency(program)
 
+def _validate_function_clauses(program: Program) -> None:
+    """The clauses of a function must be contiguous and of equal arity.
 
-def _validate_function_pattern_consistency(program: Program) -> None:
-    function_patterns = defaultdict(list)
-
+    A unique variable is bound at most once in a System O program; the
+    clauses of one function together form its single (recursive) binding.
+    """
+    seen: List[str] = []
+    previous: FunctionDefinition | None = None
     for stmt in program.statements:
-        if isinstance(stmt, FunctionDefinition):
-            pattern_count = len(stmt.patterns)
-            function_patterns[stmt.function_name].append(pattern_count)
-
-    for function_name, pattern_counts in function_patterns.items():
-        if len(set(pattern_counts)) > 1:
-            unique_counts = sorted(set(pattern_counts))
+        if not isinstance(stmt, FunctionDefinition):
+            previous = None
+            continue
+        if previous is not None and previous.function_name == stmt.function_name:
+            if len(previous.patterns) != len(stmt.patterns):
+                raise RuntimeError(
+                    f"Function '{stmt.function_name}' has clauses with "
+                    f"{len(previous.patterns)} and {len(stmt.patterns)} parameters",
+                )
+        elif stmt.function_name in seen:
             raise RuntimeError(
-                f"Function '{function_name}' has inconsistent pattern counts: "
-                f"found definitions with {unique_counts} parameters respectively. "
-                f"All pattern matches for the same function must have the same number of parameters.",
+                f"Function '{stmt.function_name}' is defined more than once",
             )
+        else:
+            seen.append(stmt.function_name)
+        previous = stmt

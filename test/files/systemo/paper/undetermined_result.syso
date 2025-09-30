@@ -1,0 +1,10 @@
+-- RUN: FAIL
+-- TYPECHECK: FAIL
+-- ""
+
+-- The argument type must determine the result type uniquely.
+inst f :: Int -> a {
+  f x = error "no";
+};
+
+main = putStr (show (f 1));

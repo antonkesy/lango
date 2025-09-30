@@ -1,0 +1,14 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "[2,3,4][False,True]"
+
+-- applyAll :: (a -> b) -> [a] -> [b]; show is resolved at [Int] and [Bool]
+applyAll f [] = [];
+applyAll f (x:xs) = [f x] ++ applyAll f xs;
+
+inc x = x + 1;
+
+main = do {
+  putStr (show (applyAll inc [1, 2, 3]));
+  putStr (show (applyAll not [True, False]));
+};
