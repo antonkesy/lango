@@ -1179,10 +1179,7 @@ class SystemoCompiler:
             )
         else:
             # For higher arity, fallback to original behavior for now
-            lines.append(
-                f"# TODO: Implement dictionary passing for arity {arity} function {prefixed_name}",
-            )
-
+            pass
         return lines
 
     def _generate_unary_generic_function(

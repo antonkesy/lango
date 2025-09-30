@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lango"
 version = "0.1.0"
-description = "TODO"
+description = "Implementation of the programming language SystemO as described in 'A Second Look at Overloading' by Martin Odersky, Philip Wadler, and Martin Wehr in 1995."
 readme = "README.md"
 authors = [ {name = "Anton Kesy", email = "antonkesy@gmail.com"} ]
 requires-python = ">=3.13"
