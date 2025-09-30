@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from typing import Dict, ItemsView, List, Optional, Set, Tuple
 
@@ -416,8 +417,6 @@ class TypeInferrer:
             inferred_type = inferred_scheme.type
 
             # Try to unify the declared type with the inferred type
-            from lango.shared.typechecker.unify import unify_one
-
             unify_one(declared_type, inferred_type)
 
         except Exception as e:
@@ -455,8 +454,6 @@ class TypeInferrer:
             body = function_definition.body
 
             # Check if it's a constructor pattern returning a field
-            from lango.systemo.ast.nodes import ConstructorPattern
-
             if isinstance(pattern, ConstructorPattern) and isinstance(body, Variable):
                 constructor_name = pattern.constructor
                 if constructor_name in self.data_constructors:
@@ -464,8 +461,6 @@ class TypeInferrer:
 
                     # Find which field is being returned
                     for i, pattern_param in enumerate(pattern.patterns):
-                        from lango.systemo.ast.nodes import VariablePattern
-
                         if (
                             isinstance(pattern_param, VariablePattern)
                             and pattern_param.name == body.name
@@ -508,8 +503,6 @@ class TypeInferrer:
                 return func_type
 
     def _extract_operator_name(self, instance_name: str) -> str:
-        import re
-
         # Look for pattern Tree(Token('RULE', 'inst_operator_name'), ['<operator>'])
         match = re.search(
             r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']*)'\]\)",

@@ -1,3 +1,5 @@
+import hashlib
+import re
 from typing import Any, Dict, List, Optional, Set
 
 from lango.shared.compiler.python import (
@@ -21,6 +23,7 @@ from lango.shared.typechecker.lango_types import (
     TypeVar,
 )
 from lango.systemo.ast.nodes import (
+    ArrowType,
     BoolLiteral,
     CharLiteral,
     ConsPattern,
@@ -50,6 +53,11 @@ from lango.systemo.ast.nodes import (
     SymbolicOperation,
     TupleLiteral,
     TuplePattern,
+    TupleType,
+    TypeApplication,
+    TypeConstructor,
+    TypeExpression,
+    TypeVariable,
     Variable,
     VariablePattern,
     is_expression,
@@ -260,13 +268,9 @@ class SystemoCompiler:
         type_sig = instance.type_signature
 
         # Check for function type (ArrowType or FunctionType)
-        from lango.systemo.ast.nodes import ArrowType
-
         if isinstance(type_sig, ArrowType):
             # Function type: from_type -> to_type
             param_type = type_sig.from_type
-
-            from lango.systemo.ast.nodes import TypeConstructor
 
             if isinstance(param_type, TypeConstructor):
                 type_name = param_type.name

@@ -1,3 +1,5 @@
+import hashlib
+import re
 from typing import Any, Dict, List, Optional, Set
 
 from lango.shared.compiler.python import (
@@ -21,6 +23,7 @@ from lango.shared.typechecker.lango_types import (
     TypeVar,
 )
 from lango.systemo.ast.nodes import (
+    ArrowType,
     BoolLiteral,
     CharLiteral,
     ConsPattern,
@@ -50,6 +53,11 @@ from lango.systemo.ast.nodes import (
     SymbolicOperation,
     TupleLiteral,
     TuplePattern,
+    TupleType,
+    TypeApplication,
+    TypeConstructor,
+    TypeExpression,
+    TypeVariable,
     Variable,
     VariablePattern,
     is_expression,
@@ -527,8 +535,6 @@ class SystemoCompiler:
 
         # Handle string representations (fallback for existing code)
         if isinstance(instance_name, str):
-            import re
-
             # Look for operator patterns like Tree(Token('RULE', 'inst_operator_name'), ['/'])
             operator_match = re.search(
                 r"Tree\(Token\('RULE', 'inst_operator_name'\), \['([^']+)'\]\)",
@@ -562,13 +568,6 @@ class SystemoCompiler:
                 return type_str
 
         # Try to infer from the operand structure
-        from lango.systemo.ast.nodes import (
-            FloatLiteral,
-            FunctionApplication,
-            IntLiteral,
-            Variable,
-        )
-
         if isinstance(operand, IntLiteral):
             return "Int"
         elif isinstance(operand, FloatLiteral):
@@ -1622,8 +1621,6 @@ class SystemoCompiler:
 
                 # Check if any of the types look like type variables
                 # Type variables are typically single letters or letter+number combinations
-                import re
-
                 type_var_pattern = re.compile(r"^[a-z](\d+)?$")
                 has_type_vars = any(
                     type_var_pattern.match(t)
@@ -1858,8 +1855,6 @@ class SystemoCompiler:
                     return_type = self._type_expression_to_string(ty)
 
                 # Check for type variables in unary operators too
-                import re
-
                 type_var_pattern = re.compile(r"^[a-z](\d+)?$")
                 has_type_vars = any(
                     type_var_pattern.match(t) for t in [arg_type, return_type]
@@ -2356,8 +2351,6 @@ class SystemoCompiler:
                 # Fallback to the original function but sanitize for function names
                 type_str = self._type_expression_to_string(type_expr)
                 # Replace -> with _to_ and remove special characters
-                import re
-
                 sanitized = type_str.replace(" -> ", "_to_").replace("->", "_to_")
                 sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", sanitized)
                 return sanitized
@@ -2412,8 +2405,6 @@ class SystemoCompiler:
             return f"systemo_{base_name}_{type_suffix}"
         except Exception as e:
             # Fallback to index-based naming if type processing fails
-            import hashlib
-
             type_hash = hashlib.md5(str(type_signature).encode()).hexdigest()[:8]
             return f"systemo_{base_name}_{type_hash}"
 
@@ -2458,8 +2449,6 @@ class SystemoCompiler:
         if function_name == "show" and len(args) == 1:
             arg = args[0]
             if hasattr(arg, "ty") and hasattr(arg.ty, "__class__"):
-                from lango.systemo.ast.nodes import TupleType
-
                 if isinstance(arg.ty, TupleType):
                     # Generate specialized tuple show function name
                     tuple_type_str = self._tuple_type_to_string(arg.ty.element_types)
@@ -3140,8 +3129,6 @@ class SystemoCompiler:
 
             case DoBlock(statements=stmts):
                 for stmt in stmts:
-                    from lango.systemo.ast.nodes import LetStatement
-
                     if isinstance(stmt, LetStatement):
                         self._collect_concrete_polymorphic_instantiations(stmt.value)
                     # Skip non-expression statements

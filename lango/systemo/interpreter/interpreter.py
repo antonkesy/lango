@@ -1,3 +1,4 @@
+import re
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
@@ -42,8 +43,9 @@ from lango.systemo.ast.nodes import (
     TypeExpression,
     TypeVariable,
     Variable,
-    VariablePattern,
 )
+from lango.systemo.ast.nodes import VariablePattern
+from lango.systemo.ast.nodes import VariablePattern as VP
 from lango.systemo.typechecker.typecheck import type_check
 
 # Type aliases for the interpreter
@@ -127,8 +129,6 @@ def extract_function_name(name_tree: Any) -> str:
     # Handle Tree objects from Lark parser
     if "Token('ID'," in name_str:
         # Extract token value from something like: Tree(...[Token('ID', 'xcoord')])
-        import re
-
         match = re.search(r"Token\('ID',\s*'([^']+)'\)", name_str)
         if match:
             return match.group(1)
@@ -222,8 +222,6 @@ def build_environment(
 
                     # This is an infix operator pattern that needs fixing
                     # We need to create new variable names for the parameters
-                    from lango.systemo.ast.nodes import VariablePattern as VP
-
                     fixed_patterns = [
                         VP(name="a", ty=func_def.patterns[0].ty),  # First argument
                         func_def.patterns[1],  # Second argument (already correct)
