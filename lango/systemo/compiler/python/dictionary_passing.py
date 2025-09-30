@@ -75,9 +75,7 @@ class SystemoCompiler:
         self.function_types: Dict[str, Type] = {}
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()
-        self.monomorphic_functions: Dict[str, str] = (
-            {}
-        )
+        self.monomorphic_functions: Dict[str, str] = {}
         self.type_dictionaries: Dict[str, Dict[str, str]] = (
             {}
         )  # Maps type name -> {operation -> primitive function}
@@ -705,7 +703,9 @@ class SystemoCompiler:
                 lines.append(f"        return {func_name}({dict_var}, x, y)")
 
             # Final fallback: raise informative error
-            lines.append(f"    raise ValueError(f'Operation {op_symbol} not supported for types {{type(x).__name__}} and {{type(y).__name__}}')")
+            lines.append(
+                f"    raise ValueError(f'Operation {op_symbol} not supported for types {{type(x).__name__}} and {{type(y).__name__}}')",
+            )
             lines.append("")
 
         # Unary operations runtime dispatch
@@ -739,7 +739,9 @@ class SystemoCompiler:
                 lines.append(f"    if {cond}:")
                 lines.append(f"        return {func_name}({dict_var}, x)")
 
-            lines.append(f"    raise ValueError(f'Operation {op_symbol} not supported for type {{type(x).__name__}}')")
+            lines.append(
+                f"    raise ValueError(f'Operation {op_symbol} not supported for type {{type(x).__name__}}')",
+            )
             lines.append("")
 
         # Add runtime dispatch for show function
@@ -767,7 +769,9 @@ class SystemoCompiler:
             lines.append(f"    if {cond}:")
             lines.append(f"        return systemo_show({dict_var}, x)")
 
-        lines.append("    raise ValueError(f'Operation show not supported for type {type(x).__name__}')")
+        lines.append(
+            "    raise ValueError(f'Operation show not supported for type {type(x).__name__}')",
+        )
         lines.append("")
 
         # Add runtime dispatch for map function
