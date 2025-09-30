@@ -30,18 +30,14 @@ isTrue False = "False";
 main = do {
   let { p = MkPoint 3.0 4.0 };
   putStr ("Point p: " ++ printPoint p);
-  putStr ("\n");
   putStr ("isTrue True: " ++ isTrue True);
-  putStr ("\n");
   putStr ("isTrue False: " ++ isTrue False);
 };
 ```
 
 `lango run minio examples/minio/short.minio`:
 
-> Point p: Point(3.0, 4.0)
-> isTrue True: True
-> isTrue False: False
+> Point p: Point(3.0, 4.0)isTrue True: TrueisTrue False: False
 
 ## SystemO Example
 
@@ -61,15 +57,13 @@ inst f :: Bool -> String {
 -- Overloaded functions
 main = do {
     putStr (f 10);
-    putStr ("\n");
     putStr (f True);
 };
 ```
 
 `lango run systemo examples/systemo/short.syso`:
 
-> Int: 10
-> True
+> Int: 10True
 
 ## Installation
 
