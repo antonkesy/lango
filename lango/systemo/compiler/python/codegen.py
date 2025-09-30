@@ -489,7 +489,9 @@ class CodeGenerator:
                 raise CompileError(f"Unhandled expression {type(expr).__name__}")
 
     def compile_variable(
-        self, node: Union[Variable, Constructor], context: Context
+        self,
+        node: Union[Variable, Constructor],
+        context: Context,
     ) -> str:
         use = self.typed.var_use(node)
         match use.kind:
