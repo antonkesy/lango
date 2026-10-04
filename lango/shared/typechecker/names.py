@@ -1,7 +1,7 @@
 """Readable names for type variables: ``a`` ... ``z``, ``a1`` ... ``z1``, ``a2`` ..."""
 
+from collections.abc import Iterator
 from itertools import count
-from typing import Iterator
 
 
 def var_name(index: int) -> str:

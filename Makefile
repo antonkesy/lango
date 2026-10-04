@@ -144,7 +144,7 @@ profil-minio-run: install
 profil-systemo-run: install
 	. venv/bin/activate && \
 	pip install py-spy && \
-	py-spy top -- lango run systemo examples/syso/example.syso
+	py-spy top -- lango run systemo examples/systemo/example.syso
 
 # Benchmarking
 bench-fibonacci: install

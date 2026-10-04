@@ -8,7 +8,6 @@ applications of the (overloaded) operator functions.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 from lango.shared.ast.nodes import (
     Associativity,
@@ -42,9 +41,9 @@ class DesugarError(Exception):
 
 @dataclass
 class Fixities:
-    table: Dict[str, Tuple[int, Associativity]]
+    table: dict[str, tuple[int, Associativity]]
 
-    def of(self, operator: str) -> Tuple[int, Associativity]:
+    def of(self, operator: str) -> tuple[int, Associativity]:
         return self.table.get(operator, DEFAULT_FIXITY)
 
 
@@ -56,7 +55,7 @@ def desugar_program(program: Program) -> Program:
             if isinstance(stmt, PrecedenceDeclaration)
         },
     )
-    statements: List[Statement] = []
+    statements: list[Statement] = []
     for stmt in program.statements:
         match stmt:
             case PrecedenceDeclaration():
@@ -138,10 +137,10 @@ def _desugar_statement(stmt: Statement, fixities: Fixities) -> Statement:
             return _desugar_expr(stmt, fixities)  # type: ignore[arg-type]
 
 
-def _flatten_chain(expr: Expression) -> Tuple[List[Expression], List[str]]:
+def _flatten_chain(expr: Expression) -> tuple[list[Expression], list[str]]:
     """The parser produces right-nested chains ``a op1 (b op2 (c op3 d))``."""
-    operands: List[Expression] = []
-    operators: List[str] = []
+    operands: list[Expression] = []
+    operators: list[str] = []
     current = expr
     while isinstance(current, SymbolicOperation):
         left, right = current.operands
@@ -153,8 +152,8 @@ def _flatten_chain(expr: Expression) -> Tuple[List[Expression], List[str]]:
 
 
 def _reassociate(
-    operands: List[Expression],
-    operators: List[str],
+    operands: list[Expression],
+    operators: list[str],
     fixities: Fixities,
 ) -> Expression:
     """Precedence climbing over a flat operator chain."""
@@ -162,7 +161,7 @@ def _reassociate(
     def binary(op: str, left: Expression, right: Expression) -> Expression:
         return FunctionApplication(FunctionApplication(Variable(op), left), right)
 
-    def parse(index: int, min_prec: int) -> Tuple[Expression, int]:
+    def parse(index: int, min_prec: int) -> tuple[Expression, int]:
         left = operands[index]
         while index < len(operators):
             op = operators[index]

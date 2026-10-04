@@ -112,9 +112,9 @@ overloaded identifier the type checker records which instance (or which
 dictionary parameter of the enclosing function) satisfies the constraint.
 
 ```haskell
-inst show :: Int -> String { show x = primIntShow x; };
-
-twice x = show x ++ show x;   -- twice :: (show :: a -> String) => a -> String
+-- show and (++) are overloaded identifiers of the prelude:
+-- twice :: (show :: a -> c, (++) :: c -> c -> b) => a -> b
+twice x = show x ++ show x;
 
 main = putStr (twice 1);
 ```
@@ -123,13 +123,17 @@ main = putStr (twice 1);
 paper): a constrained binding takes one extra argument per constraint, the
 "dictionary", i.e. the implementation of the overloaded identifier at the
 instance type. Overloaded identifiers at a constrained type variable become
-that parameter; at a known type they become the instance function.
+that parameter; at a known type they become the instance function
+(`lango compile systemo twice.syso --strategy dictionary_passing`, names
+abbreviated):
 
 ```python
-def twice(d_show):                        # dictionary for `show :: a -> String`
-    return lambda x: concat(d_show(x))(d_show(x))
+def _impl(d_show, d_plus_plus, a0):       # one dictionary per constraint
+    v_x = a0
+    return d_plus_plus(d_show(v_x))(d_show(v_x))
+v_twice = curry(3, _impl)
 
-main = putStr(twice(show_Int)(1))         # the caller passes the instance
+v_main = v_putStr(v_twice(i_show_Int)(i_op_plus_plus_String)(1))  # the caller passes the instances
 ```
 
 **Monomorphization** (`--strategy monomorphization`): the same translation,
@@ -139,10 +143,12 @@ the parameters substituted. System O has no polymorphic recursion, so the
 number of copies is finite.
 
 ```python
-def twice__show_Int(x):
-    return concat(show_Int(x))(show_Int(x))
+def _impl(a0):
+    v_x = a0
+    return i_op_plus_plus_String(i_show_Int(v_x))(i_show_Int(v_x))
+v_twice__v_show_Int__op_plus_plus_String = curry(1, _impl)
 
-main = putStr(twice__show_Int(1))
+v_main = v_putStr(v_twice__v_show_Int__op_plus_plus_String(1))
 ```
 
 The interpreter (`lango run`) needs neither: following the dynamic semantics of
@@ -156,12 +162,14 @@ flowchart TB
     cli["lango/cli.py<br/>CLI: parse, typecheck, types, run, compile"]
     subgraph shared["lango/shared"]
         nodes["ast/nodes.py<br/>AST node classes"]
-        ltypes["typechecker/lango_types.py<br/>monotypes"]
+        stransformer["ast/transformer.py<br/>parse tree to AST (common rules)"]
+        ltypes["typechecker/lango_types.py<br/>monotypes, HM schemes"]
+        sgrammar["lango.lark<br/>grammar rules of both languages"]
         lparser["parser.py<br/>Lark front end + prelude loading"]
     end
     subgraph systemo["lango/systemo"]
         grammar["parser/systemo.lark"]
-        transformer["ast/transformer.py<br/>parse tree to AST"]
+        transformer["ast/transformer.py<br/>System O rules"]
         desugar["ast/desugar.py<br/>operator precedence to applications"]
         prelude["prelude/*.syso<br/>Bool, Int, Float, List, show, ..."]
         infer["typechecker/infer.py<br/>type reconstruction + evidence"]
@@ -176,7 +184,9 @@ flowchart TB
     end
     cli --> systemo
     cli --> minio
-    grammar --> transformer --> desugar --> infer
+    sgrammar --> lparser
+    grammar --> lparser
+    stransformer --> transformer --> desugar --> infer
     prelude --> lparser --> transformer
     infer --> interp
     infer --> codegen
@@ -206,7 +216,8 @@ flowchart LR
 ```
 
 1. The prelude files are prepended to the program and parsed with the LALR
-   grammar; the transformer builds the AST and the desugaring pass resolves
+   grammar (the shared rules in `lango/shared/lango.lark` plus
+   `systemo.lark`); the transformer builds the AST and the desugaring pass resolves
    `infixl`/`infixr`/`infix` declarations into plain applications.
 2. The type checker infers `main :: ()`. The use of `show` creates the
    constraint `show :: a -> b`; unifying `a` with `[Int]` finds the list

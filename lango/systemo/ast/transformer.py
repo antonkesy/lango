@@ -1,5 +1,3 @@
-from typing import Any
-
 from lark import Tree
 
 from lango.shared.ast.nodes import (

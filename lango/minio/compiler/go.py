@@ -1,7 +1,15 @@
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
+from lango.minio.common import (
+    constructors_of,
+    field_names,
+    functions_of,
+    pattern_variables,
+    referenced_variables,
+    unapply,
+)
 from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
@@ -61,14 +69,17 @@ from lango.shared.typechecker.lango_types import (
     TypeVar,
 )
 
+BUILTINS = frozenset({"show", "putStr", "error"})
+
 
 class MinioGoCompiler:
     def __init__(self) -> None:
         self.indent_level = 0
-        self.nullary_functions: Set[str] = set()
-        self.nullary_constructors: Set[str] = set()
-        self.data_types: Dict[str, DataDeclaration] = {}
-        self.local_variables: Set[str] = set()
+        self.nullary_functions: set[str] = set()
+        self.nullary_constructors: set[str] = set()
+        self.data_types: dict[str, DataDeclaration] = {}
+        self.constructors: dict[str, DataConstructor] = {}
+        self.local_variables: set[str] = set()
 
     def _indent(self) -> str:
         return "\t" * self.indent_level
@@ -76,8 +87,8 @@ class MinioGoCompiler:
     def _get_type_assertion_for_pattern(
         self,
         pattern: Pattern,
-        func_type: Optional[Type],
-    ) -> Optional[str]:
+        func_type: Type | None,
+    ) -> str | None:
         match pattern:
             case VariablePattern():
                 # For variable patterns, we need to determine the expected type
@@ -121,93 +132,17 @@ class MinioGoCompiler:
 
     def _prefix_name(self, name: str) -> str:
         # Don't prefix built-in functions
-        if name in ["show", "putStr", "error"]:
+        if name in BUILTINS:
             return name
         # Don't prefix local pattern variables
         if name in self.local_variables:
             return name
         return f"Minio{name.capitalize()}"
 
-    def _find_constructor_def(
-        self,
-        constructor_name: str,
-    ) -> Optional["DataConstructor"]:
-        for data_decl in self.data_types.values():
-            for constructor in data_decl.constructors:
-                if constructor.name == constructor_name:
-                    return constructor
-        return None
+    def _find_constructor_def(self, constructor_name: str) -> DataConstructor | None:
+        return self.constructors.get(constructor_name)
 
-    def _find_referenced_variables(self, expr: Any) -> Set[str]:
-        referenced = set()
-
-        match expr:
-            case Variable(name=name):
-                referenced.add(name)
-            case FunctionApplication(function=function, argument=argument):
-                referenced.update(self._find_referenced_variables(function))
-                referenced.update(self._find_referenced_variables(argument))
-            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
-                referenced.update(self._find_referenced_variables(condition))
-                referenced.update(self._find_referenced_variables(then_expr))
-                if else_expr:
-                    referenced.update(self._find_referenced_variables(else_expr))
-            case IndexOperation(list_expr=list_expr, index_expr=index_expr):
-                referenced.update(self._find_referenced_variables(list_expr))
-                referenced.update(self._find_referenced_variables(index_expr))
-            case (
-                AddOperation(left=left, right=right)
-                | SubOperation(left=left, right=right)
-                | MulOperation(left=left, right=right)
-                | DivOperation(left=left, right=right)
-                | AndOperation(left=left, right=right)
-                | OrOperation(left=left, right=right)
-                | EqualOperation(left=left, right=right)
-                | NotEqualOperation(left=left, right=right)
-                | GreaterThanOperation(left=left, right=right)
-                | GreaterEqualOperation(left=left, right=right)
-                | LessThanOperation(left=left, right=right)
-                | LessEqualOperation(left=left, right=right)
-                | ConcatOperation(left=left, right=right)
-            ):
-                referenced.update(self._find_referenced_variables(left))
-                referenced.update(self._find_referenced_variables(right))
-            case NotOperation(operand=operand):
-                referenced.update(self._find_referenced_variables(operand))
-            case NegOperation(operand=operand):
-                referenced.update(self._find_referenced_variables(operand))
-            case (
-                ConstructorExpression()
-                | IntLiteral()
-                | FloatLiteral()
-                | StringLiteral()
-                | CharLiteral()
-                | BoolLiteral()
-                | NegativeInt()
-                | NegativeFloat()
-            ):
-                # These don't reference variables
-                pass
-            case ListLiteral(elements=elements):
-                # List literals can contain expressions that reference variables
-                for element in elements:
-                    referenced.update(self._find_referenced_variables(element))
-            case TupleLiteral(elements=elements):
-                # Tuple literals can contain expressions that reference variables
-                for element in elements:
-                    referenced.update(self._find_referenced_variables(element))
-            case DoBlock(statements=statements):
-                for stmt in statements:
-                    referenced.update(self._find_referenced_variables(stmt))
-            case GroupedExpression(expression=inner):
-                referenced.update(self._find_referenced_variables(inner))
-            case _:
-                # For other expression types, conservatively assume no references
-                pass
-
-        return referenced
-
-    def _minio_type_to_go_type(self, minio_type: Optional[Type]) -> str:
+    def _minio_type_to_go_type(self, minio_type: Type | None) -> str:
         if minio_type is None:
             return "any"
 
@@ -238,28 +173,6 @@ class MinioGoCompiler:
             case _:
                 return "any"
 
-    def _extract_pattern_variables(self, pattern: Pattern) -> Set[str]:
-        variables = set()
-        match pattern:
-            case VariablePattern(name=name):
-                variables.add(name)
-            case ConstructorPattern(patterns=patterns):
-                for sub_pattern in patterns:
-                    variables.update(self._extract_pattern_variables(sub_pattern))
-            case ConsPattern(head=head, tail=tail):
-                variables.update(self._extract_pattern_variables(head))
-                variables.update(self._extract_pattern_variables(tail))
-            case ListPattern(patterns=patterns):
-                for sub_pattern in patterns:
-                    variables.update(self._extract_pattern_variables(sub_pattern))
-            case TuplePattern(patterns=patterns):
-                for sub_pattern in patterns:
-                    variables.update(self._extract_pattern_variables(sub_pattern))
-            case _:
-                # Other pattern types don't contain variables
-                pass
-        return variables
-
     def compile(self, program: Program) -> str:
         lines = []
         with open(Path(__file__).with_name("prelude.go"), "r") as f:
@@ -280,13 +193,12 @@ class MinioGoCompiler:
         lines.append("}")
         lines.append("")
 
-        # Collect data types
-        for stmt in program.statements:
-            match stmt:
-                case DataDeclaration(type_name=type_name):
-                    self.data_types[type_name] = stmt
-                case _:
-                    pass
+        self.data_types = {
+            stmt.type_name: stmt
+            for stmt in program.statements
+            if isinstance(stmt, DataDeclaration)
+        }
+        self.constructors = constructors_of(program)
 
         # Generate data type declarations
         for stmt in program.statements:
@@ -296,70 +208,12 @@ class MinioGoCompiler:
                 case _:
                     pass
 
-        # Group function definitions by name
-        function_definitions: Dict[str, List[FunctionDefinition]] = {}
-
-        for stmt in program.statements:
-            match stmt:
-                case FunctionDefinition(function_name=function_name):
-                    if function_name not in function_definitions:
-                        function_definitions[function_name] = []
-                    function_definitions[function_name].append(stmt)
-                case LetStatement(variable=variable, value=value):
-                    prefixed_var = self._prefix_name(variable)
-
-                    # Handle function applications that may be partial applications
-                    match value:
-                        case FunctionApplication(
-                            function=Variable(name=func_name),
-                            argument=arg,
-                        ):
-                            # This might be a partial application - generate a function instead of a variable
-                            if func_name in function_definitions and func_name not in [
-                                "show",
-                                "putStr",
-                                "error",
-                            ]:
-                                # Get the arity of the target function
-                                target_func_defs = function_definitions[func_name]
-                                if target_func_defs:
-                                    target_arity = (
-                                        len(target_func_defs[0].patterns)
-                                        if target_func_defs[0].patterns
-                                        else 0
-                                    )
-                                    if (
-                                        target_arity > 1
-                                    ):  # Multi-argument function, create partial application
-                                        prefixed_func = self._prefix_name(func_name)
-                                        arg_expr = self._compile_expression(arg)
-                                        lines.append(
-                                            f"func {prefixed_var}() interface{{}} {{",
-                                        )
-                                        lines.append(
-                                            f"\treturn {prefixed_func}({arg_expr})",
-                                        )
-                                        lines.append("}")
-                                        continue
-
-                            # Not a partial application, treat as normal variable assignment
-                            go_type = "any"
-                            lines.append(
-                                f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
-                            )
-                        case _:
-                            # Normal let statement
-                            go_type = "any"  # Default type
-                            lines.append(
-                                f"var {prefixed_var} {go_type} = {self._compile_expression(value)}",
-                            )
-                case _:
-                    pass
+        function_definitions = functions_of(program)
 
         # Generate function definitions
         for func_name, definitions in function_definitions.items():
             # Skip built-in functions to avoid conflicts
-            if func_name not in ["show", "putStr", "error"]:
+            if func_name not in BUILTINS:
                 lines.append(self._compile_function_group(func_name, definitions))
 
         # Generate function registry initialization
@@ -367,7 +221,7 @@ class MinioGoCompiler:
         lines.append("func init() {")
         lines.append("\t// Populate function registry for first-class function support")
         for func_name in function_definitions:
-            if func_name not in ["show", "putStr", "error", "main"]:
+            if func_name not in BUILTINS | {"main"}:
                 prefixed_name = self._prefix_name(func_name)
                 # Check if this is a nullary function
                 if func_name in self.nullary_functions:
@@ -434,20 +288,14 @@ class MinioGoCompiler:
                 # Named fields like Person { id_ :: Int, name :: String }
                 lines.append(f"type {class_name} struct {{")
                 for field in constructor.record_constructor.fields:
-                    field_type = "any"  # Default type
-                    if field.field_type and hasattr(field.field_type, "ty"):
-                        field_type = self._minio_type_to_go_type(field.field_type.ty)
-                    lines.append(f"\t{field.name.capitalize()} {field_type}")
+                    lines.append(f"\t{field.name.capitalize()} any")
                 lines.append("}")
             else:
                 # Positional arguments like MkPoint Float Float
                 if constructor.type_atoms:
                     lines.append(f"type {class_name} struct {{")
-                    for i, type_atom in enumerate(constructor.type_atoms):
-                        field_type = "any"
-                        if hasattr(type_atom, "ty"):
-                            field_type = self._minio_type_to_go_type(type_atom.ty)
-                        lines.append(f"\tArg{i} {field_type}")
+                    for i in range(len(constructor.type_atoms)):
+                        lines.append(f"\tArg{i} any")
                     lines.append("}")
                 else:
                     # No arguments - simple constructor
@@ -466,7 +314,7 @@ class MinioGoCompiler:
     def _compile_function_group(
         self,
         func_name: str,
-        definitions: List[FunctionDefinition],
+        definitions: list[FunctionDefinition],
     ) -> str:
         prefixed_func_name = self._prefix_name(func_name)
 
@@ -486,12 +334,12 @@ class MinioGoCompiler:
         old_local_vars = self.local_variables.copy()
         for func_def in definitions:
             for pattern in func_def.patterns:
-                self.local_variables.update(self._extract_pattern_variables(pattern))
+                self.local_variables.update(pattern_variables(pattern))
 
         # For functions with multiple definitions, we need to ensure variables are accessible
         # across all branches. We'll pre-declare variables but handle name conflicts by
         # using the most common variable name for each argument position
-        arg_var_names: Dict[int, List[str]] = {}  # arg_index -> list of var_names
+        arg_var_names: dict[int, list[str]] = {}  # arg_index -> list of var_names
         for func_def in definitions:
             for j, pattern in enumerate(func_def.patterns):
                 if isinstance(pattern, VariablePattern):
@@ -507,20 +355,15 @@ class MinioGoCompiler:
             most_common = counter.most_common(1)[0][0]
             final_arg_vars[arg_index] = most_common
 
-        # Check which variables are actually used in function bodies to avoid unused variable warnings
-        used_vars = set()
-        for func_def in definitions:
-            # Simple heuristic: check if variable names appear in the stringified body
-            body_str = str(func_def.body)
-            for var_name in final_arg_vars.values():
-                if var_name in body_str:
-                    used_vars.add(var_name)
-
-        # Only declare variables that are actually used
+        # Declare an argument variable only if some clause reads it (Go rejects
+        # unused variables); a clause naming it differently gets an alias
+        used_vars = set().union(
+            *(referenced_variables(func_def.body) for func_def in definitions)
+        )
         used_final_arg_vars = {
             arg_index: var_name
             for arg_index, var_name in final_arg_vars.items()
-            if var_name in used_vars
+            if any(name in used_vars for name in arg_var_names[arg_index])
         }
 
         # Declare argument variables at the top of the function
@@ -535,7 +378,7 @@ class MinioGoCompiler:
             lines.append("")
 
         # Generate pattern matching logic - group by arity first
-        arity_groups: Dict[int, List[FunctionDefinition]] = {}
+        arity_groups: dict[int, list[FunctionDefinition]] = {}
         for func_def in definitions:
             arity = len(func_def.patterns)
             if arity not in arity_groups:
@@ -703,7 +546,7 @@ class MinioGoCompiler:
         # Track pattern variables
         old_local_vars = self.local_variables.copy()
         for pattern in func_def.patterns:
-            self.local_variables.update(self._extract_pattern_variables(pattern))
+            self.local_variables.update(pattern_variables(pattern))
 
         # Determine return type
         return_type = "any"
@@ -788,7 +631,7 @@ class MinioGoCompiler:
         value_expr: str,
         var_prefix: str,
         function_body: Any = None,  # Optional function body to determine used variables
-    ) -> tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         match pattern:
             case VariablePattern(name=name):
                 # Variable patterns always match
@@ -817,7 +660,7 @@ class MinioGoCompiler:
                     # Determine which variables are actually used in the function body
                     used_variables = set()
                     if function_body:
-                        used_variables = self._find_referenced_variables(function_body)
+                        used_variables = referenced_variables(function_body)
 
                     for i, sub_pattern in enumerate(patterns):
                         # Skip processing if this is a variable pattern that's not used
@@ -859,7 +702,7 @@ class MinioGoCompiler:
                 # Determine which variables are actually used in the function body
                 used_variables = set()
                 if function_body:
-                    used_variables = self._find_referenced_variables(function_body)
+                    used_variables = referenced_variables(function_body)
 
                 if isinstance(head, VariablePattern):
                     # Check if head variable is actually used
@@ -925,7 +768,7 @@ class MinioGoCompiler:
                 # Determine which variables are actually used in the function body
                 used_variables = set()
                 if function_body:
-                    used_variables = self._find_referenced_variables(function_body)
+                    used_variables = referenced_variables(function_body)
 
                 for i, sub_pattern in enumerate(patterns):
                     # Skip processing if this is a variable pattern that's not used
@@ -959,7 +802,7 @@ class MinioGoCompiler:
                 # Determine which variables are actually used in the function body
                 used_variables = set()
                 if function_body:
-                    used_variables = self._find_referenced_variables(function_body)
+                    used_variables = referenced_variables(function_body)
 
                 if patterns:
                     typed_var = f"{var_prefix}_{tuple_type}"
@@ -1115,86 +958,18 @@ class MinioGoCompiler:
 
             # Function application
             case FunctionApplication(function=function, argument=argument):
-                func_expr = self._compile_expression(function)
-                arg_expr = self._compile_expression(argument)
-
-                # Helper function to unwrap GroupedExpressions
-                def unwrap_grouped(expr: Any) -> Any:
-                    while isinstance(expr, GroupedExpression):
-                        expr = expr.expression
-                    return expr
-
-                # Handle constructor calls specially
-                unwrapped_function = unwrap_grouped(function)
-                match unwrapped_function:
+                head, arguments = unapply(expr)
+                match head:
                     case Constructor(name=name):
-                        # For constructors, we need to determine if it's record or positional
-                        constructor_def = self._find_constructor_def(name)
-                        if constructor_def and constructor_def.record_constructor:
-                            # This is a record constructor, but we're applying it positionally
-                            # This shouldn't happen in well-typed code, but handle it gracefully
-                            return f"{name}{{{arg_expr}}}"
-                        else:
-                            # Positional constructor
-                            return f"{name}{{{arg_expr}}}"
-                    case FunctionApplication():
-                        # Nested function application - collect all arguments
-                        args: List[Expression] = []
-                        current: Expression = expr
-
-                        # Collect all arguments from nested function applications
-                        while True:
-                            match current:
-                                case FunctionApplication(
-                                    argument=argument,
-                                    function=function,
-                                ):
-                                    args.insert(0, argument)
-                                    current = unwrap_grouped(function)
-                                case _:
-                                    break
-
-                        # Handle the base function
-                        match current:
-                            case Constructor(name=name):
-                                # Multiple arguments to constructor
-                                arg_exprs = [
-                                    self._compile_expression(arg) for arg in args
-                                ]
-                                constructor_def = self._find_constructor_def(name)
-                                if (
-                                    constructor_def
-                                    and constructor_def.record_constructor
-                                    and len(args)
-                                    == len(constructor_def.record_constructor.fields)
-                                ):
-                                    # Match positional arguments to field names
-                                    field_assignments = []
-                                    for field, arg_expr in zip(
-                                        constructor_def.record_constructor.fields,
-                                        arg_exprs,
-                                    ):
-                                        field_assignments.append(
-                                            f"{field.name.capitalize()}: {arg_expr}",
-                                        )
-                                    return f"{name}{{{', '.join(field_assignments)}}}"
-                                else:
-                                    # Positional constructor with multiple args
-                                    if len(args) == 1:
-                                        return f"{name}{{{arg_exprs[0]}}}"
-                                    else:
-                                        # Multiple args as struct fields
-                                        field_assignments = []
-                                        for i, arg_expr in enumerate(arg_exprs):
-                                            field_assignments.append(
-                                                f"Arg{i}: {arg_expr}",
-                                            )
-                                        return (
-                                            f"{name}{{{', '.join(field_assignments)}}}"
-                                        )
-                            case _:
-                                # Regular function call with multiple arguments
-                                return f"{self._compile_expression(current)}({', '.join(self._compile_expression(arg) for arg in args)})"
+                        return self._compile_constructor_call(
+                            name,
+                            [self._compile_expression(arg) for arg in arguments],
+                        )
+                    case _ if len(arguments) > 1:
+                        args = ", ".join(
+                            self._compile_expression(arg) for arg in arguments
+                        )
+                        return f"{self._compile_expression(head)}({args})"
                     case _:
                         # Regular function call
                         func_expr = self._compile_expression(function)
@@ -1249,6 +1024,18 @@ class MinioGoCompiler:
                 return f"({self._compile_expression(expression)})"
             case _:
                 raise RuntimeError(f"Unsupported expression type: {type(expr)}")
+
+    def _compile_constructor_call(self, name: str, args: list[str]) -> str:
+        """A struct literal: by field name for a record constructor."""
+        constructor = self.constructors.get(name)
+        names = field_names(constructor) if constructor is not None else None
+        if names is not None and len(names) == len(args):
+            fields = [f"{field.capitalize()}: {arg}" for field, arg in zip(names, args)]
+        elif len(args) == 1:
+            fields = args
+        else:
+            fields = [f"Arg{i}: {arg}" for i, arg in enumerate(args)]
+        return f"{name}{{{', '.join(fields)}}}"
 
     def _compile_do_block(self, do_block: DoBlock) -> str:
         lines = ["func() any {"]
