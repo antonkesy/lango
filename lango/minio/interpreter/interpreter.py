@@ -61,7 +61,7 @@ Record = Dict[str, Any]  # Dictionary representing a record/object
 FunctionClause = Tuple[List[Pattern], Expression]
 FunctionValue = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
 Environment = Dict[str, FunctionValue]
-ConstructorInfo = Tuple[int, str]  # (arity, data_type_name)
+ConstructorInfo = int  # arity
 ConstructorEnvironment = Dict[str, ConstructorInfo]
 
 
@@ -135,7 +135,7 @@ def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment
                         # Nullary constructor - arity 0
                         arity = 0
 
-                    constructors[ctor_name] = (arity, type_name)
+                    constructors[ctor_name] = arity
             case _:
                 pass
 
@@ -258,7 +258,7 @@ class Interpreter:
             case Constructor(name=constructor_name):
                 # Check if this is a known constructor
                 if constructor_name in self.constructors:
-                    arity, data_type = self.constructors[constructor_name]
+                    arity = self.constructors[constructor_name]
 
                     if arity == 0:
                         # Nullary constructor - return the value directly
@@ -560,7 +560,7 @@ class Interpreter:
 
                 # Check if this is a record constructor or positional constructor
                 if constructor in self.constructors:
-                    arity, data_type = self.constructors[constructor]
+                    arity = self.constructors[constructor]
 
                     # If the value has named fields (not field_0, field_1, etc), it's a record
                     has_named_fields = any(

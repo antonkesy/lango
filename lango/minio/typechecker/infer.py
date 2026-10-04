@@ -5,7 +5,6 @@ from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     ArrowType,
-    ASTNode,
     BoolLiteral,
     CharLiteral,
     ConcatOperation,
@@ -58,6 +57,7 @@ from lango.shared.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.shared.typechecker.errors import TypeInferenceError
 from lango.shared.typechecker.lango_types import (
     BOOL_TYPE,
     CHAR_TYPE,
@@ -126,20 +126,9 @@ class TypeEnvironment:
         return self.bindings[name]
 
 
-class TypeInferenceError(Exception):
-    def __init__(self, message: str, node: Optional[ASTNode] = None) -> None:
-        self.message = message
-        self.node = node
-        super().__init__(message)
-
-
 class TypeInferrer:
     def __init__(self) -> None:
         self.fresh_var_gen = FreshVarGenerator()
-        self.data_types: Dict[str, List[str]] = {}  # type_name -> [constructor_names]
-        self.data_constructors: Dict[str, Tuple[str, List[Type]]] = (
-            {}
-        )  # constructor -> (type_name, field_types)
 
     def fresh_type_var(self) -> TypeVar:
         var_name = self.fresh_var_gen.fresh()
@@ -149,16 +138,14 @@ class TypeInferrer:
         type_name = node.type_name
         type_params = [param.name for param in node.type_params]
 
-        constructor_names = []
         constructor_types: Dict[str, TypeScheme] = {}
 
         for constructor in node.constructors:
             ctor_name = constructor.name
-            constructor_names.append(ctor_name)
 
             # Create type parameter variables
             type_param_vars: List[Type] = [TypeVar(param) for param in type_params]
-            result_type = DataType(type_name, type_param_vars)
+            result_type = DataType(type_name, tuple(type_param_vars))
 
             if constructor.record_constructor:
                 # Record constructor
@@ -176,7 +163,6 @@ class TypeInferrer:
                 bound_vars = set(type_params)
                 ctor_scheme = TypeScheme(bound_vars, ctor_type)
                 constructor_types[ctor_name] = ctor_scheme
-                self.data_constructors[ctor_name] = (type_name, field_types)
 
             else:
                 # Positional constructor
@@ -205,10 +191,6 @@ class TypeInferrer:
                     ctor_scheme = TypeScheme(bound_vars, positional_ctor_type)
                     constructor_types[ctor_name] = ctor_scheme
 
-                self.data_constructors[ctor_name] = (type_name, [])
-
-        self.data_types[type_name] = constructor_names
-
         # Return environment extended with constructor types
         env = TypeEnvironment()
         for name, scheme in constructor_types.items():
@@ -228,8 +210,10 @@ class TypeInferrer:
                         return FLOAT_TYPE
                     case "Bool":
                         return BOOL_TYPE
+                    case "Char":
+                        return CHAR_TYPE
                     case _:
-                        return DataType(type_name, [])
+                        return DataType(type_name)
             case TypeVariable(name=name):
                 return TypeVar(name)
             case ArrowType(from_type=from_type, to_type=to_type):
@@ -243,17 +227,15 @@ class TypeInferrer:
                 match constructor_type:
                     case DataType(name=name, type_args=type_args):
                         # Apply type argument to data type
-                        new_args = type_args + [argument_type]
-                        return DataType(name, new_args)
+                        return DataType(name, (*type_args, argument_type))
                     case _:
                         return TypeApp(constructor_type, argument_type)
             case GroupedType(type_expr=type_expr):
                 return self.parse_type_expr(type_expr)
             case TupleType(element_types=element_types):
-                parsed_element_types = [
-                    self.parse_type_expr(elem) for elem in element_types
-                ]
-                return SharedTupleType(parsed_element_types)
+                return SharedTupleType(
+                    tuple(self.parse_type_expr(elem) for elem in element_types),
+                )
             case _:
                 raise TypeInferenceError(
                     f"Cannot parse type expression: {type(node).__name__}",
@@ -319,7 +301,7 @@ class TypeInferrer:
             case TupleLiteral(elements=elements):
                 if not elements:
                     # Empty tuple: unit type
-                    tuple_type = SharedTupleType([])
+                    tuple_type = SharedTupleType(())
                     expr.ty = tuple_type
                     return tuple_type, TypeSubstitution()
 
@@ -335,7 +317,7 @@ class TypeInferrer:
                     current_subst = current_subst.compose(elem_subst)
                     element_types.append(elem_type.apply_substitution(current_subst))
 
-                tuple_type = SharedTupleType(element_types)
+                tuple_type = SharedTupleType(tuple(element_types))
                 expr.ty = tuple_type
                 return tuple_type, current_subst
 
@@ -496,8 +478,6 @@ class TypeInferrer:
             case NegOperation(operand=operand_expr):
                 operand_type, subst = self.infer_expr(operand_expr, env)
                 # Unary negation works on Int or Float types
-                int_var = self.fresh_type_var()
-                float_var = self.fresh_type_var()
                 try:
 
                     int_unify = unify_one(operand_type, INT_TYPE)
@@ -538,7 +518,7 @@ class TypeInferrer:
                     return final_type, final_subst
                 except UnificationError:
                     raise TypeInferenceError(
-                        f"Concatenation operands must have same type",
+                        "Concatenation operands must have same type",
                     )
 
             case IndexOperation(list_expr=list_expr, index_expr=idx_expr):
@@ -651,7 +631,7 @@ class TypeInferrer:
                     expr.ty = result_type
                     return result_type, final_subst
                 except UnificationError:
-                    raise TypeInferenceError(f"Function application type mismatch")
+                    raise TypeInferenceError("Function application type mismatch")
 
             # Grouping
             case GroupedExpression(expression=inner_expr):
@@ -666,10 +646,7 @@ class TypeInferrer:
                 return result
 
             # Constructor expressions
-            case ConstructorExpression(
-                constructor_name=constructor_name,
-                fields=fields,
-            ):
+            case ConstructorExpression():
                 result = self.infer_constructor_expr(expr, env)
                 expr.ty = result[0]
                 return result
@@ -721,7 +698,7 @@ class TypeInferrer:
                         )
         except UnificationError:
             raise TypeInferenceError(
-                f"Binary numeric operation requires operands of same type",
+                "Binary numeric operation requires operands of same type",
             )
 
     def _infer_binary_comparison_op(
@@ -747,7 +724,7 @@ class TypeInferrer:
             final_subst = combined_subst.compose(unify_subst)
             return BOOL_TYPE, final_subst
         except UnificationError:
-            raise TypeInferenceError(f"Comparison requires operands of same type")
+            raise TypeInferenceError("Comparison requires operands of same type")
 
     def _infer_binary_logical_op(
         self,
@@ -773,7 +750,7 @@ class TypeInferrer:
 
             return BOOL_TYPE, final_subst
         except UnificationError:
-            raise TypeInferenceError(f"Logical operation requires Bool operands")
+            raise TypeInferenceError("Logical operation requires Bool operands")
 
     def infer_function(
         self,
@@ -1258,7 +1235,7 @@ class TypeInferrer:
 
                 # Create tuple type from pattern types
                 tuple_type = SharedTupleType(
-                    [pt.apply_substitution(current_subst) for pt in pattern_types],
+                    tuple(pt.apply_substitution(current_subst) for pt in pattern_types),
                 )
 
                 # Unify pattern type with tuple type

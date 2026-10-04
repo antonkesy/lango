@@ -1,0 +1,10 @@
+-- RUN: OK
+-- TYPECHECK: OK
+-- "'x'"
+data Letter = MkLetter Char;
+
+letter (MkLetter c) = c;
+
+main = do {
+  putStr (show (letter (MkLetter 'x')));
+};

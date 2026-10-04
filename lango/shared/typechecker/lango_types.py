@@ -1,139 +1,160 @@
+"""Monotypes shared by MiniO and System O.
+
+    tau ::= alpha | tau -> tau' | D tau_1 ... tau_n | (tau_1, ..., tau_n)
+
+The primitive types ``Int``, ``Float``, ``Bool``, ``String``, ``Char`` and
+``()`` are nullary type constructors (``TypeCon``).  System O represents
+lists as ``DataType("List", (tau,))``; MiniO as ``TypeApp(TypeCon("List"), tau)``.
+The two representations never meet: each type checker only sees its own.
+
+Types are immutable and hashable.  ``TypeSubstitution``, ``TypeScheme``,
+``FreshVarGenerator`` and ``generalize`` implement plain Hindley/Milner for
+MiniO; System O has its own constrained schemes in
+:mod:`lango.systemo.typechecker.types`.
+"""
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from dataclasses import dataclass, field
+
+from lango.shared.typechecker.names import var_name
+
+type Subst = dict[str, "Type"]
 
 
 class Type(ABC):
+    __slots__ = ()
 
     @abstractmethod
-    def free_vars(self) -> Set[str]:
-        pass
+    def children(self) -> tuple[Type, ...]: ...
 
     @abstractmethod
-    def substitute(self, subst: Dict[str, "Type"]) -> "Type":
-        pass
+    def substitute(self, subst: Subst) -> Type: ...
 
-    def apply_substitution(self, subst: "TypeSubstitution") -> "Type":
+    @abstractmethod
+    def __str__(self) -> str: ...
+
+    def free_vars(self) -> set[str]:
+        return set().union(*(child.free_vars() for child in self.children()))
+
+    def apply_substitution(self, subst: TypeSubstitution) -> Type:
         return self.substitute(subst.mapping)
 
-    @abstractmethod
-    def __str__(self) -> str:
-        pass
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TypeVar(Type):
-
     name: str
 
-    def free_vars(self) -> Set[str]:
+    def children(self) -> tuple[Type, ...]:
+        return ()
+
+    def free_vars(self) -> set[str]:
         return {self.name}
 
-    def substitute(self, subst: Dict[str, Type]) -> Type:
+    def substitute(self, subst: Subst) -> Type:
         return subst.get(self.name, self)
 
     def __str__(self) -> str:
         return self.name
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TypeCon(Type):
-
     name: str
 
-    def free_vars(self) -> Set[str]:
-        return set()
+    def children(self) -> tuple[Type, ...]:
+        return ()
 
-    def substitute(self, subst: Dict[str, Type]) -> Type:
+    def substitute(self, subst: Subst) -> Type:
         return self
 
     def __str__(self) -> str:
         return self.name
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TypeApp(Type):
+    """Application of a type constructor (MiniO lists: ``List a``)."""
 
     constructor: Type
     argument: Type
 
-    def free_vars(self) -> Set[str]:
-        return self.constructor.free_vars() | self.argument.free_vars()
+    def children(self) -> tuple[Type, ...]:
+        return (self.constructor, self.argument)
 
-    def substitute(self, subst: Dict[str, Type]) -> Type:
+    def substitute(self, subst: Subst) -> Type:
         return TypeApp(
-            self.constructor.substitute(subst),
-            self.argument.substitute(subst),
+            self.constructor.substitute(subst), self.argument.substitute(subst)
         )
 
     def __str__(self) -> str:
         return f"({self.constructor} {self.argument})"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FunctionType(Type):
-
     param: Type
     result: Type
 
-    def free_vars(self) -> Set[str]:
-        return self.param.free_vars() | self.result.free_vars()
+    def children(self) -> tuple[Type, ...]:
+        return (self.param, self.result)
 
-    def substitute(self, subst: Dict[str, Type]) -> Type:
+    def substitute(self, subst: Subst) -> Type:
         return FunctionType(self.param.substitute(subst), self.result.substitute(subst))
 
     def __str__(self) -> str:
-        # Handle right associativity of function types
-        match self.param:
-            case FunctionType():
-                return f"({self.param}) -> {self.result}"
-            case _:
-                return f"{self.param} -> {self.result}"
+        if isinstance(self.param, FunctionType):
+            return f"({self.param}) -> {self.result}"
+        return f"{self.param} -> {self.result}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DataType(Type):
-
     name: str
-    type_args: List[Type]
+    type_args: tuple[Type, ...] = ()
 
-    def free_vars(self) -> Set[str]:
-        result = set()
-        for arg in self.type_args:
-            result |= arg.free_vars()
-        return result
+    def children(self) -> tuple[Type, ...]:
+        return self.type_args
 
-    def substitute(self, subst: Dict[str, Type]) -> Type:
-        return DataType(self.name, [arg.substitute(subst) for arg in self.type_args])
-
-    def __str__(self) -> str:
-        if not self.type_args:
-            return self.name
-        args_str = " ".join(str(arg) for arg in self.type_args)
-        return f"{self.name} {args_str}"
-
-
-@dataclass(frozen=True)
-class TupleType(Type):
-
-    element_types: List[Type]
-
-    def free_vars(self) -> Set[str]:
-        result = set()
-        for elem_type in self.element_types:
-            result |= elem_type.free_vars()
-        return result
-
-    def substitute(self, subst: Dict[str, Type]) -> Type:
-        return TupleType(
-            [elem_type.substitute(subst) for elem_type in self.element_types],
+    def substitute(self, subst: Subst) -> Type:
+        return DataType(
+            self.name, tuple(arg.substitute(subst) for arg in self.type_args)
         )
 
     def __str__(self) -> str:
-        if len(self.element_types) == 0:
-            return "()"
-        elements_str = ", ".join(str(elem) for elem in self.element_types)
-        return f"({elements_str})"
+        return " ".join([self.name, *map(str, self.type_args)])
+
+
+@dataclass(frozen=True, slots=True)
+class TupleType(Type):
+    element_types: tuple[Type, ...]
+
+    def children(self) -> tuple[Type, ...]:
+        return self.element_types
+
+    def substitute(self, subst: Subst) -> Type:
+        return TupleType(tuple(elem.substitute(subst) for elem in self.element_types))
+
+    def __str__(self) -> str:
+        return "(" + ", ".join(map(str, self.element_types)) + ")"
+
+
+def function(*types: Type) -> Type:
+    """``function(a, b, c)`` is ``a -> b -> c``."""
+    result = types[-1]
+    for param in reversed(types[:-1]):
+        result = FunctionType(param, result)
+    return result
+
+
+def unfold_function(t: Type) -> tuple[list[Type], Type]:
+    """``a -> b -> c`` is ``([a, b], c)``."""
+    params: list[Type] = []
+    while isinstance(t, FunctionType):
+        params.append(t.param)
+        t = t.result
+    return params, t
 
 
 # Built-in types
@@ -144,129 +165,97 @@ FLOAT_TYPE = TypeCon("Float")
 BOOL_TYPE = TypeCon("Bool")
 UNIT_TYPE = TypeCon("()")  # For do blocks and putStr
 
+PRIMITIVE_TYPES: dict[str, Type] = {
+    t.name: t
+    for t in (INT_TYPE, FLOAT_TYPE, BOOL_TYPE, STRING_TYPE, CHAR_TYPE, UNIT_TYPE)
+}
 
+
+# --------------------------------------------------------------------------
+# Hindley/Milner schemes and substitutions (MiniO)
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
 class TypeSubstitution:
-
-    def __init__(self, mapping: Optional[Dict[str, Type]] = None):
-        self.mapping = mapping or {}
+    mapping: Subst = field(default_factory=dict)
 
     def apply(self, t: Type) -> Type:
         return t.substitute(self.mapping)
 
-    def compose(self, other: "TypeSubstitution") -> "TypeSubstitution":
-        new_mapping = {}
-
-        # Apply self to all mappings in other
-        for var, typ in other.mapping.items():
-            new_mapping[var] = self.apply(typ)
-
-        # Add mappings from self that aren't in other
+    def compose(self, other: TypeSubstitution) -> TypeSubstitution:
+        """``self`` after ``other``."""
+        mapping = {var: self.apply(typ) for var, typ in other.mapping.items()}
         for var, typ in self.mapping.items():
-            if var not in new_mapping:
-                new_mapping[var] = typ
-
-        return TypeSubstitution(new_mapping)
+            mapping.setdefault(var, typ)
+        return TypeSubstitution(mapping)
 
     def __str__(self) -> str:
         if not self.mapping:
             return "∅"
-        items = [f"{var} ↦ {typ}" for var, typ in self.mapping.items()]
-        return "{" + ", ".join(items) + "}"
+        return (
+            "{" + ", ".join(f"{var} ↦ {typ}" for var, typ in self.mapping.items()) + "}"
+        )
 
 
+@dataclass(frozen=True, slots=True)
 class TypeScheme:
+    quantified_vars: frozenset[str]
+    type: Type
 
-    def __init__(self, quantified_vars: Set[str], type_: Type):
-        self.quantified_vars = quantified_vars
-        self.type = type_
+    def __init__(self, quantified_vars: set[str] | frozenset[str], type_: Type) -> None:
+        object.__setattr__(self, "quantified_vars", frozenset(quantified_vars))
+        object.__setattr__(self, "type", type_)
 
-    def free_vars(self) -> Set[str]:
+    def free_vars(self) -> set[str]:
         return self.type.free_vars() - self.quantified_vars
 
-    def substitute(self, subst: TypeSubstitution) -> "TypeScheme":
-        # Remove quantified variables from the substitution
-        filtered_mapping = {
+    def substitute(self, subst: TypeSubstitution) -> TypeScheme:
+        mapping = {
             var: typ
             for var, typ in subst.mapping.items()
             if var not in self.quantified_vars
         }
-        filtered_subst = TypeSubstitution(filtered_mapping)
+        return TypeScheme(self.quantified_vars, self.type.substitute(mapping))
 
-        return TypeScheme(self.quantified_vars, filtered_subst.apply(self.type))
-
-    def instantiate(self, fresh_var_gen: "FreshVarGenerator") -> Type:
-        if not self.quantified_vars:
-            return self.type
-
-        subst_mapping: Dict[str, Type] = {}
-        for var in self.quantified_vars:
-            fresh_var = fresh_var_gen.fresh()
-            subst_mapping[var] = TypeVar(fresh_var)
-
-        subst = TypeSubstitution(subst_mapping)
-        return subst.apply(self.type)
+    def instantiate(self, fresh_var_gen: FreshVarGenerator) -> Type:
+        mapping: Subst = {
+            var: fresh_var_gen.fresh_var() for var in self.quantified_vars
+        }
+        return self.type.substitute(mapping)
 
     def __str__(self) -> str:
         if not self.quantified_vars:
             return str(self.type)
-        vars_str = " ".join(sorted(self.quantified_vars))
-        return f"∀ {vars_str} . {self.type}"
+        return f"∀ {' '.join(sorted(self.quantified_vars))} . {self.type}"
 
 
 class FreshVarGenerator:
-
     def __init__(self) -> None:
         self.counter = 0
 
     def fresh(self) -> str:
-        # Use letters a, b, c, ... then a1, a2, a3, ...
-        if self.counter < 26:
-            name = chr(ord("a") + self.counter)
-        else:
-            base = self.counter // 26 - 1
-            offset = self.counter % 26
-            name = chr(ord("a") + offset) + str(base + 1)
+        name = var_name(self.counter)
         self.counter += 1
         return name
 
+    def fresh_var(self) -> TypeVar:
+        return TypeVar(self.fresh())
 
-def generalize(type_env_free_vars: Set[str], typ: Type) -> TypeScheme:
-    free_in_type = typ.free_vars()
-    quantified = free_in_type - type_env_free_vars
-    scheme = TypeScheme(quantified, typ)
-    return normalize_type_scheme(scheme)
+
+def generalize(type_env_free_vars: set[str], typ: Type) -> TypeScheme:
+    return normalize_type_scheme(TypeScheme(typ.free_vars() - type_env_free_vars, typ))
 
 
 def normalize_type_scheme(scheme: TypeScheme) -> TypeScheme:
-    # Collect all type variables in the type (both quantified and free)
-    all_vars = scheme.type.free_vars()
-
-    if not all_vars:
-        return scheme
-
-    # Sort all variables for consistent ordering
-    sorted_vars = sorted(list(all_vars))
-
-    # Create mapping from old names to normalized TypeVar objects
-    var_mapping: Dict[str, Type] = {}
-    for i, old_name in enumerate(sorted_vars):
-        if i < 26:
-            new_name = chr(ord("a") + i)
-        else:
-            base = i // 26 - 1
-            offset = i % 26
-            new_name = chr(ord("a") + offset) + str(base + 1)
-        var_mapping[old_name] = TypeVar(new_name)
-
-    # Apply the mapping
-    new_type = scheme.type.substitute(var_mapping)
-
-    # Update quantified variables to use the new names
-    new_quantified = set()
-    for old_name in scheme.quantified_vars:
-        if old_name in var_mapping:
-            new_var = var_mapping[old_name]
-            if isinstance(new_var, TypeVar):
-                new_quantified.add(new_var.name)
-
-    return TypeScheme(new_quantified, new_type)
+    """Rename the type variables to ``a``, ``b``, ... in alphabetical order."""
+    mapping: Subst = {
+        old: TypeVar(var_name(i))
+        for i, old in enumerate(sorted(scheme.type.free_vars()))
+    }
+    quantified = {
+        new.name
+        for old, new in mapping.items()
+        if old in scheme.quantified_vars and isinstance(new, TypeVar)
+    }
+    return TypeScheme(quantified, scheme.type.substitute(mapping))

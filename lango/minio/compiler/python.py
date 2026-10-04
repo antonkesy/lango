@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
 from lango.shared.ast.nodes import (
@@ -75,7 +75,6 @@ from lango.shared.typechecker.lango_types import (
 @dataclass
 class FunctionInfo:
     arity: int
-    type_info: Optional[Type] = None
 
 
 class MinioCompiler:
@@ -117,12 +116,6 @@ class MinioCompiler:
             for constructor in data_decl.constructors:
                 if constructor.name == constructor_name:
                     return constructor
-        return None
-
-    def _convert_type_expression_to_type(self, type_expr: Any) -> Optional[Type]:
-        if hasattr(type_expr, "ty") and type_expr.ty is not None:
-            return type_expr.ty
-        # If no type information is available, return None
         return None
 
     def _minio_type_to_python_hint(self, minio_type: Optional[Type]) -> str:
@@ -183,7 +176,7 @@ class MinioCompiler:
             case ConsPattern(head=head, tail=tail):
                 variables.update(self._extract_pattern_variables(head))
                 variables.update(self._extract_pattern_variables(tail))
-            case TuplePattern(patterns=patterns):
+            case TuplePattern(patterns=patterns) | ListPattern(patterns=patterns):
                 for sub_pattern in patterns:
                     variables.update(self._extract_pattern_variables(sub_pattern))
             case _:
@@ -250,18 +243,8 @@ class MinioCompiler:
 
                 # Create typed arguments
                 typed_args = []
-                for i, (field_name, field_type_expr) in enumerate(
-                    zip(field_names, field_types),
-                ):
-                    # Convert field type expression to Python type hint
-                    if field_type_expr:
-                        converted_type = self._convert_type_expression_to_type(
-                            field_type_expr,
-                        )
-                        type_hint = self._minio_type_to_python_hint(converted_type)
-                    else:
-                        type_hint = "Any"
-                    typed_args.append(f"arg_{i}: {type_hint}")
+                for i in range(len(field_names)):
+                    typed_args.append(f"arg_{i}: Any")
 
                 lines.extend(
                     [
@@ -280,16 +263,8 @@ class MinioCompiler:
 
                 # Create typed arguments
                 typed_args = []
-                for i, type_atom in enumerate(constructor.type_atoms):
-                    # Convert type atom to Python type hint
-                    if type_atom:
-                        converted_type = self._convert_type_expression_to_type(
-                            type_atom,
-                        )
-                        type_hint = self._minio_type_to_python_hint(converted_type)
-                    else:
-                        type_hint = "Any"
-                    typed_args.append(f"arg_{i}: {type_hint}")
+                for i in range(arg_count):
+                    typed_args.append(f"arg_{i}: Any")
 
                 lines.extend(
                     [
@@ -297,7 +272,7 @@ class MinioCompiler:
                         f"    def __init__(self, {', '.join(typed_args)}) -> None:",
                     ],
                 )
-                for i, arg in enumerate(range(arg_count)):
+                for i in range(arg_count):
                     lines.append(f"        self.arg_{i} = arg_{i}")
             else:
                 # No arguments
@@ -324,12 +299,7 @@ class MinioCompiler:
             max(len(defn.patterns) for defn in definitions) if definitions else 0
         )
 
-        # Store function information
-        function_type = definitions[0].ty if definitions and definitions[0].ty else None
-        self.functions[func_name] = FunctionInfo(
-            arity=max_params,
-            type_info=function_type,
-        )
+        self.functions[func_name] = FunctionInfo(arity=max_params)
 
         if len(definitions) == 1 and len(definitions[0].patterns) <= 1:
             return self._compile_simple_function(definitions[0], prefixed_func_name)
@@ -342,11 +312,6 @@ class MinioCompiler:
             while isinstance(current_type, FunctionType):
                 current_type = current_type.result
             return_type_hint = self._minio_type_to_python_hint(current_type)
-
-        # Find maximum number of parameters needed
-        max_params = (
-            max(len(defn.patterns) for defn in definitions) if definitions else 0
-        )
 
         # Create parameter list with type hints for multi-parameter functions
         param_list = []
@@ -436,10 +401,10 @@ class MinioCompiler:
                             pattern_matches.append(
                                 f"len({arg_name}) == {len(patterns)}",
                             )
-                            for i, sub_pattern in enumerate(patterns):
+                            for k, sub_pattern in enumerate(patterns):
                                 match sub_pattern:
                                     case VariablePattern(name=name):
-                                        assignments.append(f"{name} = {arg_name}[{i}]")
+                                        assignments.append(f"{name} = {arg_name}[{k}]")
                                     case _:
                                         # For non-variable patterns, add recursive matching
                                         pass
@@ -448,10 +413,10 @@ class MinioCompiler:
                             pattern_matches.append(
                                 f"len({arg_name}) == {len(patterns)}",
                             )
-                            for i, sub_pattern in enumerate(patterns):
+                            for k, sub_pattern in enumerate(patterns):
                                 match sub_pattern:
                                     case VariablePattern(name=name):
-                                        assignments.append(f"{name} = {arg_name}[{i}]")
+                                        assignments.append(f"{name} = {arg_name}[{k}]")
                                     case _:
                                         # For non-variable patterns, add recursive matching
                                         pass
@@ -617,7 +582,7 @@ class MinioCompiler:
                     )
                 case _ if is_minio_expression(stmt):
                     # Handle expression statements (like putStr calls)
-                    lines.append(f"    {self._compile_expression_safe(stmt)}")
+                    lines.append(f"    {self._compile_expression(stmt)}")
                 case _:
                     pass
 
@@ -631,7 +596,7 @@ class MinioCompiler:
                 )
                 lines.append(f"    return {prefixed_var}")
             case _ if is_minio_expression(last_stmt):
-                lines.append(f"    return {self._compile_expression_safe(last_stmt)}")
+                lines.append(f"    return {self._compile_expression(last_stmt)}")
             case _:
                 lines.append("    return None")
 
@@ -995,10 +960,6 @@ class MinioCompiler:
 
                     if constructor_def and constructor_def.record_constructor:
                         # Reorder fields according to declaration order
-                        declared_fields = {
-                            field.name: field
-                            for field in constructor_def.record_constructor.fields
-                        }
                         provided_fields = {field.field_name: field for field in fields}
 
                         # Create ordered field arguments
@@ -1041,7 +1002,7 @@ class MinioCompiler:
                 case LetStatement(value=value):
                     return f"(lambda: {self._compile_expression(value)})()"
                 case _ if is_minio_expression(stmt):
-                    return self._compile_expression_safe(stmt)
+                    return self._compile_expression(stmt)
                 case _:
                     return "None"
 
@@ -1055,7 +1016,7 @@ class MinioCompiler:
                         f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
                     )
                 case _ if is_minio_expression(stmt):
-                    parts.append(self._compile_expression_safe(stmt))
+                    parts.append(self._compile_expression(stmt))
                 case _:
                     pass
 
@@ -1066,7 +1027,7 @@ class MinioCompiler:
                 prefixed_var = self._prefix_name(variable)
                 final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
             case _ if is_minio_expression(last_stmt):
-                final_expr = self._compile_expression_safe(last_stmt)
+                final_expr = self._compile_expression(last_stmt)
             case _:
                 final_expr = "None"
 
@@ -1074,9 +1035,6 @@ class MinioCompiler:
             return f"({' or '.join(parts)} or {final_expr})"
         else:
             return final_expr
-
-    def _compile_expression_safe(self, stmt: Any) -> str:
-        return self._compile_expression(stmt) if is_minio_expression(stmt) else "None"
 
 
 def compile_program(program: Program) -> str:

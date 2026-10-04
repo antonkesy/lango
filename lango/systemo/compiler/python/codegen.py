@@ -165,7 +165,6 @@ def tree_key(tree: Tree) -> str:
             return "undef"
         case ParamTree(python_name=python_name):
             return python_name
-    raise CompileError(f"Unknown evidence {tree}")
 
 
 @dataclass
@@ -548,7 +547,6 @@ class CodeGenerator:
                 return self.param_tree(name, var, context)
             case AmbiguousEvidence():
                 return UndefTree()
-        raise CompileError(f"Unknown evidence {evidence}")
 
     def param_tree(self, name: str, var: str, context: Context) -> Tree:
         tree = context.params.get((name, var))
@@ -572,7 +570,6 @@ class CodeGenerator:
                 for argument in arguments:
                     result += f"({self.compile_tree(argument)})"
                 return result
-        raise CompileError(f"Unknown evidence {tree}")
 
     def request_specialization(
         self,
@@ -591,9 +588,6 @@ class CodeGenerator:
             self.specializations[key] = spec
             self.pending.append(spec)
         return spec.python_name
-
-    def local_specialization_name(self, name: str, trees: Tuple[Tree, ...]) -> str:
-        return f"{mangle(name)}__" + "__".join(tree_key(t) for t in trees)
 
     # --- blocks -------------------------------------------------------------------
 

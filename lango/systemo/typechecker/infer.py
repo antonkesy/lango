@@ -75,11 +75,13 @@ from lango.shared.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.shared.typechecker.errors import TypeInferenceError
 from lango.shared.typechecker.lango_types import (
     BOOL_TYPE,
     CHAR_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
+    PRIMITIVE_TYPES,
     STRING_TYPE,
     UNIT_TYPE,
     DataType,
@@ -88,29 +90,22 @@ from lango.shared.typechecker.lango_types import (
     Type,
     TypeCon,
     TypeVar,
+    function,
+    unfold_function,
 )
 from lango.systemo.typechecker.primitives import CONSTANTS, PRIMITIVES
 from lango.systemo.typechecker.types import (
     LIST,
-    PRIMITIVE_TYPES,
     ConstraintSet,
     Scheme,
     display_name,
     free_vars,
-    function,
     list_of,
     scheme_to_str,
-    substitute,
     tycon_args,
     tycon_name,
     type_to_str,
-    unfold_function,
 )
-
-
-class TypeInferenceError(Exception):
-    pass
-
 
 # --------------------------------------------------------------------------
 # Evidence
@@ -197,7 +192,6 @@ class PrimBinding:
 class ConBinding:
     scheme: Scheme
     field_names: List[str]
-    tycon: str
 
 
 Binding = Union[LetBinding, MonoBinding, RecBinding, PrimBinding, ConBinding]
@@ -277,7 +271,6 @@ class InstanceInfo:
     scheme: Scheme  # the declared sigma_T
     clauses: List[FunctionDefinition]
     arity: int
-    inferred: Scheme = field(default_factory=Scheme)
     # evidence for the constraints of the *inferred* scheme of the body,
     # expressed in terms of the declared scheme (see ``check_instance``)
     body_evidence: Dict[Tuple[str, str], Constraint] = field(default_factory=dict)
@@ -364,9 +357,9 @@ class TypeInferrer:
             case FunctionType(param=param, result=result):
                 return FunctionType(self.resolve(param), self.resolve(result))
             case DataType(name=name, type_args=args):
-                return DataType(name, [self.resolve(arg) for arg in args])
+                return DataType(name, tuple(self.resolve(arg) for arg in args))
             case TupleType(element_types=elems):
-                return TupleType([self.resolve(elem) for elem in elems])
+                return TupleType(tuple(self.resolve(elem) for elem in elems))
             case _:
                 return t
 
@@ -464,10 +457,10 @@ class TypeInferrer:
             fresh_var = mapping[var]
             assert isinstance(fresh_var, TypeVar)
             for o, tau in constraints:
-                constraint = Constraint(o, fresh_var.name, substitute(tau, mapping))
+                constraint = Constraint(o, fresh_var.name, tau.substitute(mapping))
                 self.constraints[fresh_var.name][o] = constraint
                 created.append(constraint)
-        return substitute(scheme.type, mapping), created
+        return scheme.type.substitute(mapping), created
 
     def overloaded_use(self, o: str) -> Tuple[Type, Constraint]:
         """``tp(o) = newinst(forall a b . (o : a -> b) => a -> b)``."""
@@ -542,11 +535,11 @@ class TypeInferrer:
                 self.instances[o][tycon_name(skolem)] = InstanceInfo(
                     name=o,
                     tycon=tycon_name(skolem),
-                    scheme=Scheme([], FunctionType(skolem, substitute(tau, mapping))),
+                    scheme=Scheme([], FunctionType(skolem, tau.substitute(mapping))),
                     clauses=[],
                     arity=0,
                 )
-        return substitute(scheme.type, mapping), skolems
+        return scheme.type.substitute(mapping), skolems
 
     def remove_skolems(self, skolems: Dict[str, str]) -> None:
         for instances in self.instances.values():
@@ -576,7 +569,7 @@ class TypeInferrer:
             case TypeConstructor(name=name):
                 if name in PRIMITIVE_TYPES:
                     return PRIMITIVE_TYPES[name]
-                return self._data_type(name, [])
+                return self._data_type(name, ())
             case TypeVariable(name=name):
                 if scope is None:
                     return TypeVar(name)
@@ -593,7 +586,7 @@ class TypeInferrer:
                 arg = self.parse_type(argument, scope)
                 match head:
                     case DataType(name=name, type_args=args):
-                        return self._data_type(name, args + [arg])
+                        return self._data_type(name, (*args, arg))
                     case _:
                         raise TypeInferenceError(
                             f"Type {type_to_str(head)} cannot be applied to an argument",
@@ -601,13 +594,15 @@ class TypeInferrer:
             case ListType(element_type=element_type):
                 return list_of(self.parse_type(element_type, scope))
             case ASTTupleType(element_types=element_types):
-                return TupleType([self.parse_type(e, scope) for e in element_types])
+                return TupleType(
+                    tuple(self.parse_type(e, scope) for e in element_types)
+                )
             case GroupedType(type_expr=type_expr):
                 return self.parse_type(type_expr, scope)
             case _:
                 raise TypeInferenceError(f"Cannot parse type expression: {node}")
 
-    def _data_type(self, name: str, args: List[Type]) -> Type:
+    def _data_type(self, name: str, args: tuple[Type, ...]) -> Type:
         info = self.data_types.get(name)
         if info is None:
             raise TypeInferenceError(f"Unknown type '{name}'")
@@ -705,14 +700,14 @@ class TypeInferrer:
             (
                 fresh_vars[var].name,
                 sorted(
-                    (name, substitute(tau, mapping))
+                    (name, tau.substitute(mapping))
                     for name, tau in constraint_sets[var]
                 ),
             )
             for var in scheme_vars
         ]
         return DeclaredScheme(
-            Scheme(quantified, substitute(body, mapping)),
+            Scheme(quantified, body.substitute(mapping)),
             tycon,
             {fresh_vars[var].name: var for var in scheme_vars},
         )
@@ -732,7 +727,7 @@ class TypeInferrer:
         for decl in decls:
             info = self.data_types[decl.type_name]
             scope: Dict[str, Type] = {param: TypeVar(param) for param in info.params}
-            result = DataType(decl.type_name, [TypeVar(param) for param in info.params])
+            result = DataType(decl.type_name, tuple(TypeVar(p) for p in info.params))
             for constructor in decl.constructors:
                 if constructor.name in self.constructors:
                     raise TypeInferenceError(
@@ -771,7 +766,7 @@ class TypeInferrer:
         for name, scheme in CONSTANTS.items():
             env = env.extend(name, PrimBinding(scheme))
         for name, con in self.constructors.items():
-            env = env.extend(name, ConBinding(con.scheme, con.field_names, con.tycon))
+            env = env.extend(name, ConBinding(con.scheme, con.field_names))
         return env
 
     # --- expressions -------------------------------------------------------------
@@ -802,7 +797,7 @@ class TypeInferrer:
                     self.unify(self.infer(e, env), element)
                 return list_of(element)
             case TupleLiteral(elements=elements):
-                return TupleType([self.infer(e, env) for e in elements])
+                return TupleType(tuple(self.infer(e, env) for e in elements))
             case Variable(name=name):
                 return self.infer_variable(expr, name, env)
             case Constructor(name=name):
@@ -863,7 +858,6 @@ class TypeInferrer:
                 t, _ = self.newinst(scheme)
                 self.var_uses[id(node)] = VarUse(UseKind.CONSTRUCTOR, name)
                 return t
-        raise TypeInferenceError(f"Unknown variable '{name}'")
 
     def infer_record(
         self,
@@ -966,7 +960,7 @@ class TypeInferrer:
                 for sub in subpatterns:
                     sub_type, env = self.infer_pattern(sub, env, bound)
                     types.append(sub_type)
-                return TupleType(types), env
+                return TupleType(tuple(types)), env
             case _:
                 raise TypeInferenceError(f"Unhandled pattern: {type(pattern).__name__}")
 
@@ -1057,7 +1051,6 @@ class TypeInferrer:
             scheme=declared,
             clauses=list(decl.clauses),
             arity=len(decl.clauses[0].patterns),
-            inferred=inferred,
             body_evidence=body_evidence,
             skolem_vars=skolems,
         )
@@ -1097,11 +1090,8 @@ class TypeInferrer:
         for node in self.typed_nodes:
             node.ty = self.resolve(node.ty)  # type: ignore[attr-defined]
         for decl in decls:
-            match decl:
-                case FunctionDecl():
-                    decl.scheme = self.resolve_scheme(decl.scheme)
-                case InstanceInfo():
-                    decl.inferred = self.resolve_scheme(decl.inferred)
+            if isinstance(decl, FunctionDecl):
+                decl.scheme = self.resolve_scheme(decl.scheme)
         return TypedProgram(
             program=program,
             data_types=self.data_types,

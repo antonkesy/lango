@@ -64,13 +64,10 @@ from lango.shared.typechecker.lango_types import (
 class MinioGoCompiler:
     def __init__(self) -> None:
         self.indent_level = 0
-        self.defined_functions: Set[str] = set()
         self.nullary_functions: Set[str] = set()
         self.nullary_constructors: Set[str] = set()
-        self.function_types: Dict[str, Type] = {}
         self.data_types: Dict[str, DataDeclaration] = {}
         self.local_variables: Set[str] = set()
-        self.do_block_counter = 0
 
     def _indent(self) -> str:
         return "\t" * self.indent_level
@@ -224,16 +221,16 @@ class MinioGoCompiler:
                 return "bool"
             case TypeCon(name="()"):
                 return "any"
-            case TypeApp(constructor=TypeCon(name="List"), argument=arg_type):
+            case TypeApp(constructor=TypeCon(name="List")):
                 return "[]any"
-            case TypeApp(constructor=TypeCon(name="IO"), argument=arg_type):
+            case TypeApp(constructor=TypeCon(name="IO")):
                 # IO type not represented in Go
                 return "any"
             case FunctionType(param=param_type, result=result_type):
                 param_type_str = self._minio_type_to_go_type(param_type)
                 result_type_str = self._minio_type_to_go_type(result_type)
                 return f"func({param_type_str}) {result_type_str}"
-            case DataType(name=name, type_args=type_args):
+            case DataType(name=name):
                 return f"{name}Interface"
             case TypeVar(name=name):
                 return "any"
@@ -471,11 +468,6 @@ class MinioGoCompiler:
         definitions: List[FunctionDefinition],
     ) -> str:
         prefixed_func_name = self._prefix_name(func_name)
-        self.defined_functions.add(func_name)
-
-        # Store function type information
-        if definitions and definitions[0].ty:
-            self.function_types[func_name] = definitions[0].ty
 
         # Check if any definition is nullary
         if any(len(defn.patterns) == 0 for defn in definitions):

@@ -1,7 +1,7 @@
 from abc import ABC
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, TypeGuard, Union
 
 from lango.shared.typechecker.lango_types import Type
 
@@ -386,7 +386,7 @@ class Program(ASTNode):
     ty: Optional[Type] = None
 
 
-def is_minio_expression(stmt: Any) -> bool:
+def is_minio_expression(stmt: Any) -> TypeGuard["Expression"]:
     match stmt:
         case (
             IntLiteral()
@@ -395,12 +395,17 @@ def is_minio_expression(stmt: Any) -> bool:
             | CharLiteral()
             | BoolLiteral()
             | ListLiteral()
+            | TupleLiteral()
+            | NegativeInt()
+            | NegativeFloat()
             | Variable()
             | Constructor()
             | AddOperation()
             | SubOperation()
             | MulOperation()
             | DivOperation()
+            | PowIntOperation()
+            | PowFloatOperation()
             | EqualOperation()
             | NotEqualOperation()
             | LessThanOperation()
@@ -529,26 +534,3 @@ type Statement = Union[
     LetStatement,
     Expression,
 ]
-
-
-def is_systemo_expression(stmt: Any) -> bool:
-    match stmt:
-        case (
-            IntLiteral()
-            | FloatLiteral()
-            | StringLiteral()
-            | CharLiteral()
-            | BoolLiteral()
-            | ListLiteral()
-            | Variable()
-            | Constructor()
-            | SymbolicOperation()
-            | FunctionApplication()
-            | ConstructorExpression()
-            | DoBlock()
-            | GroupedExpression()
-            | IfElse()
-        ):
-            return True
-        case _:
-            return False

@@ -1,3 +1,6 @@
+"""Robinson unification for MiniO (System O has constrained unification in
+:mod:`lango.systemo.typechecker.infer`)."""
+
 from lango.shared.typechecker.lango_types import (
     DataType,
     FunctionType,
@@ -14,95 +17,49 @@ class UnificationError(Exception):
     pass
 
 
-def occurs_check(var: str, typ: Type) -> bool:
-    match typ:
-        case TypeVar(name=name):
-            return var == name
-        case TypeCon():
-            return False
-        case FunctionType(param=param, result=result):
-            return occurs_check(var, param) or occurs_check(var, result)
-        case TypeApp(constructor=constructor, argument=argument):
-            return occurs_check(var, constructor) or occurs_check(var, argument)
-        case DataType(type_args=type_args):
-            return any(occurs_check(var, arg) for arg in type_args)
-        case TupleType(element_types=element_types):
-            return any(occurs_check(var, elem) for elem in element_types)
-        case _:
-            raise UnificationError(f"Unknown type in occurs check: {type(typ)}")
+def _bind(name: str, t: Type) -> TypeSubstitution:
+    if name in t.free_vars():
+        raise UnificationError(f"Occurs check failed: {name} occurs in {t}")
+    return TypeSubstitution({name: t})
+
+
+def _unify_all(pairs: list[tuple[Type, Type]]) -> TypeSubstitution:
+    subst = TypeSubstitution()
+    for t1, t2 in pairs:
+        subst = unify_one(subst.apply(t1), subst.apply(t2)).compose(subst)
+    return subst
 
 
 def unify_one(t1: Type, t2: Type) -> TypeSubstitution:
-
-    # Same type
-    if t1 == t2:
-        return TypeSubstitution()
-
-    # Type variable cases
-    match t1:
-        case TypeVar(name=name):
-            if occurs_check(name, t2):
-                raise UnificationError(f"Occurs check failed: {name} occurs in {t2}")
-            return TypeSubstitution({name: t2})
-        case _:
-            pass
-
-    match t2:
-        case TypeVar(name=name):
-            if occurs_check(name, t1):
-                raise UnificationError(f"Occurs check failed: {name} occurs in {t1}")
-            return TypeSubstitution({name: t1})
-        case _:
-            pass
-
-    # Type constructor and other cases
     match (t1, t2):
+        case _ if t1 == t2:
+            return TypeSubstitution()
+        case (TypeVar(name=name), _):
+            return _bind(name, t2)
+        case (_, TypeVar(name=name)):
+            return _bind(name, t1)
         case (TypeCon(name=name1), TypeCon(name=name2)):
-            if name1 == name2:
-                return TypeSubstitution()
-            else:
-                raise UnificationError(
-                    f"Cannot unify type constructors {name1} and {name2}",
-                )
+            raise UnificationError(
+                f"Cannot unify type constructors {name1} and {name2}"
+            )
+        case (FunctionType(), FunctionType()):
+            return _unify_all([(t1.param, t2.param), (t1.result, t2.result)])
+        case (TypeApp(), TypeApp()):
+            return _unify_all(
+                [(t1.constructor, t2.constructor), (t1.argument, t2.argument)],
+            )
         case (
-            FunctionType(param=param1, result=result1),
-            FunctionType(param=param2, result=result2),
+            DataType(name=name1, type_args=args1),
+            DataType(name=name2, type_args=args2),
         ):
-            s1 = unify_one(param1, param2)
-            s2 = unify_one(s1.apply(result1), s1.apply(result2))
-            return s2.compose(s1)
-        case (
-            TypeApp(constructor=constructor1, argument=argument1),
-            TypeApp(constructor=constructor2, argument=argument2),
-        ):
-            s1 = unify_one(constructor1, constructor2)
-            s2 = unify_one(s1.apply(argument1), s1.apply(argument2))
-            return s2.compose(s1)
-        case (
-            DataType(name=name1, type_args=type_args1),
-            DataType(name=name2, type_args=type_args2),
-        ):
-            if name1 != name2 or len(type_args1) != len(type_args2):
+            if name1 != name2 or len(args1) != len(args2):
                 raise UnificationError(f"Cannot unify data types {t1} and {t2}")
-
-            subst = TypeSubstitution()
-            for arg1, arg2 in zip(type_args1, type_args2):
-                s = unify_one(subst.apply(arg1), subst.apply(arg2))
-                subst = s.compose(subst)
-            return subst
-        case (
-            TupleType(element_types=elem_types1),
-            TupleType(element_types=elem_types2),
-        ):
-            if len(elem_types1) != len(elem_types2):
+            return _unify_all(list(zip(args1, args2)))
+        case (TupleType(element_types=elems1), TupleType(element_types=elems2)):
+            if len(elems1) != len(elems2):
                 raise UnificationError(
                     f"Cannot unify tuples of different lengths: {t1} and {t2}",
                 )
-
-            subst = TypeSubstitution()
-            for elem1, elem2 in zip(elem_types1, elem_types2):
-                s = unify_one(subst.apply(elem1), subst.apply(elem2))
-                subst = s.compose(subst)
-            return subst
+            return _unify_all(list(zip(elems1, elems2)))
         case _:
             raise UnificationError(f"Cannot unify {t1} and {t2}")

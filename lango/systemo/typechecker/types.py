@@ -12,14 +12,8 @@ are ``Tuple<n>`` (``TupleType``) and user datatypes are ``DataType``.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 from lango.shared.typechecker.lango_types import (
-    BOOL_TYPE,
-    CHAR_TYPE,
-    FLOAT_TYPE,
-    INT_TYPE,
-    STRING_TYPE,
     UNIT_TYPE,
     DataType,
     FunctionType,
@@ -28,21 +22,14 @@ from lango.shared.typechecker.lango_types import (
     TypeCon,
     TypeVar,
 )
+from lango.shared.typechecker.names import var_names
 
 LIST = "List"
 FUNCTION = "->"
 
 
 def list_of(element: Type) -> Type:
-    return DataType(LIST, [element])
-
-
-def function(*types: Type) -> Type:
-    """``function(a, b, c)`` is ``a -> b -> c``."""
-    result = types[-1]
-    for param in reversed(types[:-1]):
-        result = FunctionType(param, result)
-    return result
+    return DataType(LIST, (element,))
 
 
 def tuple_tycon(arity: int) -> str:
@@ -64,7 +51,7 @@ def tycon_name(t: Type) -> str:
             raise ValueError(f"Type {t} has no outermost type constructor")
 
 
-def tycon_args(t: Type) -> List[Type]:
+def tycon_args(t: Type) -> list[Type]:
     match t:
         case TypeCon():
             return []
@@ -78,17 +65,10 @@ def tycon_args(t: Type) -> List[Type]:
             raise ValueError(f"Type {t} has no outermost type constructor")
 
 
-def unfold_function(t: Type) -> Tuple[List[Type], Type]:
-    params: List[Type] = []
-    while isinstance(t, FunctionType):
-        params.append(t.param)
-        t = t.result
-    return params, t
-
-
-def free_vars(t: Type) -> List[str]:
-    """Free type variables in order of first occurrence."""
-    result: List[str] = []
+def free_vars(t: Type) -> list[str]:
+    """Free type variables in order of first occurrence (this order decides
+    the order of dictionary parameters, see ``TypeInferrer.gen``)."""
+    result: list[str] = []
 
     def go(t: Type) -> None:
         match t:
@@ -111,14 +91,10 @@ def free_vars(t: Type) -> List[str]:
     return result
 
 
-def substitute(t: Type, mapping: Dict[str, Type]) -> Type:
-    return t.substitute(mapping)
-
-
 # A constraint set on a type variable: ``o_1 : alpha -> tau_1, ..., o_n : alpha -> tau_n``
 # with pairwise distinct ``o_i``, kept sorted lexicographically by ``o_i``
 # (the paper fixes this order to make the dictionary passing transform coherent).
-ConstraintSet = List[Tuple[str, Type]]
+type ConstraintSet = list[tuple[str, Type]]
 
 
 @dataclass
@@ -130,17 +106,17 @@ class Scheme:
     special case of empty constraint sets.
     """
 
-    quantified: List[Tuple[str, ConstraintSet]] = field(default_factory=list)
+    quantified: list[tuple[str, ConstraintSet]] = field(default_factory=list)
     type: Type = UNIT_TYPE
 
     @property
-    def dictionary_params(self) -> List[Tuple[str, str]]:
+    def dictionary_params(self) -> list[tuple[str, str]]:
         """The ``(o, alpha)`` pairs for which a use of this scheme passes a dictionary."""
         return [
             (o, var) for var, constraints in self.quantified for o, _ in constraints
         ]
 
-    def free_vars(self) -> List[str]:
+    def free_vars(self) -> list[str]:
         bound = {var for var, _ in self.quantified}
         names = free_vars(self.type)
         for _, constraints in self.quantified:
@@ -152,22 +128,7 @@ class Scheme:
         return scheme_to_str(self)
 
 
-PRIMITIVE_TYPES: Dict[str, Type] = {
-    "Int": INT_TYPE,
-    "Float": FLOAT_TYPE,
-    "Bool": BOOL_TYPE,
-    "String": STRING_TYPE,
-    "Char": CHAR_TYPE,
-    "()": UNIT_TYPE,
-}
-
-
-def _var_names() -> List[str]:
-    names = [chr(ord("a") + i) for i in range(26)]
-    return names + [f"{n}{i}" for i in range(1, 10) for n in names]
-
-
-def skolem_names(t: Type) -> List[str]:
+def skolem_names(t: Type) -> list[str]:
     """Lowercase type constructors are skolemised type variables of a
     declared instance type (see ``TypeInferrer.skolemize``)."""
     match t:
@@ -183,14 +144,14 @@ def skolem_names(t: Type) -> List[str]:
             return []
 
 
-def type_to_str(t: Type, names: Optional[Dict[str, str]] = None) -> str:
+def type_to_str(t: Type, names: dict[str, str] | None = None) -> str:
     names = names if names is not None else {}
     reserved = set(skolem_names(t))
 
     def name_of(var: str) -> str:
         if var not in names:
             taken = reserved | set(names.values())
-            names[var] = next(n for n in _var_names() if n not in taken)
+            names[var] = next(n for n in var_names() if n not in taken)
         return names[var]
 
     def go(t: Type, atom: bool) -> str:
@@ -220,7 +181,7 @@ def type_to_str(t: Type, names: Optional[Dict[str, str]] = None) -> str:
     return go(t, False)
 
 
-def scheme_to_str(scheme: Scheme, names: Optional[Dict[str, str]] = None) -> str:
+def scheme_to_str(scheme: Scheme, names: dict[str, str] | None = None) -> str:
     names = names if names is not None else {}
     body = type_to_str(scheme.type, names)
     constraints = [

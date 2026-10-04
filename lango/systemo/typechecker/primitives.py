@@ -14,8 +14,9 @@ from lango.shared.typechecker.lango_types import (
     STRING_TYPE,
     UNIT_TYPE,
     TypeVar,
+    function,
 )
-from lango.systemo.typechecker.types import Scheme, function, list_of
+from lango.systemo.typechecker.types import Scheme, list_of
 
 _A = TypeVar("a")
 
