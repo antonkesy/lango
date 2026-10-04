@@ -772,7 +772,7 @@ class TypeInferrer:
     # --- expressions -------------------------------------------------------------
 
     def annotate(self, node: ASTNode, t: Type) -> Type:
-        node.ty = t  # type: ignore[attr-defined]
+        node.ty = t
         self.typed_nodes.append(node)
         return t
 
@@ -1088,7 +1088,8 @@ class TypeInferrer:
             # the environment is closed at top level: whatever is left is ambiguous
             self.discard_ambiguous_constraints()
         for node in self.typed_nodes:
-            node.ty = self.resolve(node.ty)  # type: ignore[attr-defined]
+            if node.ty is not None:
+                node.ty = self.resolve(node.ty)
         for decl in decls:
             if isinstance(decl, FunctionDecl):
                 decl.scheme = self.resolve_scheme(decl.scheme)

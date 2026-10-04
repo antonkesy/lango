@@ -1,18 +1,20 @@
 from pathlib import Path
-from typing import List
 
 from lango.shared.ast.nodes import FunctionDefinition, Program
 from lango.shared.parser import parse_lark
 from lango.systemo.ast.desugar import desugar_program
 from lango.systemo.ast.transformer import transform_parse_tree
 
+GRAMMAR = Path(__file__).with_name("systemo.lark")
+PRELUDE_DIR = Path(__file__).parents[1] / "prelude"
+
 
 def parse(path: Path) -> Program:
     program = transform_parse_tree(
         parse_lark(
             path,
-            grammar=Path("./lango/systemo/parser/systemo.lark"),
-            prelude_dir=Path("./lango/systemo/prelude"),
+            GRAMMAR,
+            PRELUDE_DIR,
             file_extension="syso",
             prelude_first=True,
             # rebinding a unique variable is a type error (checked by the type checker)
@@ -43,7 +45,7 @@ def _validate_function_clauses(program: Program) -> None:
     A unique variable is bound at most once in a System O program; the
     clauses of one function together form its single (recursive) binding.
     """
-    seen: List[str] = []
+    seen: list[str] = []
     previous: FunctionDefinition | None = None
     for stmt in program.statements:
         if not isinstance(stmt, FunctionDefinition):

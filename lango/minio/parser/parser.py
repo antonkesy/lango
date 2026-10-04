@@ -5,15 +5,13 @@ from lango.minio.ast.transformer import transform_parse_tree
 from lango.shared.ast.nodes import FunctionDefinition, Program
 from lango.shared.parser import parse_lark
 
+GRAMMAR = Path(__file__).with_name("minio.lark")
+PRELUDE_DIR = Path(__file__).parents[1] / "prelude"
+
 
 def parse(path: Path) -> Program:
     program = transform_parse_tree(
-        parse_lark(
-            path,
-            grammar=Path("./lango/minio/parser/minio.lark"),
-            prelude_dir=Path("./lango/minio/prelude"),
-            file_extension="minio",
-        ),
+        parse_lark(path, GRAMMAR, PRELUDE_DIR, file_extension="minio"),
     )
 
     _validate_program(program)

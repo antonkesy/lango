@@ -22,7 +22,7 @@ strategies:
 """
 
 from dataclasses import dataclass, field, replace
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
@@ -74,7 +74,7 @@ from lango.systemo.typechecker.infer import (
 from lango.systemo.typechecker.types import Scheme
 
 
-class Strategy(Enum):
+class Strategy(StrEnum):
     DICTIONARY_PASSING = "dictionary_passing"
     MONOMORPHIZATION = "monomorphization"
 

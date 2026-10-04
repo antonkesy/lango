@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from lango.shared.ast.nodes import (
@@ -49,7 +50,7 @@ from lango.shared.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
-    is_minio_expression,
+    is_expression,
 )
 from lango.shared.compiler.python import (
     build_cons_pattern_match,
@@ -185,9 +186,7 @@ class MinioCompiler:
         return variables
 
     def compile(self, program: Program) -> str:
-        lines = []
-        with open("lango/minio/compiler/prelude.py", "r") as f:
-            lines.extend(f.read().splitlines())
+        lines = Path(__file__).with_name("prelude.py").read_text().splitlines()
 
         # Collect data types
         for stmt in program.statements:
@@ -580,7 +579,7 @@ class MinioCompiler:
                     lines.append(
                         f"    {prefixed_var} = {self._compile_expression(value)}",
                     )
-                case _ if is_minio_expression(stmt):
+                case _ if is_expression(stmt):
                     # Handle expression statements (like putStr calls)
                     lines.append(f"    {self._compile_expression(stmt)}")
                 case _:
@@ -595,7 +594,7 @@ class MinioCompiler:
                     f"    {prefixed_var} = {self._compile_expression(value)}",
                 )
                 lines.append(f"    return {prefixed_var}")
-            case _ if is_minio_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 lines.append(f"    return {self._compile_expression(last_stmt)}")
             case _:
                 lines.append("    return None")
@@ -1001,7 +1000,7 @@ class MinioCompiler:
             match stmt:
                 case LetStatement(value=value):
                     return f"(lambda: {self._compile_expression(value)})()"
-                case _ if is_minio_expression(stmt):
+                case _ if is_expression(stmt):
                     return self._compile_expression(stmt)
                 case _:
                     return "None"
@@ -1015,7 +1014,7 @@ class MinioCompiler:
                     parts.append(
                         f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})",
                     )
-                case _ if is_minio_expression(stmt):
+                case _ if is_expression(stmt):
                     parts.append(self._compile_expression(stmt))
                 case _:
                     pass
@@ -1026,7 +1025,7 @@ class MinioCompiler:
             case LetStatement(variable=variable, value=value):
                 prefixed_var = self._prefix_name(variable)
                 final_expr = f"globals().update({{'{prefixed_var}': {self._compile_expression(value)}}})"
-            case _ if is_minio_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 final_expr = self._compile_expression(last_stmt)
             case _:
                 final_expr = "None"

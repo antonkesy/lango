@@ -1,4 +1,5 @@
 from collections import Counter
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from lango.shared.ast.nodes import (
@@ -49,7 +50,7 @@ from lango.shared.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
-    is_minio_expression,
+    is_expression,
 )
 from lango.shared.typechecker.lango_types import (
     DataType,
@@ -261,7 +262,7 @@ class MinioGoCompiler:
 
     def compile(self, program: Program) -> str:
         lines = []
-        with open("lango/minio/compiler/prelude.go", "r") as f:
+        with open(Path(__file__).with_name("prelude.go"), "r") as f:
             lines.extend(f.read().splitlines())
 
         # Generate built-in tuple type definitions
@@ -1264,8 +1265,8 @@ class MinioGoCompiler:
                     lines.append(
                         f"\t_ = {prefixed_var}",
                     )  # This suppresses unused variable warnings
-                case _ if is_minio_expression(stmt):
-                    lines.append(f"\t{self._compile_expression(stmt)}")  # type: ignore
+                case _ if is_expression(stmt):
+                    lines.append(f"\t{self._compile_expression(stmt)}")
 
         # Handle the last statement (which becomes the return value)
         last_stmt = do_block.statements[-1]
@@ -1274,9 +1275,9 @@ class MinioGoCompiler:
                 prefixed_var = self._prefix_name(variable)
                 lines.append(f"\t{prefixed_var} := {self._compile_expression(value)}")
                 lines.append(f"\treturn {prefixed_var}")
-            case _ if is_minio_expression(last_stmt):
+            case _ if is_expression(last_stmt):
                 # Check if it's a statement that doesn't return a value (like putStr)
-                expr_str = self._compile_expression(last_stmt)  # type: ignore
+                expr_str = self._compile_expression(last_stmt)
                 if "minioPutStr(" in expr_str:
                     # This is a print statement - execute it and return nil
                     lines.append(f"\t{expr_str}")

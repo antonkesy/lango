@@ -1,23 +1,9 @@
-start: prelude stmt* postlude
-
-prelude: COMMENT*
-postlude: COMMENT*
+// System O.  The shared rules are in lango/shared/lango.lark.
 
 ?stmt: data_decl
      | inst_decl
      | func_def
      | precedence_decl
-
-// --- Data Declarations ---
-data_decl: "data" TYPE type_param* "=" constructor ("|" constructor)* ";"
-
-type_param: ID
-
-constructor: UIDENT record_constructor
-           | UIDENT type_atom*
-
-record_constructor: "{" [field ("," field)*] "}"
-field: ID "::" type_expr
 
 // --- Instance Declarations ---
 // inst o :: (o1 :: a -> t1, o2 :: b -> t2) => T a b -> t { clauses }
@@ -66,15 +52,13 @@ SYMBOLIC_OP: "?"
 func_def: operator_name pattern* "=" expr ";"
 inst_func_def: inst_operator_name pattern* "=" expr ";"
 
-do_stmt: "let" "{" assignment_list "}"
+?do_stmt: "let" "{" assignment_list "}"
         | expr
 
 assignment_list: assignment ("," assignment)*
                | assignment (";" assignment)*
 
 assignment: ID "=" expr
-
-stmt_list: (do_stmt ";")+
 
 ?expr: "do" "{" stmt_list "}"          -> do_block
      | "if" expr "then" expr elsif_clauses "else" expr -> if_else_extended
@@ -104,65 +88,5 @@ elsif_clauses: ("else" "if" expr "then" expr)+
           | symbolic_operator      -> symbolic_var
           | literal
 
-constructor_expr: UIDENT "{" field_assign ("," field_assign)* "}"
-field_assign: ID "=" expr
-
 // --- Types ---
-?type_expr: type_app
-          | type_app "->" type_expr   -> arrow_type
-
-?type_app: type_app type_atom         -> type_application
-         | type_atom
-
-?type_atom: TYPE                      -> type_constructor
-          | ID                        -> type_var
-          | "[" type_expr "]"         -> list_type
-          | "(" type_expr ")"         -> grouped_type
-          | "(" type_expr "," type_expr ("," type_expr)* ")" -> tuple_type
-
-// --- Patterns ---
-?pattern: constructor_pattern
-        | cons_pattern
-        | tuple_pattern
-        | list_pattern
-        | UIDENT                 -> constructor_pattern_bare
-        | ID                     -> var_pattern
-        | atomic_literal         -> literal_pattern
-        | "(" "-" INT ")"      -> neg_int_pattern
-        | "(" "-" FLOAT ")"    -> neg_float_pattern
-
-constructor_pattern: "(" UIDENT pattern+ ")"
-cons_pattern: "(" pattern COLON pattern ")"
-tuple_pattern: "(" pattern "," pattern ("," pattern)* ")"
-list_pattern: "[" [pattern ("," pattern)*] "]"
-
-// --- Literals ---
-?atomic_literal: INT     -> int
-               | FLOAT   -> float
-               | STRING  -> string
-               | CHAR    -> char
-               | "True"  -> true
-               | "False" -> false
-
-?literal: atomic_literal
-        | list
-
-list: "[" [expr ("," expr)*] "]"
-
-// --- Tokens ---
-ID: /[a-z][a-zA-Z0-9_]*/
-TYPE: /[A-Z][a-zA-Z0-9_]*/
-UIDENT: TYPE
-STRING: /"[^"]*"/
-CHAR: /'[^']*'/
-INT: /[0-9]+/
-FLOAT: /[0-9]+\.[0-9]+/
-COLON: ":"
-
-COMMENT: /--.*/
-%ignore COMMENT
-%ignore /[ \t]+/
-%ignore /\n/
-
-%import common.WS
-%ignore WS
+%extend type_atom: "[" type_expr "]"  -> list_type

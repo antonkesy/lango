@@ -1,53 +1,18 @@
-import os
+"""Parsing: the shared grammar (``lango.lark``) plus a language grammar,
+with the language's prelude appended to (or, for System O, prepended to)
+the user program."""
+
 import re
+from functools import cache
 from pathlib import Path
-from typing import Set
 
 from lark import Lark, ParseTree
 
+SHARED_GRAMMAR = Path(__file__).with_name("lango.lark")
 
-def parse_lark(
-    path: Path,
-    grammar: Path,
-    prelude_dir: Path,
-    file_extension: str,
-    prelude_first: bool = False,
-    check_prelude_conflicts: bool = True,
-) -> ParseTree:
-    parser = Lark.open(
-        str(grammar),
-        parser="lalr",
-    )
-
-    prelude_content = ""
-
-    if os.path.exists(prelude_dir):
-        for filename in sorted(os.listdir(prelude_dir)):
-            if filename.endswith(f".{file_extension}"):
-                prelude_file_path = os.path.join(prelude_dir, filename)
-                try:
-                    with open(prelude_file_path, "r") as prelude_file:
-                        prelude_content += prelude_file.read() + "\n"
-                except FileNotFoundError:
-                    pass
-
-    with open(path) as f:
-        main_content = f.read()
-
-    with open(f"./build/main.{file_extension}", "w") as f:
-        f.write(main_content + prelude_content)
-
-    # Prevent user files from redefining prelude symbols
-    def _extract_top_level_names(src: str) -> Set[str]:
-        # Capture likely top-level symbol definitions.
-        # This intentionally favors simple, conservative matching.
-        pattern = re.compile(r"(?m)^[ \t]*([A-Za-z_][\w']*)\s*(?:::|\(|=)")
-        return set(pattern.findall(src))
-
-    prelude_names = _extract_top_level_names(prelude_content)
-    main_names = _extract_top_level_names(main_content)
-    # Filter out language keywords and common non-symbol tokens
-    reserved_keywords = {
+# Keywords that the top-level name scan below must not mistake for definitions.
+_RESERVED = frozenset(
+    {
         "inst",
         "data",
         "let",
@@ -59,17 +24,48 @@ def parse_lark(
         "import",
         "type",
         "precedence",
-    }
-    prelude_names = {n for n in prelude_names if n not in reserved_keywords}
-    main_names = {n for n in main_names if n not in reserved_keywords}
-    conflicts = prelude_names & main_names
-    if conflicts and check_prelude_conflicts:
+    },
+)
+_TOP_LEVEL_NAME = re.compile(r"(?m)^[ \t]*([A-Za-z_][\w']*)\s*(?:::|\(|=)")
+
+
+@cache
+def _parser(grammar: Path) -> Lark:
+    return Lark(SHARED_GRAMMAR.read_text() + "\n" + grammar.read_text(), parser="lalr")
+
+
+def _read_prelude(prelude_dir: Path, extension: str) -> str:
+    return "".join(
+        path.read_text() + "\n" for path in sorted(prelude_dir.glob(f"*.{extension}"))
+    )
+
+
+def _top_level_names(source: str) -> set[str]:
+    """Likely top-level definitions (a conservative textual approximation)."""
+    return set(_TOP_LEVEL_NAME.findall(source)) - _RESERVED
+
+
+def _check_prelude_conflicts(prelude: str, program: str) -> None:
+    conflicts = _top_level_names(prelude) & _top_level_names(program)
+    if conflicts:
         raise ValueError(
             f"Prelude defines names {sorted(conflicts)}; user file must not redefine prelude symbols",
         )
 
-    if prelude_first:
-        # System O scopes declarations sequentially, so the prelude must
-        # precede the user program.
-        return parser.parse(prelude_content + main_content)
-    return parser.parse(main_content + prelude_content)
+
+def parse_lark(
+    path: Path,
+    grammar: Path,
+    prelude_dir: Path,
+    file_extension: str,
+    prelude_first: bool = False,
+    check_prelude_conflicts: bool = True,
+) -> ParseTree:
+    prelude = _read_prelude(prelude_dir, file_extension)
+    program = path.read_text()
+    if check_prelude_conflicts:
+        _check_prelude_conflicts(prelude, program)
+    # System O scopes declarations sequentially, so its prelude must precede
+    # the user program.
+    source = prelude + program if prelude_first else program + prelude
+    return _parser(grammar).parse(source)

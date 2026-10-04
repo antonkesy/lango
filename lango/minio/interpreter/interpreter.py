@@ -75,9 +75,7 @@ def interpret(
     ast: Program,
     collectStdOut: bool = False,
 ) -> RunReturn:
-    if not type_check(ast):
-        print("Type checking failed, cannot interpret.")
-        return RunReturn("", 1)
+    type_check(ast)
 
     env, constructors = build_environment(ast)
     interp = Interpreter(env, constructors)
