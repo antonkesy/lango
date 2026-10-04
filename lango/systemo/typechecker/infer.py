@@ -605,7 +605,7 @@ class TypeInferrer:
                 return list_of(self.parse_type(element_type, scope))
             case ASTTupleType(element_types=element_types):
                 return TupleType(
-                    tuple(self.parse_type(e, scope) for e in element_types)
+                    tuple(self.parse_type(e, scope) for e in element_types),
                 )
             case GroupedType(type_expr=type_expr):
                 return self.parse_type(type_expr, scope)
@@ -674,7 +674,10 @@ class TypeInferrer:
         )
 
     def _instance_head(
-        self, body: Type, o: str, declared: str
+        self,
+        body: Type,
+        o: str,
+        declared: str,
     ) -> tuple[str, list[str]]:
         """``T a_1 ... a_n -> tau``: the type constructor and its variables."""
         match body:

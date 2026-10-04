@@ -40,7 +40,7 @@ def unify_one(t1: Type, t2: Type) -> TypeSubstitution:
             return _bind(name, t1)
         case (TypeCon(name=name1), TypeCon(name=name2)):
             raise UnificationError(
-                f"Cannot unify type constructors {name1} and {name2}"
+                f"Cannot unify type constructors {name1} and {name2}",
             )
         case (FunctionType(), FunctionType()):
             return _unify_all([(t1.param, t2.param), (t1.result, t2.result)])

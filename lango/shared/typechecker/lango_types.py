@@ -85,7 +85,8 @@ class TypeApp(Type):
 
     def substitute(self, subst: Subst) -> Type:
         return TypeApp(
-            self.constructor.substitute(subst), self.argument.substitute(subst)
+            self.constructor.substitute(subst),
+            self.argument.substitute(subst),
         )
 
     def __str__(self) -> str:
@@ -119,7 +120,8 @@ class DataType(Type):
 
     def substitute(self, subst: Subst) -> Type:
         return DataType(
-            self.name, tuple(arg.substitute(subst) for arg in self.type_args)
+            self.name,
+            tuple(arg.substitute(subst) for arg in self.type_args),
         )
 
     def __str__(self) -> str:

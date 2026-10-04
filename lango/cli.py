@@ -58,7 +58,10 @@ class Language:
 
 LANGUAGES = {
     Lang.MINIO: Language(
-        minio_parse, minio_type_check, minio_interpret, minio_get_type_str
+        minio_parse,
+        minio_type_check,
+        minio_interpret,
+        minio_get_type_str,
     ),
     Lang.SYSTEMO: Language(
         systemo_parse,

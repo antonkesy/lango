@@ -372,7 +372,11 @@ class CodeGenerator:
                 body.add(f"return pattern_match_failure({decl.name!r})")
 
         self.emit_curried(
-            emitter, python_name, "impl", dictionary_params + args, fill_body
+            emitter,
+            python_name,
+            "impl",
+            dictionary_params + args,
+            fill_body,
         )
         return emitter.lines
 
@@ -692,7 +696,9 @@ class CodeGenerator:
         return None
 
     def generate_local_specializations(
-        self, local: "LocalLet", block: Emitter
+        self,
+        local: "LocalLet",
+        block: Emitter,
     ) -> Emitter:
         """One copy of the let per distinct tuple of dictionaries it was used
         with; generating a copy may request further copies."""

@@ -159,7 +159,9 @@ class MinioCompiler:
     # --- functions -----------------------------------------------------------------
 
     def compile_function(
-        self, name: str, clauses: Sequence[FunctionDefinition]
+        self,
+        name: str,
+        clauses: Sequence[FunctionDefinition],
     ) -> list[str]:
         """``def minio_f(arg_0, ..., arg_n)``: the clauses are tried in order."""
         params = [f"arg_{i}" for i in range(self.arity[name])]
@@ -182,7 +184,7 @@ class MinioCompiler:
                 break  # later clauses are unreachable
         if not exhaustive:
             lines.append(
-                f"    raise ValueError('No matching pattern for {mangle(name)}')"
+                f"    raise ValueError('No matching pattern for {mangle(name)}')",
             )
         return lines
 
@@ -196,7 +198,7 @@ class MinioCompiler:
             match stmt:
                 case LetStatement(variable=variable, value=value):
                     lines.append(
-                        f"{mangle(variable)} = {self.compile_expression(value, scope)}"
+                        f"{mangle(variable)} = {self.compile_expression(value, scope)}",
                     )
                     result = "None"
                 case _:
@@ -244,7 +246,10 @@ class MinioCompiler:
                 conditions.append(f"len({subject}) == {len(subpatterns)}")
                 for index, sub in enumerate(subpatterns):
                     self.compile_pattern(
-                        sub, f"{subject}[{index}]", conditions, bindings
+                        sub,
+                        f"{subject}[{index}]",
+                        conditions,
+                        bindings,
                     )
             case _:
                 raise ValueError(f"Unhandled pattern {type(pattern).__name__}")
@@ -280,22 +285,26 @@ class MinioCompiler:
                 )
             case DivOperation(left=left, right=right):
                 l, r = self.compile_expression(left, scope), self.compile_expression(
-                    right, scope
+                    right,
+                    scope,
                 )
                 return f"({l} / {r}) if {r} != 0 else math.inf"  # like Haskell
             case PowIntOperation(left=left, right=right):
                 l, r = self.compile_expression(left, scope), self.compile_expression(
-                    right, scope
+                    right,
+                    scope,
                 )
                 return f"int(({l} ** {r}))"
             case PowFloatOperation(left=left, right=right):
                 l, r = self.compile_expression(left, scope), self.compile_expression(
-                    right, scope
+                    right,
+                    scope,
                 )
                 return f"float(({l} ** {r}))"
             case BinaryOperation(left=left, right=right):
                 l, r = self.compile_expression(left, scope), self.compile_expression(
-                    right, scope
+                    right,
+                    scope,
                 )
                 return f"({l} {BINARY_OPERATORS[type(expr)]} {r})"
             case NotOperation(operand=operand):
@@ -304,7 +313,8 @@ class MinioCompiler:
                 return f"(-{self.compile_expression(operand, scope)})"
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):
                 l, i = self.compile_expression(
-                    list_expr, scope
+                    list_expr,
+                    scope,
                 ), self.compile_expression(index_expr, scope)
                 return f"({l}[{i}])"
             case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
@@ -369,7 +379,7 @@ class MinioCompiler:
                     if len(statements) == 1:
                         return f"(lambda: {compiled})()"
                     parts.append(
-                        f"globals().update({{'{mangle(variable)}': {compiled}}})"
+                        f"globals().update({{'{mangle(variable)}': {compiled}}})",
                     )
                 case _:
                     assert is_expression(stmt)

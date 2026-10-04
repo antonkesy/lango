@@ -284,7 +284,9 @@ class TypeInferrer:
             ):
                 left, right, subst = self.infer_operands(expr, env)
                 subst = self.unify(
-                    left, right, "Comparison requires operands of same type"
+                    left,
+                    right,
+                    "Comparison requires operands of same type",
                 ).compose(subst)
                 return BOOL_TYPE, subst
             case AndOperation() | OrOperation():
@@ -299,25 +301,33 @@ class TypeInferrer:
             case ConcatOperation():
                 left, right, subst = self.infer_operands(expr, env)
                 subst = self.unify(
-                    left, right, "Concatenation operands must have same type"
+                    left,
+                    right,
+                    "Concatenation operands must have same type",
                 ).compose(subst)
                 return left.apply_substitution(subst), subst
             case NotOperation(operand=operand):
                 t, subst = self.infer_expr(operand, env)
                 subst = self.unify(
-                    t, BOOL_TYPE, "'not' requires a Bool operand"
+                    t,
+                    BOOL_TYPE,
+                    "'not' requires a Bool operand",
                 ).compose(subst)
                 return BOOL_TYPE, subst
             case NegOperation(operand=operand):
                 t, subst = self.infer_expr(operand, env)
                 return self.numeric_type(
-                    t, subst, "Negation requires a numeric operand"
+                    t,
+                    subst,
+                    "Negation requires a numeric operand",
                 )
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):
                 list_type, subst = self.infer_expr(list_expr, env)
                 index_type, subst = self.infer_next(index_expr, env, subst)
                 subst = self.unify(
-                    index_type, INT_TYPE, "List index must be Int"
+                    index_type,
+                    INT_TYPE,
+                    "List index must be Int",
                 ).compose(subst)
                 element = self.fresh()
                 subst = self.unify(
@@ -329,7 +339,9 @@ class TypeInferrer:
             case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
                 condition_type, subst = self.infer_expr(condition, env)
                 subst = self.unify(
-                    condition_type, BOOL_TYPE, "If condition must be Bool"
+                    condition_type,
+                    BOOL_TYPE,
+                    "If condition must be Bool",
                 ).compose(subst)
                 then_type, subst = self.infer_next(then_expr, env, subst)
                 else_type, subst = self.infer_next(else_expr, env, subst)
@@ -377,7 +389,9 @@ class TypeInferrer:
         return left.apply_substitution(subst), right.apply_substitution(subst), subst
 
     def infer_numeric(
-        self, expr: BinaryOperation, env: TypeEnvironment
+        self,
+        expr: BinaryOperation,
+        env: TypeEnvironment,
     ) -> InferenceResult:
         left, right, subst = self.infer_operands(expr, env)
         subst = self.unify(
@@ -477,11 +491,15 @@ class TypeInferrer:
                 )
             case NegativeIntPattern():
                 return env, self.unify(
-                    pattern_type, INT_TYPE, "Pattern has the wrong type"
+                    pattern_type,
+                    INT_TYPE,
+                    "Pattern has the wrong type",
                 )
             case NegativeFloatPattern():
                 return env, self.unify(
-                    pattern_type, FLOAT_TYPE, "Pattern has the wrong type"
+                    pattern_type,
+                    FLOAT_TYPE,
+                    "Pattern has the wrong type",
                 )
             case ConstructorPattern(constructor=name, patterns=subpatterns):
                 scheme = env.lookup(name)
@@ -494,22 +512,31 @@ class TypeInferrer:
                         f"got {len(subpatterns)}",
                     )
                 subst = self.unify(
-                    pattern_type, result, "Constructor pattern type mismatch"
+                    pattern_type,
+                    result,
+                    "Constructor pattern type mismatch",
                 )
                 return self.infer_subpatterns(subpatterns, params, env, subst)
             case ConsPattern(head=head, tail=tail):
                 element = self.fresh()
                 list_type = list_of(element)
                 subst = self.unify(
-                    pattern_type, list_type, "Cons pattern requires a List"
+                    pattern_type,
+                    list_type,
+                    "Cons pattern requires a List",
                 )
                 return self.infer_subpatterns(
-                    [head, tail], [element, list_type], env, subst
+                    [head, tail],
+                    [element, list_type],
+                    env,
+                    subst,
                 )
             case ListPattern(patterns=subpatterns):
                 element = self.fresh()
                 subst = self.unify(
-                    pattern_type, list_of(element), "List pattern requires a List"
+                    pattern_type,
+                    list_of(element),
+                    "List pattern requires a List",
                 )
                 return self.infer_subpatterns(
                     subpatterns,
@@ -526,10 +553,12 @@ class TypeInferrer:
                     TypeSubstitution(),
                 )
                 tuple_type = TupleType(
-                    tuple(e.apply_substitution(subst) for e in elements)
+                    tuple(e.apply_substitution(subst) for e in elements),
                 )
                 subst = self.unify(
-                    pattern_type, tuple_type, "Tuple pattern type mismatch"
+                    pattern_type,
+                    tuple_type,
+                    "Tuple pattern type mismatch",
                 ).compose(subst)
                 return env, subst
         raise TypeInferenceError(f"Unhandled pattern: {type(pattern).__name__}")
@@ -580,7 +609,7 @@ class TypeInferrer:
         arity = len(clauses[0].patterns)
         if any(len(clause.patterns) != arity for clause in clauses):
             raise TypeInferenceError(
-                f"Function {name} has clauses with different arities"
+                f"Function {name} has clauses with different arities",
             )
         param_types = [self.fresh() for _ in range(arity)]
         result_type = self.fresh()
@@ -602,7 +631,8 @@ class TypeInferrer:
         for clause in clauses:
             clause.ty = function_type
         return generalize(
-            outer.apply_substitution(subst).free_type_vars(), function_type
+            outer.apply_substitution(subst).free_type_vars(),
+            function_type,
         )
 
     def infer_program(self, ast: Program) -> TypeEnvironment:

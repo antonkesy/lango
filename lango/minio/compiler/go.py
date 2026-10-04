@@ -358,7 +358,7 @@ class MinioGoCompiler:
         # Declare an argument variable only if some clause reads it (Go rejects
         # unused variables); a clause naming it differently gets an alias
         used_vars = set().union(
-            *(referenced_variables(func_def.body) for func_def in definitions)
+            *(referenced_variables(func_def.body) for func_def in definitions),
         )
         used_final_arg_vars = {
             arg_index: var_name

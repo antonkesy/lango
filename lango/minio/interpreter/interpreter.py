@@ -286,7 +286,8 @@ class Interpreter:
                 return -self.eval(operand, scope)
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):
                 return self.index(
-                    self.eval(list_expr, scope), self.eval(index_expr, scope)
+                    self.eval(list_expr, scope),
+                    self.eval(index_expr, scope),
                 )
             case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
                 branch = then_expr if self.eval(condition, scope) else else_expr
@@ -345,7 +346,9 @@ class Interpreter:
                 if not (isinstance(value, dict) and value.get(CONSTRUCTOR_KEY) == name):
                     return False
                 return self.match_all(
-                    subpatterns, self.constructor_fields(value), bindings
+                    subpatterns,
+                    self.constructor_fields(value),
+                    bindings,
                 )
             case ConsPattern(head=head, tail=tail):
                 return (
