@@ -1,6 +1,3 @@
-from contextlib import redirect_stdout
-from dataclasses import dataclass
-from io import StringIO
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from lango.minio.typechecker.typecheck import type_check
@@ -53,6 +50,7 @@ from lango.shared.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.shared.run_result import RunResult, run_program
 
 # Type aliases for the interpreter
 Value = Any  # Any runtime value
@@ -65,39 +63,23 @@ ConstructorInfo = int  # arity
 ConstructorEnvironment = Dict[str, ConstructorInfo]
 
 
-@dataclass
-class RunReturn:
-    output: str
-    exit_code: int
-
-
-def interpret(
-    ast: Program,
-    collectStdOut: bool = False,
-) -> RunReturn:
+def interpret(ast: Program, collect_stdout: bool = False) -> RunResult:
     type_check(ast)
-
     env, constructors = build_environment(ast)
     interp = Interpreter(env, constructors)
-
     if "main" not in env:
         raise RuntimeError("No main function defined")
 
-    if collectStdOut:
-        f = StringIO()
-        with redirect_stdout(f):
-            result = interp.eval_func("main")
-        output = f.getvalue()
-    else:
+    def run() -> None:
         result = interp.eval_func("main")
-        output = ""
-
-    if not collectStdOut:
-        if result is not None and not callable(result):
-            print(f"{result}\n")
-        elif callable(result):
+        if collect_stdout:
+            return
+        if callable(result):
             print("[main] is a function")
-    return RunReturn(output, 0)
+        elif result is not None:
+            print(f"{result}\n")
+
+    return run_program(run, collect_stdout)
 
 
 def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment]:

@@ -89,7 +89,7 @@ def test_python_dictionary_passing_compiler_is_superset_of_minio(
 )
 def test_interpreter_is_superset_of_minio(file_name: Path) -> None:
     def run_interpreter(f: Path) -> str:
-        return interpret(parse(f), collectStdOut=True).output
+        return interpret(parse(f), collect_stdout=True).output
 
     file_test_output(file_name, run_interpreter)
 
@@ -101,7 +101,7 @@ def test_interpreter_is_superset_of_minio(file_name: Path) -> None:
 )
 def test_interpreter(file_name: Path) -> None:
     def run_interpreter(f: Path) -> str:
-        return interpret(parse(f), collectStdOut=True).output
+        return interpret(parse(f), collect_stdout=True).output
 
     file_test_output(file_name, run_interpreter)
 

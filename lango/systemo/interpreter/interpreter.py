@@ -7,9 +7,6 @@ Figure 3).  No type information is needed at run time; the program is type
 checked first only to reject ill-typed programs.
 """
 
-from contextlib import redirect_stdout
-from dataclasses import dataclass
-from io import StringIO
 from typing import Any, Callable, Dict, Optional, Sequence
 
 from lango.shared.ast.nodes import (
@@ -44,6 +41,7 @@ from lango.shared.ast.nodes import (
     Variable,
     VariablePattern,
 )
+from lango.shared.run_result import RunResult, run_program
 from lango.systemo import runtime
 from lango.systemo.typechecker.infer import (
     FunctionDecl,
@@ -54,12 +52,6 @@ from lango.systemo.typechecker.infer import (
 from lango.systemo.typechecker.primitives import CONSTANTS, PRIMITIVES
 
 Value = Any
-
-
-@dataclass
-class RunReturn:
-    output: str
-    exit_code: int
 
 
 class Scope:
@@ -285,13 +277,6 @@ class Interpreter:
                 return literal.value  # type: ignore[union-attr]
 
 
-def interpret(ast: Program, collectStdOut: bool = False) -> RunReturn:
-    typed = infer_program(ast)
-    interpreter = Interpreter(typed)
-    if collectStdOut:
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            interpreter.run()
-        return RunReturn(buffer.getvalue(), 0)
-    interpreter.run()
-    return RunReturn("", 0)
+def interpret(ast: Program, collect_stdout: bool = False) -> RunResult:
+    interpreter = Interpreter(infer_program(ast))
+    return run_program(interpreter.run, collect_stdout)

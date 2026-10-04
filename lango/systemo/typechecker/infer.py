@@ -23,10 +23,10 @@ transform of Section 4 -- and the monomorphising compiler -- are functions
 of this evidence.
 """
 
-from collections import defaultdict
+from collections import defaultdict, deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
+from enum import Enum, auto
 
 from lango.shared.ast.nodes import (
     ArrowType,
@@ -74,6 +74,7 @@ from lango.shared.ast.nodes import (
     TypeVariable,
     Variable,
     VariablePattern,
+    is_expression,
 )
 from lango.shared.typechecker.errors import TypeInferenceError
 from lango.shared.typechecker.lango_types import (
@@ -112,17 +113,17 @@ from lango.systemo.typechecker.types import (
 # --------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class InstanceEvidence:
     """The constraint is satisfied by the instance ``o : sigma_T``,
     whose own constraints are satisfied by ``arguments`` (in scheme order)."""
 
     name: str
     tycon: str
-    arguments: List["Constraint"]
+    arguments: list["Constraint"]
 
 
-@dataclass
+@dataclass(frozen=True)
 class ParamEvidence:
     """The constraint ``o : alpha -> tau`` was generalised: it is satisfied
     by the dictionary parameter for ``(o, alpha)`` of the enclosing binding."""
@@ -131,7 +132,7 @@ class ParamEvidence:
     var: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class AmbiguousEvidence:
     """The constrained type variable is neither generalised nor
     instantiated (e.g. ``[] == []``): by coherence any dictionary will do."""
@@ -139,18 +140,21 @@ class AmbiguousEvidence:
     name: str
 
 
-Evidence = Union[InstanceEvidence, ParamEvidence, AmbiguousEvidence]
+type Evidence = InstanceEvidence | ParamEvidence | AmbiguousEvidence
 
 
 @dataclass(eq=False)
 class Constraint:
-    """A constraint ``o : var -> result`` that demands evidence."""
+    """A constraint ``o : var -> result`` that demands evidence.
+
+    Constraints are mutable and compared by identity: ``mkinst`` moves them
+    between type variables and records their evidence in place."""
 
     name: str
     var: str
     result: Type
-    evidence: Optional[Evidence] = None
-    alias: Optional["Constraint"] = None
+    evidence: Evidence | None = None
+    alias: "Constraint | None" = None
 
     def canonical(self) -> "Constraint":
         c = self
@@ -164,50 +168,50 @@ class Constraint:
 # --------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class LetBinding:
     scheme: Scheme
 
 
-@dataclass
+@dataclass(frozen=True)
 class MonoBinding:
     """A lambda/pattern bound variable."""
 
     type: Type
 
 
-@dataclass
+@dataclass(frozen=True)
 class RecBinding:
     """The function currently being defined (monomorphic recursion)."""
 
     type: Type
 
 
-@dataclass
+@dataclass(frozen=True)
 class PrimBinding:
     scheme: Scheme
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConBinding:
     scheme: Scheme
-    field_names: List[str]
+    field_names: list[str]
 
 
-Binding = Union[LetBinding, MonoBinding, RecBinding, PrimBinding, ConBinding]
+type Binding = LetBinding | MonoBinding | RecBinding | PrimBinding | ConBinding
 
 
+@dataclass(frozen=True)
 class Env:
-    def __init__(self, bindings: Optional[Dict[str, Binding]] = None) -> None:
-        self.bindings: Dict[str, Binding] = bindings or {}
+    """The typothesis Gamma (persistent: ``extend`` returns a new one)."""
 
-    def lookup(self, name: str) -> Optional[Binding]:
+    bindings: dict[str, Binding] = field(default_factory=dict)
+
+    def lookup(self, name: str) -> Binding | None:
         return self.bindings.get(name)
 
     def extend(self, name: str, binding: Binding) -> "Env":
-        new = dict(self.bindings)
-        new[name] = binding
-        return Env(new)
+        return Env({**self.bindings, name: binding})
 
 
 # --------------------------------------------------------------------------
@@ -216,14 +220,12 @@ class Env:
 
 
 class UseKind(Enum):
-    LET = "let"  # a generalised binding: pass the dictionaries in ``evidence``
-    MONO = "mono"  # a pattern bound variable
-    SELF = "self"  # recursive occurrence of the binding being defined
-    PRIM = "prim"  # primitive function or constant
-    CONSTRUCTOR = "constructor"
-    OVERLOADED = (
-        "overloaded"  # an overloaded identifier: ``constraint`` is its evidence
-    )
+    LET = auto()  # a generalised binding: pass the dictionaries in ``evidence``
+    MONO = auto()  # a pattern bound variable
+    SELF = auto()  # recursive occurrence of the binding being defined
+    PRIM = auto()  # primitive function or constant
+    CONSTRUCTOR = auto()
+    OVERLOADED = auto()  # an overloaded identifier: ``constraint`` is its evidence
 
 
 @dataclass
@@ -232,24 +234,24 @@ class VarUse:
 
     kind: UseKind
     name: str
-    evidence: List[Constraint] = field(default_factory=list)
-    constraint: Optional[Constraint] = None
+    evidence: list[Constraint] = field(default_factory=list)
+    constraint: Constraint | None = None
 
 
 @dataclass
 class ConstructorInfo:
     name: str
     tycon: str
-    field_types: List[Type]
-    field_names: List[str]
+    field_types: list[Type]
+    field_names: list[str]
     scheme: Scheme
 
 
 @dataclass
 class DataInfo:
     name: str
-    params: List[str]
-    constructors: List[ConstructorInfo]
+    params: list[str]
+    constructors: list[ConstructorInfo]
 
 
 @dataclass
@@ -257,7 +259,7 @@ class FunctionDecl:
     """A (possibly recursive) top-level binding ``let u = e``."""
 
     name: str
-    clauses: List[FunctionDefinition]
+    clauses: list[FunctionDefinition]
     scheme: Scheme
     arity: int
 
@@ -269,16 +271,24 @@ class InstanceInfo:
     name: str
     tycon: str
     scheme: Scheme  # the declared sigma_T
-    clauses: List[FunctionDefinition]
+    clauses: list[FunctionDefinition]
     arity: int
     # evidence for the constraints of the *inferred* scheme of the body,
     # expressed in terms of the declared scheme (see ``check_instance``)
-    body_evidence: Dict[Tuple[str, str], Constraint] = field(default_factory=dict)
+    body_evidence: dict[tuple[str, str], Constraint] = field(default_factory=dict)
     # skolem type constructor -> quantified variable of the declared scheme
-    skolem_vars: Dict[str, str] = field(default_factory=dict)
+    skolem_vars: dict[str, str] = field(default_factory=dict)
 
 
-Decl = Union[FunctionDecl, InstanceInfo]
+type Decl = FunctionDecl | InstanceInfo
+
+
+@dataclass
+class FunctionGroup:
+    """The consecutive clauses of one top-level function."""
+
+    name: str
+    clauses: list[FunctionDefinition]
 
 
 @dataclass
@@ -288,7 +298,7 @@ class DeclaredScheme:
     scheme: Scheme
     tycon: str
     # internal name of each quantified variable -> the name the user wrote
-    names: Dict[str, str]
+    names: dict[str, str]
 
 
 def is_skolem(tycon: str) -> bool:
@@ -304,14 +314,14 @@ class TypedProgram:
     with it; use ``var_use`` / ``let_scheme`` to look it up."""
 
     program: Program
-    data_types: Dict[str, DataInfo]
-    constructors: Dict[str, ConstructorInfo]
-    decls: List[Decl]
-    overloaded: Set[str]
-    var_uses: Dict[int, VarUse]
-    let_schemes: Dict[int, Scheme]
+    data_types: dict[str, DataInfo]
+    constructors: dict[str, ConstructorInfo]
+    decls: list[Decl]
+    overloaded: set[str]
+    var_uses: dict[int, VarUse]
+    let_schemes: dict[int, Scheme]
 
-    def var_use(self, node: Union[Variable, Constructor]) -> VarUse:
+    def var_use(self, node: Variable | Constructor) -> VarUse:
         return self.var_uses[id(node)]
 
     def let_scheme(self, node: LetStatement) -> Scheme:
@@ -326,18 +336,18 @@ class TypedProgram:
 class TypeInferrer:
     def __init__(self) -> None:
         self.counter = 0
-        self.subst: Dict[str, Type] = {}
+        self.subst: dict[str, Type] = {}
         # constraints on unbound type variables: var -> o -> constraint
-        self.constraints: Dict[str, Dict[str, Constraint]] = defaultdict(dict)
+        self.constraints: dict[str, dict[str, Constraint]] = defaultdict(dict)
         # instances: o -> T -> instance
-        self.instances: Dict[str, Dict[str, InstanceInfo]] = defaultdict(dict)
-        self.overloaded: Set[str] = set()
+        self.instances: dict[str, dict[str, InstanceInfo]] = defaultdict(dict)
+        self.overloaded: set[str] = set()
         # the built-in list type constructor has no user-visible constructors
-        self.data_types: Dict[str, DataInfo] = {LIST: DataInfo(LIST, ["a"], [])}
-        self.constructors: Dict[str, ConstructorInfo] = {}
-        self.var_uses: Dict[int, VarUse] = {}
-        self.let_schemes: Dict[int, Scheme] = {}
-        self.typed_nodes: List[ASTNode] = []
+        self.data_types: dict[str, DataInfo] = {LIST: DataInfo(LIST, ["a"], [])}
+        self.constructors: dict[str, ConstructorInfo] = {}
+        self.var_uses: dict[int, VarUse] = {}
+        self.let_schemes: dict[int, Scheme] = {}
+        self.typed_nodes: list[ASTNode] = []
 
     # --- fresh variables and substitution ------------------------------------
 
@@ -450,9 +460,9 @@ class TypeInferrer:
 
     # --- instantiation and generalisation (Figure 7) -------------------------
 
-    def newinst(self, scheme: Scheme) -> Tuple[Type, List[Constraint]]:
-        mapping: Dict[str, Type] = {var: self.fresh() for var, _ in scheme.quantified}
-        created: List[Constraint] = []
+    def newinst(self, scheme: Scheme) -> tuple[Type, list[Constraint]]:
+        mapping: dict[str, Type] = {var: self.fresh() for var, _ in scheme.quantified}
+        created: list[Constraint] = []
         for var, constraints in scheme.quantified:
             fresh_var = mapping[var]
             assert isinstance(fresh_var, TypeVar)
@@ -462,17 +472,17 @@ class TypeInferrer:
                 created.append(constraint)
         return scheme.type.substitute(mapping), created
 
-    def overloaded_use(self, o: str) -> Tuple[Type, Constraint]:
+    def overloaded_use(self, o: str) -> tuple[Type, Constraint]:
         """``tp(o) = newinst(forall a b . (o : a -> b) => a -> b)``."""
         a, b = self.fresh(), self.fresh()
         constraint = Constraint(o, a.name, b)
         self.constraints[a.name][o] = constraint
         return FunctionType(a, b), constraint
 
-    def env_free_vars(self, env: Env) -> Set[str]:
+    def env_free_vars(self, env: Env) -> set[str]:
         """Type variables of ``S Gamma``, including those reachable through
         the constraints on them (``Gamma`` contains the constraint bindings)."""
-        result: Set[str] = set()
+        result: set[str] = set()
         for binding in env.bindings.values():
             match binding:
                 case MonoBinding(type=t) | RecBinding(type=t):
@@ -494,11 +504,11 @@ class TypeInferrer:
     def gen(self, t: Type, env: Env) -> Scheme:
         t = self.resolve(t)
         env_vars = self.env_free_vars(env)
-        quantified: List[Tuple[str, ConstraintSet]] = []
-        seen: Set[str] = set()
-        worklist = free_vars(t)
+        quantified: list[tuple[str, ConstraintSet]] = []
+        seen: set[str] = set()
+        worklist = deque(free_vars(t))
         while worklist:
-            var = worklist.pop(0)
+            var = worklist.popleft()
             if var in seen or var in env_vars:
                 continue
             seen.add(var)
@@ -516,15 +526,15 @@ class TypeInferrer:
     def skolemize(
         self,
         scheme: Scheme,
-        names: Dict[str, str],
-    ) -> Tuple[Type, Dict[str, str]]:
+        names: dict[str, str],
+    ) -> tuple[Type, dict[str, str]]:
         """Replace the quantified variables by fresh nullary type constructors
         and turn their constraints into instances for those constructors.
 
         The skolem constructors carry the type variable names the user wrote
         (``names``); being lowercase they cannot clash with datatypes."""
-        skolems: Dict[str, str] = {}
-        mapping: Dict[str, Type] = {}
+        skolems: dict[str, str] = {}
+        mapping: dict[str, Type] = {}
         for var, _ in scheme.quantified:
             name = names[var]
             mapping[var] = TypeCon(name)
@@ -532,16 +542,16 @@ class TypeInferrer:
         for var, constraints in scheme.quantified:
             skolem = mapping[var]
             for o, tau in constraints:
-                self.instances[o][tycon_name(skolem)] = InstanceInfo(
+                self.instances[o][names[var]] = InstanceInfo(
                     name=o,
-                    tycon=tycon_name(skolem),
+                    tycon=names[var],
                     scheme=Scheme([], FunctionType(skolem, tau.substitute(mapping))),
                     clauses=[],
                     arity=0,
                 )
         return scheme.type.substitute(mapping), skolems
 
-    def remove_skolems(self, skolems: Dict[str, str]) -> None:
+    def remove_skolems(self, skolems: dict[str, str]) -> None:
         for instances in self.instances.values():
             for name in list(instances):
                 if name in skolems:
@@ -560,8 +570,8 @@ class TypeInferrer:
 
     def parse_type(
         self,
-        node: Union[TypeExpression, ASTNode],
-        scope: Optional[Dict[str, Type]] = None,
+        node: TypeExpression | ASTNode,
+        scope: dict[str, Type] | None = None,
     ) -> Type:
         """Translate a type expression; ``scope`` maps the type variables in
         scope (``None`` allows any variable, e.g. in an instance scheme)."""
@@ -607,19 +617,20 @@ class TypeInferrer:
         if info is None:
             raise TypeInferenceError(f"Unknown type '{name}'")
         if len(args) > len(info.params):
-            raise TypeInferenceError(
-                f"Type '{name}' expects {len(info.params)} arguments, got {len(args)}",
-            )
+            raise self._arity_error(name, len(args))
         return DataType(name, args)
+
+    def _arity_error(self, name: str, given: int) -> TypeInferenceError:
+        expected = len(self.data_types[name].params)
+        return TypeInferenceError(
+            f"Type '{name}' expects {expected} arguments, got {given}",
+        )
 
     def _check_saturated(self, t: Type) -> None:
         match t:
             case DataType(name=name, type_args=args):
                 if len(args) != len(self.data_types[name].params):
-                    raise TypeInferenceError(
-                        f"Type '{name}' expects {len(self.data_types[name].params)} "
-                        f"arguments, got {len(args)}",
-                    )
+                    raise self._arity_error(name, len(args))
                 for arg in args:
                     self._check_saturated(arg)
             case FunctionType(param=param, result=result):
@@ -641,6 +652,31 @@ class TypeInferrer:
         body = self.parse_type(node.type_expr)
         self._check_saturated(body)
         declared = scheme_to_str(Scheme([], body))
+        tycon, scheme_vars = self._instance_head(body, o, declared)
+        constraint_sets = self._instance_constraints(node, o, declared, scheme_vars)
+        # rename the user's type variables to fresh internal ones
+        fresh_vars = {var: self.fresh() for var in scheme_vars}
+        mapping: dict[str, Type] = dict(fresh_vars)
+        quantified: list[tuple[str, ConstraintSet]] = [
+            (
+                fresh_vars[var].name,
+                sorted(
+                    (name, tau.substitute(mapping))
+                    for name, tau in constraint_sets[var]
+                ),
+            )
+            for var in scheme_vars
+        ]
+        return DeclaredScheme(
+            Scheme(quantified, body.substitute(mapping)),
+            tycon,
+            {fresh_vars[var].name: var for var in scheme_vars},
+        )
+
+    def _instance_head(
+        self, body: Type, o: str, declared: str
+    ) -> tuple[str, list[str]]:
+        """``T a_1 ... a_n -> tau``: the type constructor and its variables."""
         match body:
             case FunctionType(param=param, result=result):
                 pass
@@ -662,13 +698,23 @@ class TypeInferrer:
                 f"Instance type '{declared}' of '{o}' must be parametric in the "
                 f"arguments of '{tycon}' (distinct type variables)",
             )
-        scheme_vars: List[str] = [var for var in arg_vars if var is not None]
+        scheme_vars = [var for var in arg_vars if var is not None]
         if not set(free_vars(result)) <= set(scheme_vars):
             raise TypeInferenceError(
                 f"Instance type '{declared}' of '{o}': the argument type must "
                 f"determine the result type uniquely",
             )
-        constraint_sets: Dict[str, ConstraintSet] = {var: [] for var in scheme_vars}
+        return tycon, scheme_vars
+
+    def _instance_constraints(
+        self,
+        node: ConstrainedType,
+        o: str,
+        declared: str,
+        scheme_vars: list[str],
+    ) -> dict[str, ConstraintSet]:
+        """The constraint set ``pi_a`` of each quantified variable ``a``."""
+        constraint_sets: dict[str, ConstraintSet] = {var: [] for var in scheme_vars}
         for constraint in node.constraints:
             ctype = self.parse_type(constraint.type_expr)
             self._check_saturated(ctype)
@@ -693,24 +739,7 @@ class TypeInferrer:
                     f"'{var}' in the instance type of '{o}'",
                 )
             constraint_sets[var].append((constraint.name, tau))
-        # rename the user's type variables to fresh internal ones
-        fresh_vars = {var: self.fresh() for var in scheme_vars}
-        mapping: Dict[str, Type] = dict(fresh_vars)
-        quantified: List[Tuple[str, ConstraintSet]] = [
-            (
-                fresh_vars[var].name,
-                sorted(
-                    (name, tau.substitute(mapping))
-                    for name, tau in constraint_sets[var]
-                ),
-            )
-            for var in scheme_vars
-        ]
-        return DeclaredScheme(
-            Scheme(quantified, body.substitute(mapping)),
-            tycon,
-            {fresh_vars[var].name: var for var in scheme_vars},
-        )
+        return constraint_sets
 
     # --- data declarations -----------------------------------------------------
 
@@ -726,7 +755,7 @@ class TypeInferrer:
             self.data_types[decl.type_name] = DataInfo(decl.type_name, params, [])
         for decl in decls:
             info = self.data_types[decl.type_name]
-            scope: Dict[str, Type] = {param: TypeVar(param) for param in info.params}
+            scope: dict[str, Type] = {param: TypeVar(param) for param in info.params}
             result = DataType(decl.type_name, tuple(TypeVar(p) for p in info.params))
             for constructor in decl.constructors:
                 if constructor.name in self.constructors:
@@ -760,14 +789,14 @@ class TypeInferrer:
                 self.constructors[constructor.name] = con
 
     def initial_env(self) -> Env:
-        env = Env()
-        for name, scheme in PRIMITIVES.items():
-            env = env.extend(name, PrimBinding(scheme))
-        for name, scheme in CONSTANTS.items():
-            env = env.extend(name, PrimBinding(scheme))
+        """Gamma_0 extended with the constructors of the program."""
+        bindings: dict[str, Binding] = {
+            name: PrimBinding(scheme)
+            for name, scheme in (PRIMITIVES | CONSTANTS).items()
+        }
         for name, con in self.constructors.items():
-            env = env.extend(name, ConBinding(con.scheme, con.field_names))
-        return env
+            bindings[name] = ConBinding(con.scheme, con.field_names)
+        return Env(bindings)
 
     # --- expressions -------------------------------------------------------------
 
@@ -824,40 +853,47 @@ class TypeInferrer:
 
     def infer_variable(
         self,
-        node: Union[Variable, Constructor],
+        node: Variable | Constructor,
         name: str,
         env: Env,
     ) -> Type:
-        binding = env.lookup(name)
-        match binding:
+        use: VarUse
+        match env.lookup(name):
+            case None if name in self.overloaded:
+                t, constraint = self.overloaded_use(name)
+                use = VarUse(UseKind.OVERLOADED, name, constraint=constraint)
             case None:
-                if name in self.overloaded:
-                    t, constraint = self.overloaded_use(name)
-                    self.var_uses[id(node)] = VarUse(
-                        UseKind.OVERLOADED,
-                        name,
-                        constraint=constraint,
-                    )
-                    return t
                 raise TypeInferenceError(f"Unknown variable '{name}'")
             case MonoBinding(type=t):
-                self.var_uses[id(node)] = VarUse(UseKind.MONO, name)
-                return t
+                use = VarUse(UseKind.MONO, name)
             case RecBinding(type=t):
-                self.var_uses[id(node)] = VarUse(UseKind.SELF, name)
-                return t
+                use = VarUse(UseKind.SELF, name)
             case LetBinding(scheme=scheme):
                 t, evidence = self.newinst(scheme)
-                self.var_uses[id(node)] = VarUse(UseKind.LET, name, evidence=evidence)
-                return t
+                use = VarUse(UseKind.LET, name, evidence=evidence)
             case PrimBinding(scheme=scheme):
                 t, _ = self.newinst(scheme)
-                self.var_uses[id(node)] = VarUse(UseKind.PRIM, name)
-                return t
+                use = VarUse(UseKind.PRIM, name)
             case ConBinding(scheme=scheme):
                 t, _ = self.newinst(scheme)
-                self.var_uses[id(node)] = VarUse(UseKind.CONSTRUCTOR, name)
-                return t
+                use = VarUse(UseKind.CONSTRUCTOR, name)
+        self.var_uses[id(node)] = use
+        return t
+
+    def constructor_type(
+        self,
+        name: str,
+        env: Env,
+        where: str = "",
+    ) -> tuple[ConBinding, list[Type], Type]:
+        """A fresh instance of the constructor's type, split into its
+        field types and the datatype it builds."""
+        binding = env.lookup(name)
+        if not isinstance(binding, ConBinding):
+            raise TypeInferenceError(f"Unknown constructor '{name}'{where}")
+        t, _ = self.newinst(binding.scheme)
+        params, result = unfold_function(t)
+        return binding, params, result
 
     def infer_record(
         self,
@@ -865,13 +901,9 @@ class TypeInferrer:
         fields: Sequence[FieldAssignment],
         env: Env,
     ) -> Type:
-        binding = env.lookup(name)
-        if not isinstance(binding, ConBinding):
-            raise TypeInferenceError(f"Unknown constructor '{name}'")
+        binding, params, result = self.constructor_type(name, env)
         if not binding.field_names:
             raise TypeInferenceError(f"Constructor '{name}' has no named fields")
-        t, _ = self.newinst(binding.scheme)
-        params, result = unfold_function(t)
         given = {f.field_name: f.value for f in fields}
         if set(given) != set(binding.field_names):
             raise TypeInferenceError(
@@ -893,7 +925,8 @@ class TypeInferrer:
                     env = env.extend(name, LetBinding(scheme))
                     result = UNIT_TYPE
                 case _:
-                    result = self.infer(stmt, env)  # type: ignore[arg-type]
+                    assert is_expression(stmt)
+                    result = self.infer(stmt, env)
         return result
 
     # --- patterns --------------------------------------------------------------
@@ -902,8 +935,8 @@ class TypeInferrer:
         self,
         pattern: Pattern,
         env: Env,
-        bound: Set[str],
-    ) -> Tuple[Type, Env]:
+        bound: set[str],
+    ) -> tuple[Type, Env]:
         t, env = self._infer_pattern(pattern, env, bound)
         self.annotate(pattern, t)
         return t, env
@@ -912,8 +945,8 @@ class TypeInferrer:
         self,
         pattern: Pattern,
         env: Env,
-        bound: Set[str],
-    ) -> Tuple[Type, Env]:
+        bound: set[str],
+    ) -> tuple[Type, Env]:
         match pattern:
             case VariablePattern(name=name):
                 if name in bound:
@@ -930,11 +963,7 @@ class TypeInferrer:
             case NegativeFloatPattern():
                 return FLOAT_TYPE, env
             case ConstructorPattern(constructor=name, patterns=subpatterns):
-                binding = env.lookup(name)
-                if not isinstance(binding, ConBinding):
-                    raise TypeInferenceError(f"Unknown constructor '{name}' in pattern")
-                constructor_type, _ = self.newinst(binding.scheme)
-                params, result = unfold_function(constructor_type)
+                _, params, result = self.constructor_type(name, env, " in pattern")
                 if len(params) != len(subpatterns):
                     raise TypeInferenceError(
                         f"Constructor '{name}' takes {len(params)} arguments, "
@@ -956,7 +985,7 @@ class TypeInferrer:
                     self.unify(sub_type, element)
                 return list_of(element), env
             case TuplePattern(patterns=subpatterns):
-                types: List[Type] = []
+                types: list[Type] = []
                 for sub in subpatterns:
                     sub_type, env = self.infer_pattern(sub, env, bound)
                     types.append(sub_type)
@@ -984,8 +1013,8 @@ class TypeInferrer:
                     f"Clauses of '{clause.function_name}' have different numbers of parameters",
                 )
             clause_env = env
-            bound: Set[str] = set()
-            param_types: List[Type] = []
+            bound: set[str] = set()
+            param_types: list[Type] = []
             for pattern in clause.patterns:
                 param_type, clause_env = self.infer_pattern(pattern, clause_env, bound)
                 param_types.append(param_type)
@@ -1039,19 +1068,14 @@ class TypeInferrer:
             ) from e
         finally:
             self.remove_skolems(skolems)
-        body_evidence: Dict[Tuple[str, str], Constraint] = {}
-        index = 0
-        for var, constraints in inferred.quantified:
-            for name, _ in constraints:
-                body_evidence[(name, var)] = copies[index]
-                index += 1
+        # newinst creates the constraints in the order of dictionary_params
         info = InstanceInfo(
             name=o,
             tycon=tycon,
             scheme=declared,
             clauses=list(decl.clauses),
             arity=len(decl.clauses[0].patterns),
-            body_evidence=body_evidence,
+            body_evidence=dict(zip(inferred.dictionary_params, copies)),
             skolem_vars=skolems,
         )
         self.instances[o][tycon] = info
@@ -1068,12 +1092,12 @@ class TypeInferrer:
             if isinstance(s, InstanceDeclaration)
         }
         env = self.initial_env()
-        decls: List[Decl] = []
+        decls: list[Decl] = []
         for item in group_clauses(program.statements):
             match item:
                 case InstanceDeclaration():
                     decls.append(self.check_instance(item, env))
-                case (name, clauses):
+                case FunctionGroup(name=name, clauses=clauses):
                     if name in self.overloaded:
                         raise TypeInferenceError(
                             f"'{name}' is overloaded and cannot also be defined as a function",
@@ -1106,9 +1130,9 @@ class TypeInferrer:
 
 def group_clauses(
     statements: Sequence[Statement],
-) -> List[Union[InstanceDeclaration, Tuple[str, List[FunctionDefinition]]]]:
+) -> list[InstanceDeclaration | FunctionGroup]:
     """Consecutive clauses of the same function form one binding."""
-    groups: List[Union[InstanceDeclaration, Tuple[str, List[FunctionDefinition]]]] = []
+    groups: list[InstanceDeclaration | FunctionGroup] = []
     for stmt in statements:
         match stmt:
             case DataDeclaration():
@@ -1117,10 +1141,10 @@ def group_clauses(
                 groups.append(stmt)
             case FunctionDefinition(function_name=name):
                 last = groups[-1] if groups else None
-                if isinstance(last, tuple) and last[0] == name:
-                    last[1].append(stmt)
+                if isinstance(last, FunctionGroup) and last.name == name:
+                    last.clauses.append(stmt)
                 else:
-                    groups.append((name, [stmt]))
+                    groups.append(FunctionGroup(name, [stmt]))
             case _:
                 raise TypeInferenceError(f"Unexpected statement: {type(stmt).__name__}")
     return groups

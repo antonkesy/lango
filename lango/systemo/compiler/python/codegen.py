@@ -21,10 +21,11 @@ strategies:
   polymorphic recursion, so the set of instantiations is finite.
 """
 
+from collections import deque
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from lango.shared.ast.nodes import (
     BoolLiteral,
@@ -57,11 +58,13 @@ from lango.shared.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
+    is_expression,
 )
 from lango.systemo import runtime
 from lango.systemo.typechecker.infer import (
     AmbiguousEvidence,
     Constraint,
+    Decl,
     FunctionDecl,
     InstanceEvidence,
     InstanceInfo,
@@ -116,7 +119,8 @@ def mangle_tycon(tycon: str) -> str:
 
 
 def instance_name(o: str, tycon: str) -> str:
-    return f"i_{mangle(o)[2:] if mangle(o).startswith('v_') else mangle(o)}_{mangle_tycon(tycon)}"
+    mangled = mangle(o)
+    return f"i_{mangled.removeprefix('v_')}_{mangle_tycon(tycon)}"
 
 
 def constructor_name(name: str) -> str:
@@ -124,7 +128,12 @@ def constructor_name(name: str) -> str:
 
 
 def dictionary_param(o: str, var: str) -> str:
-    return f"d_{mangle(o)}_{var.replace('$', '')}"
+    return f"d_{mangle(o)}_{var}"
+
+
+def apply(function: str, arguments: Sequence[str]) -> str:
+    """``f(a_1)(a_2)...``: a curried application."""
+    return function + "".join(f"({a})" for a in arguments)
 
 
 # --------------------------------------------------------------------------
@@ -136,7 +145,7 @@ def dictionary_param(o: str, var: str) -> str:
 class InstanceTree:
     name: str
     tycon: str
-    arguments: Tuple["Tree", ...]
+    arguments: tuple["Tree", ...]
 
 
 @dataclass(frozen=True)
@@ -151,7 +160,7 @@ class UndefTree:
     pass
 
 
-Tree = Union[InstanceTree, ParamTree, UndefTree]
+type Tree = InstanceTree | ParamTree | UndefTree
 
 
 def tree_key(tree: Tree) -> str:
@@ -159,12 +168,17 @@ def tree_key(tree: Tree) -> str:
         case InstanceTree(name=name, tycon=tycon, arguments=args):
             key = f"{mangle(name)}_{mangle_tycon(tycon)}"
             if args:
-                key += "_of_" + "_and_".join(tree_key(a) for a in args) + "_end"
+                key += f"_of_{'_and_'.join(tree_key(a) for a in args)}_end"
             return key
         case UndefTree():
             return "undef"
         case ParamTree(python_name=python_name):
             return python_name
+
+
+def specialization_name(base: str, trees: Sequence[Tree]) -> str:
+    """The name of the copy of ``base`` for the dictionaries ``trees``."""
+    return f"{base}__{'__'.join(tree_key(t) for t in trees)}"
 
 
 @dataclass
@@ -173,15 +187,18 @@ class Context:
     the generated code."""
 
     # (o, var) -> evidence for the dictionary parameters of enclosing bindings
-    params: Dict[Tuple[str, str], Tree] = field(default_factory=dict)
+    params: dict[tuple[str, str], Tree] = field(default_factory=dict)
     # for instance bodies: constraints of the inferred scheme -> their evidence
-    body_evidence: Dict[Tuple[str, str], Constraint] = field(default_factory=dict)
+    body_evidence: dict[tuple[str, str], Constraint] = field(default_factory=dict)
     # skolem type constructor -> quantified variable of the declared scheme
-    skolem_vars: Dict[str, str] = field(default_factory=dict)
+    skolem_vars: dict[str, str] = field(default_factory=dict)
     # the Python expression for a recursive occurrence of the binding being defined
     self_expr: str = ""
     # constrained local lets in scope (monomorphization)
-    local_lets: Dict[str, "LocalLet"] = field(default_factory=dict)
+    local_lets: dict[str, "LocalLet"] = field(default_factory=dict)
+
+    def with_params(self, params: dict[tuple[str, str], Tree]) -> "Context":
+        return replace(self, params={**self.params, **params})
 
 
 # --------------------------------------------------------------------------
@@ -191,8 +208,8 @@ class Context:
 
 @dataclass
 class Specialization:
-    decl: Union[FunctionDecl, InstanceInfo]
-    trees: Tuple[Tree, ...]
+    decl: Decl
+    trees: tuple[Tree, ...]
     python_name: str
 
 
@@ -200,7 +217,7 @@ class Emitter:
     """Statement lines of the function body currently being generated."""
 
     def __init__(self, indent: int) -> None:
-        self.lines: List[str] = []
+        self.lines: list[str] = []
         self.indent = indent
 
     def add(self, line: str) -> None:
@@ -208,23 +225,41 @@ class Emitter:
 
     def add_lines(self, lines: Sequence[str]) -> None:
         for line in lines:
-            self.lines.append("    " * self.indent + line)
+            self.add(line)
+
+    def child(self) -> "Emitter":
+        """An emitter for a nested block; ``extend`` it back in when done."""
+        return Emitter(self.indent + 1)
+
+    def extend(self, block: "Emitter") -> None:
+        self.lines.extend(block.lines)
+
+    def placeholder(self, comment: str) -> int:
+        """Reserve a line to be filled in by ``fill`` later."""
+        self.add(f"# {comment}")
+        return len(self.lines) - 1
+
+    def fill(self, position: int, block: "Emitter") -> None:
+        """Replace the placeholder at ``position`` by the lines of ``block``.
+        Positions after it shift, so fill placeholders last-to-first."""
+        self.lines[position : position + 1] = block.lines
 
 
 class CodeGenerator:
     def __init__(self, typed: TypedProgram, strategy: Strategy) -> None:
         self.typed = typed
         self.strategy = strategy
+        self.monomorphize = strategy == Strategy.MONOMORPHIZATION
         self.counter = 0
-        self.decl_of_name: Dict[str, FunctionDecl] = {
+        self.decl_of_name: dict[str, FunctionDecl] = {
             d.name: d for d in typed.decls if isinstance(d, FunctionDecl)
         }
-        self.instance_of: Dict[Tuple[str, str], InstanceInfo] = {
+        self.instance_of: dict[tuple[str, str], InstanceInfo] = {
             (d.name, d.tycon): d for d in typed.decls if isinstance(d, InstanceInfo)
         }
         # monomorphization: specializations already generated / to generate
-        self.specializations: Dict[Tuple[int, str], Specialization] = {}
-        self.pending: List[Specialization] = []
+        self.specializations: dict[tuple[int, str], Specialization] = {}
+        self.pending: deque[Specialization] = deque()
         self.emitted: set[str] = set()
         self.module = Emitter(0)
 
@@ -249,8 +284,8 @@ class CodeGenerator:
             self.generate_decl(decl)
         return "\n".join(self.module.lines) + "\n"
 
-    def generate_decl(self, decl: Union[FunctionDecl, InstanceInfo]) -> None:
-        if self.strategy == Strategy.MONOMORPHIZATION and decl.scheme.dictionary_params:
+    def generate_decl(self, decl: Decl) -> None:
+        if self.monomorphize and decl.scheme.dictionary_params:
             # generated on demand, once per tuple of dictionaries (see flush_pending)
             return
         params = [dictionary_param(o, var) for o, var in decl.scheme.dictionary_params]
@@ -264,7 +299,7 @@ class CodeGenerator:
         self.flush_pending()
         self.module.add_lines(lines)
 
-    def python_name(self, decl: Union[FunctionDecl, InstanceInfo]) -> str:
+    def python_name(self, decl: Decl) -> str:
         match decl:
             case FunctionDecl(name=name):
                 return mangle(name)
@@ -273,8 +308,8 @@ class CodeGenerator:
 
     def context_for(
         self,
-        decl: Union[FunctionDecl, InstanceInfo],
-        trees: Tuple[Tree, ...],
+        decl: Decl,
+        trees: tuple[Tree, ...],
     ) -> Context:
         """The evidence for the dictionary parameters of ``decl``."""
         params = dict(zip(decl.scheme.dictionary_params, trees))
@@ -294,83 +329,95 @@ class CodeGenerator:
         They are emitted before it; everything they refer to was declared
         earlier (declarations are scoped sequentially)."""
         while self.pending:
-            spec = self.pending.pop(0)
+            spec = self.pending.popleft()
             if spec.python_name in self.emitted:
                 continue
             self.emitted.add(spec.python_name)
-            lines = self.generate_specialization(spec)
+            lines = self.generate_binding(
+                spec.python_name,
+                spec.decl,
+                [],
+                self.context_for(spec.decl, spec.trees),
+            )
             # generating it may have requested further specializations
             self.flush_pending()
             self.module.add_lines(lines)
             self.module.add("")
-
-    def generate_specialization(self, spec: Specialization) -> List[str]:
-        return self.generate_binding(
-            spec.python_name,
-            spec.decl,
-            [],
-            self.context_for(spec.decl, spec.trees),
-        )
 
     # --- bindings --------------------------------------------------------------
 
     def generate_binding(
         self,
         python_name: str,
-        decl: Union[FunctionDecl, InstanceInfo],
-        dictionary_params: List[str],
+        decl: Decl,
+        dictionary_params: list[str],
         context: Context,
-    ) -> List[str]:
+    ) -> list[str]:
         """``python_name = \\d_1 ... d_k . \\a_1 ... a_n . match clauses``"""
-        self_expr = python_name + "".join(f"({param})" for param in dictionary_params)
-        context = replace(context, self_expr=self_expr)
-        total_arity = len(dictionary_params) + decl.arity
+        context = replace(context, self_expr=apply(python_name, dictionary_params))
         emitter = Emitter(0)
-        if total_arity == 0:
+        if not dictionary_params and decl.arity == 0:
             value = self.compile_expression(decl.clauses[0].body, context, emitter)
             emitter.add(f"{python_name} = {value}")
             return emitter.lines
-        impl = self.fresh("impl")
         args = [f"a{i}" for i in range(decl.arity)]
-        emitter.add(f"def {impl}({', '.join(dictionary_params + args)}):")
-        body = Emitter(1)
-        if decl.arity == 0:
-            value = self.compile_expression(decl.clauses[0].body, context, body)
-            body.add(f"return {value}")
-        else:
-            for clause in decl.clauses:
-                self.compile_clause(clause, args, context, body)
-            body.add(f"return pattern_match_failure({decl.name!r})")
-        emitter.lines.extend(body.lines)
-        emitter.add(f"{python_name} = curry({total_arity}, {impl})")
+
+        def fill_body(body: Emitter) -> None:
+            if decl.arity == 0:
+                value = self.compile_expression(decl.clauses[0].body, context, body)
+                body.add(f"return {value}")
+            else:
+                for clause in decl.clauses:
+                    self.compile_clause(clause, args, context, body)
+                body.add(f"return pattern_match_failure({decl.name!r})")
+
+        self.emit_curried(
+            emitter, python_name, "impl", dictionary_params + args, fill_body
+        )
         return emitter.lines
+
+    def emit_curried(
+        self,
+        emitter: Emitter,
+        python_name: str,
+        base: str,
+        params: list[str],
+        fill_body: Callable[[Emitter], None],
+    ) -> None:
+        """``python_name = curry(n, impl)`` for a fresh ``def impl(params)``."""
+        impl = self.fresh(base)
+        emitter.add(f"def {impl}({', '.join(params)}):")
+        body = emitter.child()
+        fill_body(body)
+        emitter.extend(body)
+        emitter.add(f"{python_name} = curry({len(params)}, {impl})")
 
     def compile_clause(
         self,
         clause: FunctionDefinition,
-        args: List[str],
+        args: list[str],
         context: Context,
         emitter: Emitter,
     ) -> None:
-        conditions: List[str] = []
-        bindings: List[Tuple[str, str]] = []
+        conditions: list[str] = []
+        bindings: list[tuple[str, str]] = []
         for pattern, arg in zip(clause.patterns, args):
             self.compile_pattern(pattern, arg, conditions, bindings)
         condition = " and ".join(conditions) if conditions else "True"
         emitter.add(f"if {condition}:")
-        body = Emitter(emitter.indent + 1)
+        body = emitter.child()
         for name, value in bindings:
             body.add(f"{mangle(name)} = {value}")
         result = self.compile_expression(clause.body, context, body)
         body.add(f"return {result}")
-        emitter.lines.extend(body.lines)
+        emitter.extend(body)
 
     def compile_pattern(
         self,
         pattern: Pattern,
         subject: str,
-        conditions: List[str],
-        bindings: List[Tuple[str, str]],
+        conditions: list[str],
+        bindings: list[tuple[str, str]],
     ) -> None:
         match pattern:
             case VariablePattern(name=name):
@@ -449,16 +496,11 @@ class CodeGenerator:
             ):
                 return self.compile_literal(expr)
             case ListLiteral(elements=elements):
-                return (
-                    "["
-                    + ", ".join(
-                        self.compile_expression(e, context, emitter) for e in elements
-                    )
-                    + "]"
-                )
+                items = [self.compile_expression(e, context, emitter) for e in elements]
+                return f"[{', '.join(items)}]"
             case TupleLiteral(elements=elements):
                 items = [self.compile_expression(e, context, emitter) for e in elements]
-                return "(" + "".join(item + ", " for item in items) + ")"
+                return f"({''.join(f'{item}, ' for item in items)})"
             case Variable() | Constructor():
                 return self.compile_variable(expr, context)
             case FunctionApplication(function=function, argument=argument):
@@ -480,16 +522,16 @@ class CodeGenerator:
                     f.field_name: self.compile_expression(f.value, context, emitter)
                     for f in fields
                 }
-                result = constructor_name(name)
-                for field_name in info.field_names:
-                    result += f"({values[field_name]})"
-                return result
+                return apply(
+                    constructor_name(name),
+                    [values[field_name] for field_name in info.field_names],
+                )
             case _:
                 raise CompileError(f"Unhandled expression {type(expr).__name__}")
 
     def compile_variable(
         self,
-        node: Union[Variable, Constructor],
+        node: Variable | Constructor,
         context: Context,
     ) -> str:
         use = self.typed.var_use(node)
@@ -512,20 +554,17 @@ class CodeGenerator:
     def compile_let_use(
         self,
         name: str,
-        trees: Tuple[Tree, ...],
+        trees: tuple[Tree, ...],
         context: Context,
     ) -> str:
         if not trees:
             return mangle(name)
-        if self.strategy == Strategy.MONOMORPHIZATION:
+        if self.monomorphize:
             local = context.local_lets.get(name)
             if local is not None:
                 return local.request(trees)
             return self.request_specialization(self.decl_of_name[name], trees)
-        result = mangle(name)
-        for tree in trees:
-            result += f"({self.compile_tree(tree)})"
-        return result
+        return apply(mangle(name), [self.compile_tree(tree) for tree in trees])
 
     # --- evidence -------------------------------------------------------------------
 
@@ -561,33 +600,26 @@ class CodeGenerator:
             case ParamTree(python_name=python_name):
                 return python_name
             case InstanceTree(name=name, tycon=tycon, arguments=arguments):
-                if self.strategy == Strategy.MONOMORPHIZATION and arguments:
+                if self.monomorphize and arguments:
                     return self.request_specialization(
                         self.instance_of[(name, tycon)],
                         arguments,
                     )
-                result = instance_name(name, tycon)
-                for argument in arguments:
-                    result += f"({self.compile_tree(argument)})"
-                return result
+                return apply(
+                    instance_name(name, tycon),
+                    [self.compile_tree(argument) for argument in arguments],
+                )
 
-    def request_specialization(
-        self,
-        decl: Union[FunctionDecl, InstanceInfo],
-        trees: Tuple[Tree, ...],
-    ) -> str:
-        key = (id(decl), "__".join(tree_key(t) for t in trees))
-        spec = self.specializations.get(key)
-        if spec is None:
-            base = (
-                mangle(decl.name)
-                if isinstance(decl, FunctionDecl)
-                else instance_name(decl.name, decl.tycon)
-            )
-            spec = Specialization(decl, trees, f"{base}__{key[1]}")
+    def request_specialization(self, decl: Decl, trees: tuple[Tree, ...]) -> str:
+        """The name of the copy of ``decl`` for the dictionaries ``trees``;
+        it is generated when the current declaration is done (``flush_pending``)."""
+        python_name = specialization_name(self.python_name(decl), trees)
+        key = (id(decl), python_name)
+        if key not in self.specializations:
+            spec = Specialization(decl, trees, python_name)
             self.specializations[key] = spec
             self.pending.append(spec)
-        return spec.python_name
+        return python_name
 
     # --- blocks -------------------------------------------------------------------
 
@@ -601,8 +633,8 @@ class CodeGenerator:
         value of the last statement (``()`` when it is a ``let``)."""
         name = self.fresh("block")
         emitter.add(f"def {name}():")
-        body = Emitter(emitter.indent + 1)
-        local_lets: List[LocalLet] = []
+        body = emitter.child()
+        local_lets: list[LocalLet] = []
         result = "None"  # the unit value, when the block ends with a let
         for stmt in statements:
             match stmt:
@@ -616,16 +648,16 @@ class CodeGenerator:
                         )
                     result = "None"
                 case _:
-                    body.add(f"_ = {self.compile_expression(stmt, context, body)}")  # type: ignore[arg-type]
+                    assert is_expression(stmt)
+                    body.add(f"_ = {self.compile_expression(stmt, context, body)}")
                     result = "_"
         body.add(f"return {result}")
         # Constrained local lets (monomorphization): the uses in the rest of
         # the block are now known.  Later lets may use earlier ones, so they
         # are generated last-to-first, which also keeps the positions valid.
         for local in reversed(local_lets):
-            lines = self.generate_local_specializations(local, body.indent)
-            body.lines[local.position : local.position + 1] = lines
-        emitter.lines.extend(body.lines)
+            body.fill(local.position, self.generate_local_specializations(local, body))
+        emitter.extend(body)
         return f"{name}()"
 
     def compile_let(
@@ -635,60 +667,48 @@ class CodeGenerator:
         value: Expression,
         context: Context,
         emitter: Emitter,
-    ) -> Optional["LocalLet"]:
+    ) -> "LocalLet | None":
         scheme = self.typed.let_scheme(stmt)
         if not scheme.dictionary_params:
             emitter.add(
                 f"{mangle(name)} = {self.compile_expression(value, context, emitter)}",
             )
             return None
-        if self.strategy == Strategy.MONOMORPHIZATION:
-            emitter.add(f"# let {name}")
-            return LocalLet(name, value, scheme, context, len(emitter.lines) - 1)
+        if self.monomorphize:
+            position = emitter.placeholder(f"let {name}")
+            return LocalLet(name, value, scheme, context, position)
         params = [dictionary_param(o, var) for o, var in scheme.dictionary_params]
-        inner = replace(
-            context,
-            params={
-                **context.params,
-                **{
-                    (o, var): ParamTree(dictionary_param(o, var))
-                    for o, var in scheme.dictionary_params
-                },
+        inner = context.with_params(
+            {
+                (o, var): ParamTree(dictionary_param(o, var))
+                for o, var in scheme.dictionary_params
             },
         )
-        impl = self.fresh("let")
-        emitter.add(f"def {impl}({', '.join(params)}):")
-        body = Emitter(emitter.indent + 1)
-        result = self.compile_expression(value, inner, body)
-        body.add(f"return {result}")
-        emitter.lines.extend(body.lines)
-        emitter.add(f"{mangle(name)} = curry({len(params)}, {impl})")
+
+        def fill_body(body: Emitter) -> None:
+            body.add(f"return {self.compile_expression(value, inner, body)}")
+
+        self.emit_curried(emitter, mangle(name), "let", params, fill_body)
         return None
 
     def generate_local_specializations(
-        self,
-        local: "LocalLet",
-        indent: int,
-    ) -> List[str]:
-        lines: List[str] = []
-        emitter = Emitter(indent)
+        self, local: "LocalLet", block: Emitter
+    ) -> Emitter:
+        """One copy of the let per distinct tuple of dictionaries it was used
+        with; generating a copy may request further copies."""
+        emitter = Emitter(block.indent)
         done: set[str] = set()
         while len(done) < len(local.requests):
             for python_name, trees in list(local.requests.items()):
                 if python_name in done:
                     continue
                 done.add(python_name)
-                inner = replace(
-                    local.context,
-                    params={
-                        **local.context.params,
-                        **dict(zip(local.scheme.dictionary_params, trees)),
-                    },
+                inner = local.context.with_params(
+                    dict(zip(local.scheme.dictionary_params, trees)),
                 )
                 value = self.compile_expression(local.value, inner, emitter)
                 emitter.add(f"{python_name} = {value}")
-        lines.extend(emitter.lines)
-        return lines
+        return emitter
 
 
 @dataclass
@@ -699,11 +719,11 @@ class LocalLet:
     value: Expression
     scheme: Scheme
     context: Context
-    position: int
-    requests: Dict[str, Tuple[Tree, ...]] = field(default_factory=dict)
+    position: int  # of the placeholder line in the block
+    requests: dict[str, tuple[Tree, ...]] = field(default_factory=dict)
 
-    def request(self, trees: Tuple[Tree, ...]) -> str:
-        python_name = f"{mangle(self.name)}__" + "__".join(tree_key(t) for t in trees)
+    def request(self, trees: tuple[Tree, ...]) -> str:
+        python_name = specialization_name(mangle(self.name), trees)
         self.requests[python_name] = trees
         return python_name
 
