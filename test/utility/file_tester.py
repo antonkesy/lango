@@ -22,8 +22,10 @@ class Expectation:
 
 
 def expectation_of(file_name: Path) -> Expectation:
+    """A file without a header (the examples) is expected to be well-typed."""
     header = _HEADER.match(file_name.read_text())
-    assert header, f"{file_name}: missing the RUN / TYPECHECK / output header"
+    if header is None:
+        return Expectation(run_fails=False, typecheck_fails=False, output="")
     run, typecheck, output = header.groups()
     return Expectation(run == "FAIL", typecheck == "FAIL", output)
 
