@@ -1,9 +1,20 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+"""A tree-walking interpreter for MiniO.
+
+Runtime values: Python ``int``/``float``/``bool``/``str``, characters as
+``("char", c)``, lists, tuples and constructor values as dictionaries
+``{"_constructor": name, "field_0": ..., ...}`` (positional) or
+``{"_constructor": name, <field name>: ..., ...}`` (record syntax).
+"""
+
+from collections.abc import Callable, Mapping, Sequence
+from operator import eq, ge, gt, le, lt, ne
+from typing import Any
 
 from lango.minio.typechecker.typecheck import type_check
 from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
+    BinaryOperation,
     BoolLiteral,
     CharLiteral,
     ConcatOperation,
@@ -11,6 +22,7 @@ from lango.shared.ast.nodes import (
     Constructor,
     ConstructorExpression,
     ConstructorPattern,
+    DataConstructor,
     DataDeclaration,
     DivOperation,
     DoBlock,
@@ -33,7 +45,9 @@ from lango.shared.ast.nodes import (
     LiteralPattern,
     MulOperation,
     NegativeFloat,
+    NegativeFloatPattern,
     NegativeInt,
+    NegativeIntPattern,
     NegOperation,
     NotEqualOperation,
     NotOperation,
@@ -49,29 +63,25 @@ from lango.shared.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
+    is_expression,
 )
 from lango.shared.run_result import RunResult, run_program
 
-# Type aliases for the interpreter
-Value = Any  # Any runtime value
-# Type definitions for runtime values
-Record = Dict[str, Any]  # Dictionary representing a record/object
-FunctionClause = Tuple[List[Pattern], Expression]
-FunctionValue = Tuple[str, List[FunctionClause]]  # ("pattern_match", clauses)
-Environment = Dict[str, FunctionValue]
-ConstructorInfo = int  # arity
-ConstructorEnvironment = Dict[str, ConstructorInfo]
+type Value = Any
+type Scope = Mapping[str, Value]
+type Record = dict[str, Value]
+
+CONSTRUCTOR_KEY = "_constructor"
 
 
 def interpret(ast: Program, collect_stdout: bool = False) -> RunResult:
     type_check(ast)
-    env, constructors = build_environment(ast)
-    interp = Interpreter(env, constructors)
-    if "main" not in env:
+    interpreter = Interpreter(ast)
+    if "main" not in interpreter.functions:
         raise RuntimeError("No main function defined")
 
     def run() -> None:
-        result = interp.eval_func("main")
+        result = interpreter.function_value("main")
         if collect_stdout:
             return
         if callable(result):
@@ -82,576 +92,307 @@ def interpret(ast: Program, collect_stdout: bool = False) -> RunResult:
     return run_program(run, collect_stdout)
 
 
-def build_environment(ast: Program) -> Tuple[Environment, ConstructorEnvironment]:
-    env: Environment = {}
-    constructors: ConstructorEnvironment = {}
-
-    for stmt in ast.statements:
-        match stmt:
-            case FunctionDefinition(
-                function_name=func_name,
-                patterns=patterns,
-                body=body,
-            ):
-                # Support multiple function clauses for pattern matching
-                if func_name not in env:
-                    env[func_name] = ("pattern_match", [])
-
-                # Add this clause to the function's clauses list
-                env[func_name][1].append((patterns, body))
-
-            case DataDeclaration(type_name=type_name, constructors=data_constructors):
-                # Process data type constructors
-                for constructor in data_constructors:
-                    ctor_name = constructor.name
-
-                    if constructor.record_constructor:
-                        # Record constructor - arity is number of fields
-                        arity = len(constructor.record_constructor.fields)
-                    elif constructor.type_atoms:
-                        # Positional constructor - arity is number of type atoms
-                        arity = len(constructor.type_atoms)
-                    else:
-                        # Nullary constructor - arity 0
-                        arity = 0
-
-                    constructors[ctor_name] = arity
-            case _:
-                pass
-
-    return env, constructors
+# --- Built-in functions ------------------------------------------------------------
 
 
-def flexible_putStr(
-    arg: Union[Value, Callable[[Value], Value]],
-) -> Optional[Callable[[Value], None]]:
+def _print(value: Value) -> None:
+    match value:
+        case ("char", char):
+            print(char, end="")
+        case str():
+            print(value.encode().decode("unicode_escape"), end="")
+        case _:
+            print(value, end="")
+
+
+def _put_str(arg: Value) -> Value:
+    """``putStr``; applied to a function (``putStr show``) it prints that
+    function's results."""
     if callable(arg):
-        # If given a function (like 'show'), return a curried function
-        def curried_putStr(value: Value) -> None:
-            result = arg(value)  # Apply the function to the value
-            match result:
-                case str():
-                    result = result.encode().decode("unicode_escape")
-            print(result, end="")
-
-        return curried_putStr
-    else:
-        # If given a direct value, print it
-        match arg:
-            case ("char", char_value):
-                print(char_value, end="")
-            case str():
-                arg = arg.encode().decode("unicode_escape")
-                print(arg, end="")
-            case _:
-                print(arg, end="")
-        return None
-
-
-def _error(message: str) -> Any:
-    raise RuntimeError(f"Runtime error: {message}")
+        return lambda value: _print(arg(value))
+    _print(arg)
+    return None
 
 
 def _show(value: Value) -> str:
     match value:
-        case ("char", char_value):
-            return f"'{char_value}'"
+        case ("char", char):
+            return f"'{char}'"
         case str():
             return f'"{value}"'
         case list():
-            return "[" + ",".join(_show(i) for i in value) + "]"
-        case float():
-            if value == float("inf"):
-                return "Infinity"
-            if value == float("-inf"):
-                return "-Infinity"
-            return str(value)
-        case dict() if "_constructor" in value:
-
-            constructor = value["_constructor"]
-
-            field_values = []
-            i = 0
-            while f"field_{i}" in value:
-                field_values.append(value[f"field_{i}"])
-                i += 1
-
-            if field_values:
-                field_strs = [_show(field_val) for field_val in field_values]
-                return f"{constructor}({', '.join(field_strs)})"
-            else:
-                return constructor
+            return "[" + ",".join(_show(item) for item in value) + "]"
+        case float() if value == float("inf"):
+            return "Infinity"
+        case float() if value == float("-inf"):
+            return "-Infinity"
+        case dict() if CONSTRUCTOR_KEY in value:
+            fields: list[str] = []
+            while f"field_{len(fields)}" in value:
+                fields.append(_show(value[f"field_{len(fields)}"]))
+            name = value[CONSTRUCTOR_KEY]
+            return f"{name}({', '.join(fields)})" if fields else name
         case _:
             return str(value)
 
 
-# Built-in functions available in the language
-builtins: Dict[str, Callable[..., Any]] = {
-    "putStr": flexible_putStr,
-    "show": lambda x: _show(x),
-    "error": lambda x: _error(x),
+def _error(message: str) -> Value:
+    raise RuntimeError(f"Runtime error: {message}")
+
+
+def _concat(left: Value, right: Value) -> Value:
+    if isinstance(left, list) and isinstance(right, list):
+        return left + right
+    return str(left) + str(right)
+
+
+def _div(left: Value, right: Value) -> Value:
+    return float("inf") if right == 0 else left / right  # like Haskell
+
+
+BUILTINS: dict[str, Value] = {
+    "putStr": _put_str,
+    "show": _show,
+    "error": _error,
     "mod": lambda x: lambda y: x % y,
 }
 
+BINARY_OPERATORS: dict[type, Callable[[Value, Value], Value]] = {
+    AddOperation: lambda a, b: a + b,
+    SubOperation: lambda a, b: a - b,
+    MulOperation: lambda a, b: a * b,
+    DivOperation: _div,
+    PowIntOperation: lambda a, b: int(a**b),
+    PowFloatOperation: lambda a, b: float(a**b),
+    EqualOperation: eq,
+    NotEqualOperation: ne,
+    LessThanOperation: lt,
+    LessEqualOperation: le,
+    GreaterThanOperation: gt,
+    GreaterEqualOperation: ge,
+    ConcatOperation: _concat,
+}
+
+
+def curry(arity: int, function: Callable[..., Value]) -> Value:
+    def collect(collected: tuple) -> Value:
+        if len(collected) >= arity:
+            return function(*collected)
+        return lambda argument: collect(collected + (argument,))
+
+    return collect(())
+
+
+# --- Interpreter -----------------------------------------------------------------
+
 
 class Interpreter:
-    def __init__(self, env: Environment, constructors: ConstructorEnvironment) -> None:
-        self.env = env
-        self.constructors = constructors
-        self.variables: Dict[str, Value] = {}
+    def __init__(self, program: Program) -> None:
+        self.functions: dict[str, list[FunctionDefinition]] = {}
+        self.constructors: dict[str, DataConstructor] = {}
+        for stmt in program.statements:
+            match stmt:
+                case FunctionDefinition(function_name=name):
+                    self.functions.setdefault(name, []).append(stmt)
+                case DataDeclaration(constructors=constructors):
+                    for constructor in constructors:
+                        self.constructors[constructor.name] = constructor
 
-    def eval(self, node: Expression) -> Value:
+    # --- names -----------------------------------------------------------------
+
+    def lookup(self, name: str, scope: Scope) -> Value:
+        if name in scope:
+            return scope[name]
+        if name in self.functions:
+            return self.function_value(name)
+        if name in BUILTINS:
+            return BUILTINS[name]
+        if name in self.constructors:
+            return self.constructor_value(name)
+        raise RuntimeError(f"Unknown variable: {name}")
+
+    def function_value(self, name: str) -> Value:
+        clauses = self.functions[name]
+        for clause in clauses:
+            if not clause.patterns:
+                return self.eval(clause.body, {})
+        return self.apply_clauses(clauses, ())
+
+    def apply_clauses(self, clauses: list[FunctionDefinition], args: tuple) -> Value:
+        """The function value of ``clauses`` applied to ``args`` so far."""
+
+        def apply(*more: Value) -> Value:
+            arguments = args + more
+            for clause in clauses:
+                if len(clause.patterns) == len(arguments):
+                    bindings: Record = {}
+                    if all(
+                        self.match(pattern, argument, bindings)
+                        for pattern, argument in zip(clause.patterns, arguments)
+                    ):
+                        return self.eval(clause.body, bindings)
+            if len(arguments) < max(len(clause.patterns) for clause in clauses):
+                return self.apply_clauses(clauses, arguments)
+            raise RuntimeError(
+                f"No matching pattern found for function call with "
+                f"{len(arguments)} arguments",
+            )
+
+        return apply
+
+    def constructor_value(self, name: str) -> Value:
+        arity = constructor_arity(self.constructors[name])
+        if arity == 0:
+            return {CONSTRUCTOR_KEY: name}
+        return curry(
+            arity,
+            lambda *args: {
+                CONSTRUCTOR_KEY: name,
+                **{f"field_{i}": arg for i, arg in enumerate(args)},
+            },
+        )
+
+    # --- expressions -------------------------------------------------------------
+
+    def eval(self, node: Expression, scope: Scope) -> Value:
         match node:
-            # Literals
-            case IntLiteral(value=value):
-                return value
-            case FloatLiteral(value=value):
-                return value
-            case StringLiteral(value=value):
+            case (
+                IntLiteral(value=value)
+                | FloatLiteral(value=value)
+                | StringLiteral(value=value)
+                | BoolLiteral(value=value)
+                | NegativeInt(value=value)
+                | NegativeFloat(value=value)
+            ):
                 return value
             case CharLiteral(value=value):
-                # Mark chars with a special wrapper to distinguish from strings
                 return ("char", value)
-            case BoolLiteral(value=value):
-                return value
-            case NegativeInt(value=value):
-                return value
-            case NegativeFloat(value=value):
-                return value
             case ListLiteral(elements=elements):
-                return [self.eval(elem) for elem in elements]
-
+                return [self.eval(element, scope) for element in elements]
             case TupleLiteral(elements=elements):
-                return tuple(self.eval(elem) for elem in elements)
-
-            # Variables and constructors
-            case Variable(name=name):
-                if name in self.variables:
-                    return self.variables[name]
-                elif name in self.env:
-                    return self.eval_func(name)
-                elif name in builtins:
-                    return builtins[name]
-                else:
-                    raise RuntimeError(f"Unknown variable: {name}")
-
-            case Constructor(name=constructor_name):
-                # Check if this is a known constructor
-                if constructor_name in self.constructors:
-                    arity = self.constructors[constructor_name]
-
-                    if arity == 0:
-                        # Nullary constructor - return the value directly
-                        return {"_constructor": constructor_name}
-                    else:
-                        # Return a curried constructor function
-                        def make_constructor(
-                            collected_args: Optional[List[Value]] = None,
-                        ) -> Callable[[Value], Value]:
-                            if collected_args is None:
-                                collected_args = []
-
-                            def constructor_fn(
-                                arg: Value,
-                            ) -> Union[Record, Callable[[Value], Value]]:
-                                new_args = collected_args + [arg]
-                                # Create when we have enough arguments
-                                if len(new_args) >= arity:
-                                    # Create the record with the collected arguments
-                                    fields: Record = {}
-                                    for i, value in enumerate(new_args):
-                                        fields[f"field_{i}"] = value
-                                    return {"_constructor": constructor_name, **fields}
-                                else:
-                                    # Still collecting arguments
-                                    return make_constructor(new_args)
-
-                            return constructor_fn
-
-                        return make_constructor()
-                else:
-                    # Unknown constructor - treat as variable
-                    if constructor_name in self.variables:
-                        return self.variables[constructor_name]
-                    elif constructor_name in self.env:
-                        return self.eval_func(constructor_name)
-                    elif constructor_name in builtins:
-                        return builtins[constructor_name]
-                    else:
-                        raise RuntimeError(
-                            f"Unknown constructor or variable: {constructor_name}",
-                        )
-
-            # Arithmetic operations
-            case AddOperation(left=left, right=right):
-                return self.eval(left) + self.eval(right)
-            case SubOperation(left=left, right=right):
-                return self.eval(left) - self.eval(right)
-            case MulOperation(left=left, right=right):
-                return self.eval(left) * self.eval(right)
-            case DivOperation(left=left, right=right):
-                if self.eval(right) == 0:
-                    return float("inf")  # special case because haskell does this
-                return self.eval(left) / self.eval(right)
-            case PowIntOperation(left=left, right=right):
-                return int(self.eval(left) ** self.eval(right))
-            case PowFloatOperation(left=left, right=right):
-                return float(self.eval(left) ** self.eval(right))
-
-            # Comparison operations
-            case EqualOperation(left=left, right=right):
-                return self.eval(left) == self.eval(right)
-            case NotEqualOperation(left=left, right=right):
-                return self.eval(left) != self.eval(right)
-            case LessThanOperation(left=left, right=right):
-                return self.eval(left) < self.eval(right)
-            case LessEqualOperation(left=left, right=right):
-                return self.eval(left) <= self.eval(right)
-            case GreaterThanOperation(left=left, right=right):
-                return self.eval(left) > self.eval(right)
-            case GreaterEqualOperation(left=left, right=right):
-                return self.eval(left) >= self.eval(right)
-
-            # Logical operations
+                return tuple(self.eval(element, scope) for element in elements)
+            case Variable(name=name) | Constructor(name=name):
+                return self.lookup(name, scope)
             case AndOperation(left=left, right=right):
-                return self.eval(left) and self.eval(right)
+                return self.eval(left, scope) and self.eval(right, scope)
             case OrOperation(left=left, right=right):
-                return self.eval(left) or self.eval(right)
+                return self.eval(left, scope) or self.eval(right, scope)
+            case BinaryOperation(left=left, right=right):
+                operator = BINARY_OPERATORS[type(node)]
+                return operator(self.eval(left, scope), self.eval(right, scope))
             case NotOperation(operand=operand):
-                return not self.eval(operand)
+                return not self.eval(operand, scope)
             case NegOperation(operand=operand):
-                return -self.eval(operand)
-
-            # String/List operations
-            case ConcatOperation(left=left, right=right):
-                left_val = self.eval(left)
-                right_val = self.eval(right)
-                match (left_val, right_val):
-                    case (list(), list()):
-                        # List concatenation
-                        return left_val + right_val
-                    case _:
-                        # String concatenation
-                        return str(left_val) + str(right_val)
-
+                return -self.eval(operand, scope)
             case IndexOperation(list_expr=list_expr, index_expr=index_expr):
-                list_val = self.eval(list_expr)
-                index_val = self.eval(index_expr)
-                match list_val:
-                    case list():
-                        pass  # Valid list
-                    case _:
-                        raise RuntimeError(
-                            f"Cannot index non-list value: {type(list_val)}",
-                        )
-                match index_val:
-                    case int():
-                        pass  # Valid index
-                    case _:
-                        raise RuntimeError(
-                            f"List index must be an integer, got: {type(index_val)}",
-                        )
-                if index_val < 0 or index_val >= len(list_val):
-                    raise RuntimeError(
-                        f"List index {index_val} out of bounds for list of length {len(list_val)}",
-                    )
-                return list_val[index_val]
-
-            # Control flow
-            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
-                cond_val = self.eval(condition)
-                if cond_val:
-                    return self.eval(then_expr)
-                else:
-                    return self.eval(else_expr)
-
-            case DoBlock(statements=statements):
-                return self.eval_do_block(statements)
-
-            # Function application
-            case FunctionApplication(function=function, argument=argument):
-                func = self.eval(function)
-                arg = self.eval(argument)
-                return func(arg)
-
-            # Constructor expressions
-            case ConstructorExpression(
-                constructor_name=constructor_name,
-                fields=fields,
-            ):
-                field_dict: Record = {}
-                for field_assign in fields:
-                    field_value = self.eval(field_assign.value)
-                    field_dict[field_assign.field_name] = field_value
-                return {"_constructor": constructor_name, **field_dict}
-
-            # Grouping
-            case GroupedExpression(expression=expression):
-                return self.eval(expression)
-
-            case _:
-                raise NotImplementedError(
-                    f"Unhandled expression type: {type(node).__name__}",
+                return self.index(
+                    self.eval(list_expr, scope), self.eval(index_expr, scope)
                 )
+            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
+                branch = then_expr if self.eval(condition, scope) else else_expr
+                return self.eval(branch, scope)
+            case DoBlock(statements=statements):
+                return self.eval_block(statements, scope)
+            case FunctionApplication(function=function, argument=argument):
+                return self.eval(function, scope)(self.eval(argument, scope))
+            case ConstructorExpression(constructor_name=name, fields=fields):
+                return {
+                    CONSTRUCTOR_KEY: name,
+                    **{f.field_name: self.eval(f.value, scope) for f in fields},
+                }
+            case GroupedExpression(expression=expression):
+                return self.eval(expression, scope)
+        raise NotImplementedError(f"Unhandled expression type: {type(node).__name__}")
 
-    def eval_do_block(self, statements: List[Statement]) -> Value:
+    @staticmethod
+    def index(values: Value, index: Value) -> Value:
+        if not isinstance(values, list):
+            raise RuntimeError(f"Cannot index non-list value: {type(values)}")
+        if not isinstance(index, int):
+            raise RuntimeError(f"List index must be an integer, got: {type(index)}")
+        if not 0 <= index < len(values):
+            raise RuntimeError(
+                f"List index {index} out of bounds for list of length {len(values)}",
+            )
+        return values[index]
+
+    def eval_block(self, statements: Sequence[Statement], scope: Scope) -> Value:
         result: Value = None
         for stmt in statements:
             match stmt:
-                case LetStatement(variable=variable, value=value):
-                    eval_value = self.eval(value)
-                    self.variables[variable] = eval_value
-                case (
-                    IntLiteral()
-                    | FloatLiteral()
-                    | StringLiteral()
-                    | CharLiteral()
-                    | BoolLiteral()
-                    | ListLiteral()
-                    | Variable()
-                    | Constructor()
-                    | AddOperation()
-                    | SubOperation()
-                    | MulOperation()
-                    | DivOperation()
-                    | PowIntOperation()
-                    | PowFloatOperation()
-                    | EqualOperation()
-                    | NotEqualOperation()
-                    | LessThanOperation()
-                    | LessEqualOperation()
-                    | GreaterThanOperation()
-                    | GreaterEqualOperation()
-                    | AndOperation()
-                    | OrOperation()
-                    | NotOperation()
-                    | NegOperation()
-                    | ConcatOperation()
-                    | IndexOperation()
-                    | IfElse()
-                    | DoBlock()
-                    | FunctionApplication()
-                    | ConstructorExpression()
-                    | GroupedExpression()
-                    | NegativeInt()
-                    | NegativeFloat()
-                ) as expr:
-                    # It's an expression
-                    result = self.eval(expr)
-                case _:
-                    pass
+                case LetStatement(variable=name, value=value):
+                    scope = {**scope, name: self.eval(value, scope)}
+                case _ if is_expression(stmt):
+                    result = self.eval(stmt, scope)
         return result
 
-    def eval_func(self, func_name: str) -> Value:
-        if func_name not in self.env:
-            raise RuntimeError(f"Unknown function: {func_name}")
+    # --- patterns ----------------------------------------------------------------
 
-        func_type, clauses = self.env[func_name]
-
-        if func_type != "pattern_match":
-            raise RuntimeError(f"Unsupported function type: {func_type}")
-
-        # Handle only nullary functions (no arguments)
-        for patterns, body in clauses:
-            if len(patterns) == 0:
-                # Nullary function - just evaluate the body
-                return self.eval(body)
-
-        # If no nullary clause found, return a curried function
-        def curried_function(*args: Any) -> Value:
-            return self._apply_function_with_patterns(clauses, list(args))
-
-        return curried_function
-
-    def _apply_function_with_patterns(
-        self,
-        clauses: List[FunctionClause],
-        args: List[Value],
-    ) -> Value:
-        for patterns, body in clauses:
-            if len(patterns) == len(args):
-                # Try to match this clause
-                old_vars = self.variables.copy()
-                try:
-                    if self._match_patterns(patterns, args):
-                        result = self.eval(body)
-                        self.variables = old_vars  # Restore variables after evaluation
-                        return result
-                finally:
-                    # Ensure variables are restored even if evaluation fails
-                    self.variables = old_vars
-
-        # If no patterns matched and we don't have enough args, return partial application
-        if len(args) < max(len(patterns) for patterns, _ in clauses):
-
-            def partial_function(next_arg: Value) -> Value:
-                return self._apply_function_with_patterns(clauses, args + [next_arg])
-
-            return partial_function
-
-        raise RuntimeError(
-            f"No matching pattern found for function call with {len(args)} arguments",
-        )
-
-    def _match_patterns(self, patterns: List[Pattern], args: List[Value]) -> bool:
-        if len(patterns) != len(args):
-            return False
-
-        old_vars = self.variables.copy()
-
-        try:
-            for pattern, arg in zip(patterns, args):
-                if not self._match_pattern(pattern, arg):
-                    # Restore variables if match failed
-                    self.variables = old_vars
-                    return False
-            return True
-        except Exception:
-            # Restore variables if match failed
-            self.variables = old_vars
-            return False
-
-    def _match_pattern(self, pattern: Pattern, value: Value) -> bool:
+    def match(self, pattern: Pattern, value: Value, bindings: Record) -> bool:
+        """Does ``value`` match ``pattern``?  The variables it binds are added
+        to ``bindings``."""
         match pattern:
             case VariablePattern(name=name):
-                # Variable pattern always matches and binds the value
-                self.variables[name] = value
+                bindings[name] = value
                 return True
-
-            case LiteralPattern(value=pattern_value):
-                # Literal pattern must match exactly
-                return pattern_value == value
-
-            case ConstructorPattern(constructor=constructor, patterns=patterns):
-                # Match constructor pattern
-                match value:
-                    case dict() if "_constructor" in value:
-                        pass  # Valid constructor value
-                    case _:
-                        return False
-
-                if value["_constructor"] != constructor:
+            case (
+                LiteralPattern(value=literal)
+                | NegativeIntPattern(value=literal)
+                | NegativeFloatPattern(value=literal)
+            ):
+                return bool(literal == value)
+            case ConstructorPattern(constructor=name, patterns=subpatterns):
+                if not (isinstance(value, dict) and value.get(CONSTRUCTOR_KEY) == name):
                     return False
-
-                # Match sub-patterns against constructor fields
-                if len(patterns) == 0:
-                    # Constructor with no patterns (like Zero or Nil used as pattern)
-                    return True
-
-                # Check if this is a record constructor or positional constructor
-                if constructor in self.constructors:
-                    arity = self.constructors[constructor]
-
-                    # If the value has named fields (not field_0, field_1, etc), it's a record
-                    has_named_fields = any(
-                        key not in ["_constructor"] and not key.startswith("field_")
-                        for key in value.keys()
-                    )
-
-                    if has_named_fields:
-                        # Record constructor pattern matching
-                        # For record patterns like (Person id_ name), we need to match against record fields in the order they were declared
-                        # This requires looking up the field names from the data type definition
-
-                        # Assume the pattern variables match the field names in declaration order
-                        field_names = [
-                            key for key in value.keys() if key != "_constructor"
-                        ]
-                        field_names.sort()  # Sort to ensure consistent order
-
-                        if len(patterns) != len(field_names):
-                            return False
-
-                        # Match each pattern against its corresponding field value
-                        for sub_pattern, field_name in zip(patterns, field_names):
-                            if not self._match_pattern(sub_pattern, value[field_name]):
-                                return False
-
-                        return True
-                    else:
-                        # Positional constructor pattern matching
-                        field_values = []
-                        for i in range(len(patterns)):
-                            field_key = f"field_{i}"
-                            if field_key in value:
-                                field_values.append(value[field_key])
-                            else:
-                                return False  # Not enough fields
-
-                        if len(patterns) != len(field_values):
-                            return False
-
-                        # Match each pattern against its corresponding field value
-                        for sub_pattern, field_value in zip(patterns, field_values):
-                            if not self._match_pattern(sub_pattern, field_value):
-                                return False
-
-                        return True
-                else:
-                    # Unknown constructor, treat as positional
-                    field_values = []
-                    for i in range(len(patterns)):
-                        field_key = f"field_{i}"
-                        if field_key in value:
-                            field_values.append(value[field_key])
-                        else:
-                            return False  # Not enough fields
-
-                    if len(patterns) != len(field_values):
-                        return False
-
-                    # Match each pattern against its corresponding field value
-                    for sub_pattern, field_value in zip(patterns, field_values):
-                        if not self._match_pattern(sub_pattern, field_value):
-                            return False
-
-                    return True
-
+                return self.match_all(
+                    subpatterns, self.constructor_fields(value), bindings
+                )
             case ConsPattern(head=head, tail=tail):
-                # Match cons pattern (head : tail)
-                match value:
-                    case list() if len(value) > 0:
-                        pass  # Valid non-empty list
-                    case _:
-                        return False
-
-                head_val = value[0]
-                tail_val = value[1:]
-
-                return self._match_pattern(head, head_val) and self._match_pattern(
-                    tail,
-                    tail_val,
+                return (
+                    isinstance(value, list)
+                    and len(value) > 0
+                    and self.match(head, value[0], bindings)
+                    and self.match(tail, value[1:], bindings)
                 )
-
-            case ListPattern(patterns=patterns):
-                # Match list pattern
-                match value:
-                    case list() if len(value) == len(patterns):
-                        pass  # Valid list with matching length
-                    case _:
-                        return False
-
-                # Match each element with corresponding pattern
-                for pattern, element in zip(patterns, value):
-                    if not self._match_pattern(pattern, element):
-                        return False
-                return True
-
-            case TuplePattern(patterns=patterns):
-                # Match tuple pattern
-                match value:
-                    case tuple() if len(value) == len(patterns):
-                        pass  # Valid tuple with matching length
-                    case _:
-                        return False
-
-                # Match each element with corresponding pattern
-                for pattern, element in zip(patterns, value):
-                    if not self._match_pattern(pattern, element):
-                        return False
-                return True
-
-            case _:
-                raise NotImplementedError(
-                    f"Unhandled pattern type: {type(pattern).__name__}",
+            case ListPattern(patterns=subpatterns):
+                return isinstance(value, list) and self.match_all(
+                    subpatterns,
+                    value,
+                    bindings,
                 )
+            case TuplePattern(patterns=subpatterns):
+                return isinstance(value, tuple) and self.match_all(
+                    subpatterns,
+                    value,
+                    bindings,
+                )
+        raise NotImplementedError(f"Unhandled pattern type: {type(pattern).__name__}")
+
+    def match_all(
+        self,
+        patterns: Sequence[Pattern],
+        values: Sequence[Value],
+        bindings: Record,
+    ) -> bool:
+        return len(patterns) == len(values) and all(
+            self.match(pattern, value, bindings)
+            for pattern, value in zip(patterns, values)
+        )
+
+    def constructor_fields(self, value: Record) -> list[Value]:
+        """The field values of a constructor value in declaration order."""
+        constructor = self.constructors.get(value[CONSTRUCTOR_KEY])
+        if constructor is not None and constructor.record_constructor is not None:
+            names = [f.name for f in constructor.record_constructor.fields]
+            if all(name in value for name in names):
+                return [value[name] for name in names]
+        fields: list[Value] = []
+        while f"field_{len(fields)}" in value:
+            fields.append(value[f"field_{len(fields)}"])
+        return fields
+
+
+def constructor_arity(constructor: DataConstructor) -> int:
+    if constructor.record_constructor is not None:
+        return len(constructor.record_constructor.fields)
+    return len(constructor.type_atoms or [])

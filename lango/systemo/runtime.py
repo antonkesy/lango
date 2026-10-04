@@ -1,24 +1,20 @@
-# Runtime support for System O programs.
-#
-# This module is imported by the interpreter and its source text is embedded
-# verbatim into the Python code produced by the compilers, so it must not
-# import anything from the lango package.
+"""Runtime support for System O programs.
+
+This module is imported by the interpreter and its source text is embedded
+verbatim into the Python code produced by the compilers, so it must not
+import anything from the lango package.
+"""
+
+from dataclasses import dataclass
+from operator import add, eq, ge, gt, le, lt, mul, neg, pow, sub, truediv
 from typing import Any, Callable
 
 
+@dataclass(frozen=True, slots=True, repr=False)
 class Char:
     """A character; kept distinct from ``str`` (the String type)."""
 
-    __slots__ = ("value",)
-
-    def __init__(self, value: str) -> None:
-        self.value = value
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, Char) and other.value == self.value
-
-    def __hash__(self) -> int:
-        return hash(self.value)
+    value: str
 
     def __repr__(self) -> str:
         return f"Char({self.value!r})"
@@ -35,7 +31,7 @@ class Con:
         self.args = args
 
     def __repr__(self) -> str:
-        return " ".join([self.name] + [repr(arg) for arg in self.args])
+        return " ".join([self.name, *map(repr, self.args)])
 
 
 def curry(arity: int, function: Callable[..., Any]) -> Any:
@@ -66,26 +62,27 @@ def undef(*args: Any) -> Any:
 
 def type_constructor_of(value: Any) -> str:
     """The outermost type constructor of a runtime value (dynamic semantics)."""
-    if isinstance(value, bool):
-        return "Bool"
-    if isinstance(value, int):
-        return "Int"
-    if isinstance(value, float):
-        return "Float"
-    if isinstance(value, str):
-        return "String"
-    if isinstance(value, Char):
-        return "Char"
-    if isinstance(value, list):
-        return "List"
-    if isinstance(value, tuple):
-        return f"Tuple{len(value)}"
-    if isinstance(value, Con):
-        return value.tycon
-    if value is None:
-        return "()"
-    if callable(value):
-        return "->"
+    match value:
+        case bool():  # before int: bool is a subclass of int
+            return "Bool"
+        case int():
+            return "Int"
+        case float():
+            return "Float"
+        case str():
+            return "String"
+        case Char():
+            return "Char"
+        case list():
+            return "List"
+        case tuple():
+            return f"Tuple{len(value)}"
+        case Con():
+            return value.tycon
+        case None:
+            return "()"
+        case _ if callable(value):
+            return "->"
     raise RuntimeError(f"Value of unknown type: {value!r}")
 
 
@@ -93,6 +90,13 @@ def type_constructor_of(value: Any) -> str:
 
 NaN = float("nan")
 Infinity = float("inf")
+
+
+def binary(
+    operation: Callable[[Any, Any], Any],
+) -> Callable[[Any], Callable[[Any], Any]]:
+    """A curried binary primitive."""
+    return lambda x: lambda y: operation(x, y)
 
 
 def primError(message: str) -> Any:
@@ -103,96 +107,30 @@ def primPutStr(text: str) -> None:
     print(text, end="")
 
 
-def primIntAdd(x: int) -> Callable[[int], int]:
-    return lambda y: x + y
+primIntAdd = binary(add)
+primIntSub = binary(sub)
+primIntMul = binary(mul)
+primIntDiv = binary(truediv)
+primIntPow = binary(pow)
+primIntNeg = neg
+primIntLt = binary(lt)
+primIntLe = binary(le)
+primIntGt = binary(gt)
+primIntGe = binary(ge)
+primIntEq = binary(eq)
+primIntShow = str
 
-
-def primIntSub(x: int) -> Callable[[int], int]:
-    return lambda y: x - y
-
-
-def primIntMul(x: int) -> Callable[[int], int]:
-    return lambda y: x * y
-
-
-def primIntDiv(x: int) -> Callable[[int], float]:
-    return lambda y: x / y
-
-
-def primIntPow(x: int) -> Callable[[int], int]:
-    return lambda y: x**y
-
-
-def primIntNeg(x: int) -> int:
-    return -x
-
-
-def primIntLt(x: int) -> Callable[[int], bool]:
-    return lambda y: x < y
-
-
-def primIntLe(x: int) -> Callable[[int], bool]:
-    return lambda y: x <= y
-
-
-def primIntGt(x: int) -> Callable[[int], bool]:
-    return lambda y: x > y
-
-
-def primIntGe(x: int) -> Callable[[int], bool]:
-    return lambda y: x >= y
-
-
-def primIntEq(x: int) -> Callable[[int], bool]:
-    return lambda y: x == y
-
-
-def primIntShow(x: int) -> str:
-    return str(x)
-
-
-def primFloatAdd(x: float) -> Callable[[float], float]:
-    return lambda y: x + y
-
-
-def primFloatSub(x: float) -> Callable[[float], float]:
-    return lambda y: x - y
-
-
-def primFloatMul(x: float) -> Callable[[float], float]:
-    return lambda y: x * y
-
-
-def primFloatDiv(x: float) -> Callable[[float], float]:
-    return lambda y: x / y
-
-
-def primFloatPow(x: float) -> Callable[[float], float]:
-    return lambda y: x**y
-
-
-def primFloatNeg(x: float) -> float:
-    return -x
-
-
-def primFloatLt(x: float) -> Callable[[float], bool]:
-    return lambda y: x < y
-
-
-def primFloatLe(x: float) -> Callable[[float], bool]:
-    return lambda y: x <= y
-
-
-def primFloatGt(x: float) -> Callable[[float], bool]:
-    return lambda y: x > y
-
-
-def primFloatGe(x: float) -> Callable[[float], bool]:
-    return lambda y: x >= y
-
-
-def primFloatEq(x: float) -> Callable[[float], bool]:
-    return lambda y: x == y
+primFloatAdd = binary(add)
+primFloatSub = binary(sub)
+primFloatMul = binary(mul)
+primFloatDiv = binary(truediv)
+primFloatPow = binary(pow)
+primFloatNeg = neg
+primFloatLt = binary(lt)
+primFloatLe = binary(le)
+primFloatGt = binary(gt)
+primFloatGe = binary(ge)
+primFloatEq = binary(eq)
 
 
 def primFloatShow(x: float) -> str:
@@ -205,20 +143,11 @@ def primFloatShow(x: float) -> str:
     return str(x)
 
 
-def primBoolAnd(x: bool) -> Callable[[bool], bool]:
-    return lambda y: x and y
+primBoolAnd = binary(lambda x, y: x and y)
+primBoolOr = binary(lambda x, y: x or y)
+primBoolEq = binary(eq)
 
-
-def primBoolOr(x: bool) -> Callable[[bool], bool]:
-    return lambda y: x or y
-
-
-def primBoolEq(x: bool) -> Callable[[bool], bool]:
-    return lambda y: x == y
-
-
-def primStringConcat(x: str) -> Callable[[str], str]:
-    return lambda y: x + y
+primStringConcat = binary(add)
 
 
 def primStringShow(x: str) -> str:
@@ -229,5 +158,4 @@ def primCharShow(x: Char) -> str:
     return f"'{x.value}'"
 
 
-def primListConcat(x: list) -> Callable[[list], list]:
-    return lambda y: x + y
+primListConcat = binary(add)

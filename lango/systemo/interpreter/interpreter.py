@@ -7,7 +7,9 @@ Figure 3).  No type information is needed at run time; the program is type
 checked first only to reject ill-typed programs.
 """
 
-from typing import Any, Callable, Dict, Optional, Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 from lango.shared.ast.nodes import (
     BoolLiteral,
@@ -40,6 +42,7 @@ from lango.shared.ast.nodes import (
     TuplePattern,
     Variable,
     VariablePattern,
+    is_expression,
 )
 from lango.shared.run_result import RunResult, run_program
 from lango.systemo import runtime
@@ -54,26 +57,22 @@ from lango.systemo.typechecker.primitives import CONSTANTS, PRIMITIVES
 Value = Any
 
 
+@dataclass(frozen=True)
 class Scope:
     """A persistent environment: closures capture the scope they were defined in."""
 
-    def __init__(
-        self,
-        variables: Dict[str, Value],
-        parent: Optional["Scope"] = None,
-    ) -> None:
-        self.variables = variables
-        self.parent = parent
+    variables: dict[str, Value]
+    parent: "Scope | None" = None
 
     def lookup(self, name: str) -> Value:
-        scope: Optional[Scope] = self
+        scope: Scope | None = self
         while scope is not None:
             if name in scope.variables:
                 return scope.variables[name]
             scope = scope.parent
         raise RuntimeError(f"Unknown variable: {name}")
 
-    def child(self, variables: Dict[str, Value]) -> "Scope":
+    def child(self, variables: dict[str, Value]) -> "Scope":
         return Scope(variables, self)
 
 
@@ -88,7 +87,7 @@ class Overloaded:
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self.instances: Dict[str, Callable[[Value], Value]] = {}
+        self.instances: dict[str, Callable[[Value], Value]] = {}
 
     def __call__(self, value: Value) -> Value:
         tycon = runtime.type_constructor_of(value)
@@ -131,11 +130,9 @@ class Interpreter:
         return scope.lookup("main")
 
     def initial_scope(self) -> Scope:
-        variables: Dict[str, Value] = {}
-        for name in PRIMITIVES:
-            variables[name] = getattr(runtime, name)
-        for name in CONSTANTS:
-            variables[name] = getattr(runtime, name)
+        variables: dict[str, Value] = {
+            name: getattr(runtime, name) for name in (*PRIMITIVES, *CONSTANTS)
+        }
         for con in self.typed.constructors.values():
             variables[con.name] = runtime.constructor(
                 con.name,
@@ -156,7 +153,7 @@ class Interpreter:
 
         def apply(*args: Value) -> Value:
             for clause in clauses:
-                bindings: Dict[str, Value] = {}
+                bindings: dict[str, Value] = {}
                 if all(
                     self.match(pattern, arg, bindings)
                     for pattern, arg in zip(clause.patterns, args)
@@ -216,12 +213,13 @@ class Interpreter:
                     scope = scope.child({name: self.eval(value, scope)})
                     result = None
                 case _:
-                    result = self.eval(stmt, scope)  # type: ignore[arg-type]
+                    assert is_expression(stmt)
+                    result = self.eval(stmt, scope)
         return result
 
     # --- patterns ------------------------------------------------------------
 
-    def match(self, pattern: Pattern, value: Value, bindings: Dict[str, Value]) -> bool:
+    def match(self, pattern: Pattern, value: Value, bindings: dict[str, Value]) -> bool:
         match pattern:
             case VariablePattern(name=name):
                 bindings[name] = value
@@ -273,8 +271,14 @@ class Interpreter:
         match literal:
             case CharLiteral(value=value):
                 return runtime.Char(value)
-            case _:
-                return literal.value  # type: ignore[union-attr]
+            case (
+                IntLiteral(value=value)
+                | FloatLiteral(value=value)
+                | StringLiteral(value=value)
+                | BoolLiteral(value=value)
+            ):
+                return value
+        raise RuntimeError(f"Not a literal: {type(literal).__name__}")
 
 
 def interpret(ast: Program, collect_stdout: bool = False) -> RunResult:

@@ -157,6 +157,23 @@ def unfold_function(t: Type) -> tuple[list[Type], Type]:
     return params, t
 
 
+def ordered_free_vars(t: Type) -> list[str]:
+    """Free type variables in order of first occurrence (left to right)."""
+    result: list[str] = []
+
+    def go(t: Type) -> None:
+        match t:
+            case TypeVar(name=name):
+                if name not in result:
+                    result.append(name)
+            case _:
+                for child in t.children():
+                    go(child)
+
+    go(t)
+    return result
+
+
 # Built-in types
 INT_TYPE = TypeCon("Int")
 CHAR_TYPE = TypeCon("Char")
@@ -248,10 +265,10 @@ def generalize(type_env_free_vars: set[str], typ: Type) -> TypeScheme:
 
 
 def normalize_type_scheme(scheme: TypeScheme) -> TypeScheme:
-    """Rename the type variables to ``a``, ``b``, ... in alphabetical order."""
+    """Rename the type variables to ``a``, ``b``, ... in order of occurrence."""
     mapping: Subst = {
         old: TypeVar(var_name(i))
-        for i, old in enumerate(sorted(scheme.type.free_vars()))
+        for i, old in enumerate(ordered_free_vars(scheme.type))
     }
     quantified = {
         new.name

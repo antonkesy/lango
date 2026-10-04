@@ -21,6 +21,7 @@ from lango.shared.typechecker.lango_types import (
     Type,
     TypeCon,
     TypeVar,
+    ordered_free_vars,
 )
 from lango.shared.typechecker.names import var_names
 
@@ -68,27 +69,7 @@ def tycon_args(t: Type) -> list[Type]:
 def free_vars(t: Type) -> list[str]:
     """Free type variables in order of first occurrence (this order decides
     the order of dictionary parameters, see ``TypeInferrer.gen``)."""
-    result: list[str] = []
-
-    def go(t: Type) -> None:
-        match t:
-            case TypeVar(name=name):
-                if name not in result:
-                    result.append(name)
-            case FunctionType(param=param, result=res):
-                go(param)
-                go(res)
-            case DataType(type_args=args):
-                for arg in args:
-                    go(arg)
-            case TupleType(element_types=elems):
-                for elem in elems:
-                    go(elem)
-            case _:
-                pass
-
-    go(t)
-    return result
+    return ordered_free_vars(t)
 
 
 # A constraint set on a type variable: ``o_1 : alpha -> tau_1, ..., o_n : alpha -> tau_n``

@@ -1,10 +1,20 @@
-from collections import defaultdict
-from typing import Dict, ItemsView, List, Optional, Set, Tuple
+"""Hindley/Milner type inference for MiniO (substitution passing).
+
+MiniO has no overloading: ``show``, ``putStr``, ``error`` and ``==`` are
+built-in polymorphic functions, lists are ``List a`` and the arithmetic
+operators work on ``Int`` or ``Float`` (defaulting to ``Int``).  Every
+function name is bound to a monomorphic type variable before the functions
+are checked in source order, so a function may refer to itself.
+"""
+
+from collections.abc import ItemsView, Sequence
+from dataclasses import dataclass, field
 
 from lango.shared.ast.nodes import (
     AddOperation,
     AndOperation,
     ArrowType,
+    BinaryOperation,
     BoolLiteral,
     CharLiteral,
     ConcatOperation,
@@ -32,10 +42,13 @@ from lango.shared.ast.nodes import (
     LetStatement,
     ListLiteral,
     ListPattern,
+    ListType,
     LiteralPattern,
     MulOperation,
     NegativeFloat,
+    NegativeFloatPattern,
     NegativeInt,
+    NegativeIntPattern,
     NegOperation,
     NotEqualOperation,
     NotOperation,
@@ -49,13 +62,16 @@ from lango.shared.ast.nodes import (
     SubOperation,
     TupleLiteral,
     TuplePattern,
-    TupleType,
+)
+from lango.shared.ast.nodes import TupleType as ASTTupleType
+from lango.shared.ast.nodes import (
     TypeApplication,
     TypeConstructor,
     TypeExpression,
     TypeVariable,
     Variable,
     VariablePattern,
+    is_expression,
 )
 from lango.shared.typechecker.errors import TypeInferenceError
 from lango.shared.typechecker.lango_types import (
@@ -63,58 +79,59 @@ from lango.shared.typechecker.lango_types import (
     CHAR_TYPE,
     FLOAT_TYPE,
     INT_TYPE,
+    PRIMITIVE_TYPES,
     STRING_TYPE,
     UNIT_TYPE,
     DataType,
     FreshVarGenerator,
     FunctionType,
-)
-from lango.shared.typechecker.lango_types import TupleType as SharedTupleType
-from lango.shared.typechecker.lango_types import (
+    TupleType,
     Type,
     TypeApp,
     TypeCon,
     TypeScheme,
     TypeSubstitution,
     TypeVar,
+    function,
     generalize,
+    unfold_function,
 )
 from lango.shared.typechecker.unify import UnificationError, unify_one
 
-TypeBindings = Dict[str, TypeScheme]
-InferenceResult = Tuple[Type, TypeSubstitution]
+type InferenceResult = tuple[Type, TypeSubstitution]
+
+LIST = TypeCon("List")
+IO = TypeCon("IO")
 
 
+def list_of(element: Type) -> Type:
+    return TypeApp(LIST, element)
+
+
+def mono(t: Type) -> TypeScheme:
+    return TypeScheme(set(), t)
+
+
+@dataclass(frozen=True)
 class TypeEnvironment:
-    def __init__(self, bindings: Optional[TypeBindings] = None) -> None:
-        self.bindings: TypeBindings = bindings or {}
+    bindings: dict[str, TypeScheme] = field(default_factory=dict)
 
-    def lookup(self, name: str) -> Optional[TypeScheme]:
+    def lookup(self, name: str) -> TypeScheme | None:
         return self.bindings.get(name)
 
     def extend(self, name: str, scheme: TypeScheme) -> "TypeEnvironment":
-        new_bindings = self.bindings.copy()
-        new_bindings[name] = scheme
-        return TypeEnvironment(new_bindings)
+        return TypeEnvironment({**self.bindings, name: scheme})
 
-    def extend_many(self, new_bindings: Dict[str, TypeScheme]) -> "TypeEnvironment":
-        combined_bindings = self.bindings.copy()
-        combined_bindings.update(new_bindings)
-        return TypeEnvironment(combined_bindings)
+    def extend_many(self, bindings: dict[str, TypeScheme]) -> "TypeEnvironment":
+        return TypeEnvironment({**self.bindings, **bindings})
 
     def apply_substitution(self, subst: TypeSubstitution) -> "TypeEnvironment":
-        new_bindings = {}
-        for name, scheme in self.bindings.items():
-            # Apply substitution to the scheme's type, keeping quantified vars
-            applied_type = subst.apply(scheme.type)
-            new_bindings[name] = TypeScheme(scheme.quantified_vars, applied_type)
-        return TypeEnvironment(new_bindings)
+        return TypeEnvironment(
+            {name: scheme.substitute(subst) for name, scheme in self.bindings.items()},
+        )
 
-    def free_type_vars(self) -> Set[str]:
-        free_vars = set()
-        for scheme in self.bindings.values():
-            free_vars.update(scheme.free_vars())
-        return free_vars
+    def free_type_vars(self) -> set[str]:
+        return set().union(*(scheme.free_vars() for scheme in self.bindings.values()))
 
     def items(self) -> ItemsView[str, TypeScheme]:
         return self.bindings.items()
@@ -126,1263 +143,495 @@ class TypeEnvironment:
         return self.bindings[name]
 
 
+def builtin_env() -> TypeEnvironment:
+    a = TypeVar("a")
+    return TypeEnvironment(
+        {
+            "putStr": mono(function(STRING_TYPE, TypeApp(IO, UNIT_TYPE))),
+            "show": TypeScheme({"a"}, function(a, STRING_TYPE)),
+            "error": TypeScheme({"a"}, function(STRING_TYPE, a)),
+            "==": TypeScheme({"a"}, function(a, a, BOOL_TYPE)),
+        },
+    )
+
+
 class TypeInferrer:
     def __init__(self) -> None:
         self.fresh_var_gen = FreshVarGenerator()
+        # record constructor -> its field names in declaration order
+        self.record_fields: dict[str, list[str]] = {}
 
-    def fresh_type_var(self) -> TypeVar:
-        var_name = self.fresh_var_gen.fresh()
-        return TypeVar(var_name)
+    def fresh(self) -> TypeVar:
+        return self.fresh_var_gen.fresh_var()
 
-    def infer_data_decl(self, node: DataDeclaration) -> TypeEnvironment:
-        type_name = node.type_name
-        type_params = [param.name for param in node.type_params]
+    @staticmethod
+    def unify(t1: Type, t2: Type, what: str) -> TypeSubstitution:
+        try:
+            return unify_one(t1, t2)
+        except UnificationError as e:
+            raise TypeInferenceError(f"{what}: {e}") from e
 
-        constructor_types: Dict[str, TypeScheme] = {}
-
-        for constructor in node.constructors:
-            ctor_name = constructor.name
-
-            # Create type parameter variables
-            type_param_vars: List[Type] = [TypeVar(param) for param in type_params]
-            result_type = DataType(type_name, tuple(type_param_vars))
-
-            if constructor.record_constructor:
-                # Record constructor
-                field_types = []
-                for field in constructor.record_constructor.fields:
-                    field_type = self.parse_type_expr(field.field_type)
-                    field_types.append(field_type)
-
-                # For record constructors, create a function that takes all fields
-                ctor_type: Type = result_type
-                for field_type in reversed(field_types):
-                    ctor_type = FunctionType(field_type, ctor_type)
-
-                # Generalize over the type parameters
-                bound_vars = set(type_params)
-                ctor_scheme = TypeScheme(bound_vars, ctor_type)
-                constructor_types[ctor_name] = ctor_scheme
-
-            else:
-                # Positional constructor
-                if not constructor.type_atoms:
-                    # Nullary constructor
-                    bound_vars = set(type_params)
-                    ctor_scheme = TypeScheme(bound_vars, result_type)
-                    constructor_types[ctor_name] = ctor_scheme
-                else:
-                    # Constructor with arguments
-                    field_types = []
-                    for type_expr in constructor.type_atoms:
-                        field_type = self.parse_type_expr(type_expr)
-                        field_types.append(field_type)
-
-                    # Create function type: field1 -> field2 -> ... -> DataType
-                    positional_ctor_type: Type = result_type
-                    for field_type in reversed(field_types):
-                        positional_ctor_type = FunctionType(
-                            field_type,
-                            positional_ctor_type,
-                        )
-
-                    # Generalize over the type parameters
-                    bound_vars = set(type_params)
-                    ctor_scheme = TypeScheme(bound_vars, positional_ctor_type)
-                    constructor_types[ctor_name] = ctor_scheme
-
-        # Return environment extended with constructor types
-        env = TypeEnvironment()
-        for name, scheme in constructor_types.items():
-            env = env.extend(name, scheme)
-
-        return env
+    # --- declarations -----------------------------------------------------------
 
     def parse_type_expr(self, node: TypeExpression) -> Type:
         match node:
-            case TypeConstructor(name=type_name):
-                match type_name:
-                    case "Int":
-                        return INT_TYPE
-                    case "String":
-                        return STRING_TYPE
-                    case "Float":
-                        return FLOAT_TYPE
-                    case "Bool":
-                        return BOOL_TYPE
-                    case "Char":
-                        return CHAR_TYPE
-                    case _:
-                        return DataType(type_name)
+            case TypeConstructor(name=name):
+                return PRIMITIVE_TYPES.get(name) or DataType(name)
             case TypeVariable(name=name):
                 return TypeVar(name)
             case ArrowType(from_type=from_type, to_type=to_type):
-                from_type_parsed = self.parse_type_expr(from_type)
-                to_type_parsed = self.parse_type_expr(to_type)
-                return FunctionType(from_type_parsed, to_type_parsed)
+                return FunctionType(
+                    self.parse_type_expr(from_type),
+                    self.parse_type_expr(to_type),
+                )
             case TypeApplication(constructor=constructor, argument=argument):
-                constructor_type = self.parse_type_expr(constructor)
-                argument_type = self.parse_type_expr(argument)
-
-                match constructor_type:
-                    case DataType(name=name, type_args=type_args):
-                        # Apply type argument to data type
-                        return DataType(name, (*type_args, argument_type))
+                head = self.parse_type_expr(constructor)
+                arg = self.parse_type_expr(argument)
+                match head:
+                    case DataType(name=name, type_args=args):
+                        return DataType(name, (*args, arg))
                     case _:
-                        return TypeApp(constructor_type, argument_type)
+                        return TypeApp(head, arg)
+            case ListType(element_type=element_type):
+                return list_of(self.parse_type_expr(element_type))
             case GroupedType(type_expr=type_expr):
                 return self.parse_type_expr(type_expr)
-            case TupleType(element_types=element_types):
-                return SharedTupleType(
-                    tuple(self.parse_type_expr(elem) for elem in element_types),
-                )
-            case _:
-                raise TypeInferenceError(
-                    f"Cannot parse type expression: {type(node).__name__}",
-                )
+            case ASTTupleType(element_types=element_types):
+                return TupleType(tuple(self.parse_type_expr(e) for e in element_types))
+        raise TypeInferenceError(f"Cannot parse type expression: {type(node).__name__}")
+
+    def infer_data_decl(self, node: DataDeclaration) -> dict[str, TypeScheme]:
+        """The type schemes of the constructors of ``data T a1 .. an = ...``."""
+        params = [param.name for param in node.type_params]
+        result = DataType(node.type_name, tuple(TypeVar(param) for param in params))
+        schemes: dict[str, TypeScheme] = {}
+        for constructor in node.constructors:
+            if constructor.record_constructor is not None:
+                fields = constructor.record_constructor.fields
+                self.record_fields[constructor.name] = [f.name for f in fields]
+                field_types = [self.parse_type_expr(f.field_type) for f in fields]
+            else:
+                field_types = [
+                    self.parse_type_expr(atom) for atom in constructor.type_atoms or []
+                ]
+            schemes[constructor.name] = TypeScheme(
+                set(params),
+                function(*field_types, result),
+            )
+        return schemes
+
+    # --- expressions ------------------------------------------------------------
 
     def infer_expr(self, expr: Expression, env: TypeEnvironment) -> InferenceResult:
+        t, subst = self._infer_expr(expr, env)
+        expr.ty = t
+        return t, subst
+
+    def _infer_expr(self, expr: Expression, env: TypeEnvironment) -> InferenceResult:
         match expr:
-            # Literals
             case IntLiteral() | NegativeInt():
                 return INT_TYPE, TypeSubstitution()
-
             case FloatLiteral() | NegativeFloat():
                 return FLOAT_TYPE, TypeSubstitution()
-
             case StringLiteral():
                 return STRING_TYPE, TypeSubstitution()
-
             case CharLiteral():
                 return CHAR_TYPE, TypeSubstitution()
-
             case BoolLiteral():
                 return BOOL_TYPE, TypeSubstitution()
-
             case ListLiteral(elements=elements):
-                if not elements:
-                    # Empty list: infer polymorphic list type
-                    element_type = self.fresh_type_var()
-                    list_type = TypeApp(TypeCon("List"), element_type)
-                    expr.ty = list_type
-                    return list_type, TypeSubstitution()
-
-                # Non-empty list: infer element type from first element
-                # and unify with all other elements
-                first_type, subst1 = self.infer_expr(elements[0], env)
-                current_subst = subst1
-
-                for element in elements[1:]:
-                    elem_type, elem_subst = self.infer_expr(
-                        element,
-                        env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(elem_subst)
-
-                    try:
-                        unify_subst = unify_one(
-                            first_type.apply_substitution(current_subst),
-                            elem_type,
-                        )
-                        current_subst = current_subst.compose(unify_subst)
-                        first_type = first_type.apply_substitution(unify_subst)
-                    except UnificationError as e:
-                        raise TypeInferenceError(
-                            f"List elements have incompatible types: {e}",
-                        )
-
-                list_type = TypeApp(
-                    TypeCon("List"),
-                    first_type.apply_substitution(current_subst),
-                )
-                expr.ty = list_type
-                return list_type, current_subst
-
+                element = self.fresh()
+                subst = TypeSubstitution()
+                for e in elements:
+                    t, subst = self.infer_next(e, env, subst)
+                    subst = self.unify(
+                        element.apply_substitution(subst),
+                        t,
+                        "List elements have incompatible types",
+                    ).compose(subst)
+                return list_of(element.apply_substitution(subst)), subst
             case TupleLiteral(elements=elements):
-                if not elements:
-                    # Empty tuple: unit type
-                    tuple_type = SharedTupleType(())
-                    expr.ty = tuple_type
-                    return tuple_type, TypeSubstitution()
-
-                # Non-empty tuple: infer type of each element
-                element_types = []
-                current_subst = TypeSubstitution()
-
-                for element in elements:
-                    elem_type, elem_subst = self.infer_expr(
-                        element,
-                        env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(elem_subst)
-                    element_types.append(elem_type.apply_substitution(current_subst))
-
-                tuple_type = SharedTupleType(tuple(element_types))
-                expr.ty = tuple_type
-                return tuple_type, current_subst
-
-            # Variables and constructors
-            case Variable(name=var_name):
-                scheme = env.lookup(var_name)
+                types: list[Type] = []
+                subst = TypeSubstitution()
+                for e in elements:
+                    t, subst = self.infer_next(e, env, subst)
+                    types.append(t)
+                return (
+                    TupleType(tuple(t.apply_substitution(subst) for t in types)),
+                    subst,
+                )
+            case Variable(name=name) | Constructor(name=name):
+                scheme = env.lookup(name)
                 if scheme is None:
-                    raise TypeInferenceError(f"Unknown variable: {var_name}")
-                inferred_type = scheme.instantiate(self.fresh_var_gen)
-                expr.ty = inferred_type
-                return inferred_type, TypeSubstitution()
-
-            case Constructor(name=constr_name):
-                scheme = env.lookup(constr_name)
-                if scheme is None:
-                    raise TypeInferenceError(f"Unknown constructor: {constr_name}")
-                inferred_type = scheme.instantiate(self.fresh_var_gen)
-                expr.ty = inferred_type
-                return inferred_type, TypeSubstitution()
-
-            # Arithmetic operations
-            case AddOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case SubOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case MulOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case DivOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case PowIntOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case PowFloatOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_numeric_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            # Comparison operations
-            case EqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case NotEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case LessThanOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case LessEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case GreaterThanOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case GreaterEqualOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_comparison_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            # Logical operations
-            case AndOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_logical_op(
-                    left_expr,
-                    right_expr,
-                    env,
-                )
-                expr.ty = result[0]
-                return result
-
-            case OrOperation(left=left_expr, right=right_expr):
-                result = self._infer_binary_logical_op(left_expr, right_expr, env)
-                expr.ty = result[0]
-                return result
-
-            case NotOperation(operand=operand_expr):
-                operand_type, subst = self.infer_expr(operand_expr, env)
-                try:
-                    bool_unify = unify_one(operand_type, BOOL_TYPE)
-                    final_subst = subst.compose(bool_unify)
-                    expr.ty = BOOL_TYPE
-                    return BOOL_TYPE, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"NOT operation requires Bool operand, got {operand_type}",
-                    )
-
-            case NegOperation(operand=operand_expr):
-                operand_type, subst = self.infer_expr(operand_expr, env)
-                # Unary negation works on Int or Float types
-                try:
-
-                    int_unify = unify_one(operand_type, INT_TYPE)
-                    final_subst = subst.compose(int_unify)
-                    expr.ty = INT_TYPE
-                    return INT_TYPE, final_subst
-                except UnificationError:
-                    try:
-
-                        float_unify = unify_one(operand_type, FLOAT_TYPE)
-                        final_subst = subst.compose(float_unify)
-                        expr.ty = FLOAT_TYPE
-                        return FLOAT_TYPE, final_subst
-                    except UnificationError:
-                        raise TypeInferenceError(
-                            f"Negation requires numeric operand (Int or Float), got {operand_type}",
-                        )
-
-            # String/List operations
-            case ConcatOperation(left=left_expr, right=right_expr):
-                left_type, left_subst = self.infer_expr(left_expr, env)
-                right_type, right_subst = self.infer_expr(
-                    right_expr,
-                    env.apply_substitution(left_subst),
-                )
-
-                combined_subst = left_subst.compose(right_subst)
-
-                # Try to unify both operands
-                try:
-                    unify_subst = unify_one(
-                        left_type.apply_substitution(combined_subst),
-                        right_type.apply_substitution(combined_subst),
-                    )
-                    final_subst = combined_subst.compose(unify_subst)
-                    final_type = left_type.apply_substitution(final_subst)
-                    expr.ty = final_type
-                    return final_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        "Concatenation operands must have same type",
-                    )
-
-            case IndexOperation(list_expr=list_expr, index_expr=idx_expr):
-                indexed_list_type: Type
-                indexed_list_type, list_subst = self.infer_expr(
-                    list_expr,
-                    env,
-                )
-                index_type, index_subst = self.infer_expr(
-                    idx_expr,
-                    env.apply_substitution(list_subst),
-                )
-
-                combined_subst = list_subst.compose(index_subst)
-
-                # Index must be Int
-                try:
-                    int_unify = unify_one(index_type, INT_TYPE)
-                    subst_with_int = combined_subst.compose(int_unify)
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"List index must be Int, got {index_type}",
-                    )
-
-                # List must be List[T] for some T
-                element_type = self.fresh_type_var()
-                expected_list_type = TypeApp(TypeCon("List"), element_type)
-
-                try:
-                    list_unify = unify_one(
-                        indexed_list_type.apply_substitution(subst_with_int),
-                        expected_list_type,
-                    )
-                    final_subst = subst_with_int.compose(list_unify)
-                    result_type = element_type.apply_substitution(final_subst)
-                    expr.ty = result_type
-                    return result_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"Index operation requires a List, got {indexed_list_type}",
-                    )
-
-            # Control flow
-            case IfElse(
-                condition=condition,
-                then_expr=then_branch,
-                else_expr=else_branch,
-            ):
-                cond_type, cond_subst = self.infer_expr(condition, env)
-
-                # Condition must be Bool
-                try:
-                    bool_unify = unify_one(cond_type, BOOL_TYPE)
-                    subst_after_cond = cond_subst.compose(bool_unify)
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"If condition must be Bool, got {cond_type}",
-                    )
-
-                # Infer then branch
-                then_type, then_subst = self.infer_expr(
-                    then_branch,
-                    env.apply_substitution(subst_after_cond),
-                )
-                subst_after_then = subst_after_cond.compose(then_subst)
-
-                # Infer else branch
-                else_type, else_subst = self.infer_expr(
-                    else_branch,
-                    env.apply_substitution(subst_after_then),
-                )
-                subst_after_else = subst_after_then.compose(else_subst)
-
-                # Then and else branches must have same type
-                try:
-                    branch_unify = unify_one(
-                        then_type.apply_substitution(subst_after_else),
-                        else_type,
-                    )
-                    final_subst = subst_after_else.compose(branch_unify)
-                    final_type = then_type.apply_substitution(final_subst)
-                    expr.ty = final_type
-                    return final_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError(
-                        f"If branches have incompatible types: {then_type} vs {else_type}",
-                    )
-
-            # Function application
-            case FunctionApplication(function=func_expr, argument=arg_expr):
-                func_type, func_subst = self.infer_expr(func_expr, env)
-                arg_type, arg_subst = self.infer_expr(
-                    arg_expr,
-                    env.apply_substitution(func_subst),
-                )
-
-                combined_subst = func_subst.compose(arg_subst)
-
-                # Create fresh return type
-                return_type = self.fresh_type_var()
-                expected_func_type = FunctionType(arg_type, return_type)
-
-                try:
-                    func_unify = unify_one(
-                        func_type.apply_substitution(combined_subst),
-                        expected_func_type,
-                    )
-                    final_subst = combined_subst.compose(func_unify)
-                    result_type = return_type.apply_substitution(final_subst)
-                    expr.ty = result_type
-                    return result_type, final_subst
-                except UnificationError:
-                    raise TypeInferenceError("Function application type mismatch")
-
-            # Grouping
-            case GroupedExpression(expression=inner_expr):
-                result = self.infer_expr(inner_expr, env)
-                expr.ty = result[0]
-                return result
-
-            # Do blocks
-            case DoBlock(statements=stmts):
-                result = self.infer_do_block(stmts, env)
-                expr.ty = result[0]
-                return result
-
-            # Constructor expressions
-            case ConstructorExpression():
-                result = self.infer_constructor_expr(expr, env)
-                expr.ty = result[0]
-                return result
-
-            case _:
-                raise TypeInferenceError(
-                    f"Unhandled expression type: {type(expr).__name__}",
-                )
-
-    def _infer_binary_numeric_op(
-        self,
-        left: Expression,
-        right: Expression,
-        env: TypeEnvironment,
-    ) -> InferenceResult:
-        left_type, left_subst = self.infer_expr(left, env)
-        right_type, right_subst = self.infer_expr(
-            right,
-            env.apply_substitution(left_subst),
-        )
-
-        combined_subst = left_subst.compose(right_subst)
-
-        # Both operands must have the same numeric type
-        try:
-            unify_subst = unify_one(
-                left_type.apply_substitution(combined_subst),
-                right_type.apply_substitution(combined_subst),
-            )
-            final_subst = combined_subst.compose(unify_subst)
-
-            # Check that the unified type is numeric (Int or Float)
-            unified_type = left_type.apply_substitution(final_subst)
-            if unified_type == INT_TYPE or unified_type == FLOAT_TYPE:
-                return unified_type, final_subst
-            else:
-                # Try to unify with Int
-                try:
-                    int_unify = unify_one(unified_type, INT_TYPE)
-                    return INT_TYPE, final_subst.compose(int_unify)
-                except UnificationError:
-                    # Try to unify with Float
-                    try:
-                        float_unify = unify_one(unified_type, FLOAT_TYPE)
-                        return FLOAT_TYPE, final_subst.compose(float_unify)
-                    except UnificationError:
-                        raise TypeInferenceError(
-                            f"Numeric operation requires Int or Float, got {unified_type}",
-                        )
-        except UnificationError:
-            raise TypeInferenceError(
-                "Binary numeric operation requires operands of same type",
-            )
-
-    def _infer_binary_comparison_op(
-        self,
-        left: Expression,
-        right: Expression,
-        env: TypeEnvironment,
-    ) -> InferenceResult:
-        left_type, left_subst = self.infer_expr(left, env)
-        right_type, right_subst = self.infer_expr(
-            right,
-            env.apply_substitution(left_subst),
-        )
-
-        combined_subst = left_subst.compose(right_subst)
-
-        # Both operands must have the same type (for comparison)
-        try:
-            unify_subst = unify_one(
-                left_type.apply_substitution(combined_subst),
-                right_type.apply_substitution(combined_subst),
-            )
-            final_subst = combined_subst.compose(unify_subst)
-            return BOOL_TYPE, final_subst
-        except UnificationError:
-            raise TypeInferenceError("Comparison requires operands of same type")
-
-    def _infer_binary_logical_op(
-        self,
-        left: Expression,
-        right: Expression,
-        env: TypeEnvironment,
-    ) -> InferenceResult:
-        left_type, left_subst = self.infer_expr(left, env)
-        right_type, right_subst = self.infer_expr(
-            right,
-            env.apply_substitution(left_subst),
-        )
-
-        combined_subst = left_subst.compose(right_subst)
-
-        # Both operands must be Bool
-        try:
-            left_bool_unify = unify_one(left_type, BOOL_TYPE)
-            subst_with_left = combined_subst.compose(left_bool_unify)
-
-            right_bool_unify = unify_one(right_type, BOOL_TYPE)
-            final_subst = subst_with_left.compose(right_bool_unify)
-
-            return BOOL_TYPE, final_subst
-        except UnificationError:
-            raise TypeInferenceError("Logical operation requires Bool operands")
-
-    def infer_function(
-        self,
-        func_def: FunctionDefinition,
-        env: TypeEnvironment,
-    ) -> Tuple[TypeScheme, TypeEnvironment]:
-        # For now, handle simple functions without pattern matching
-        if len(func_def.patterns) == 0:
-            # Nullary function
-            body_type, body_subst = self.infer_expr(func_def.body, env)
-            final_type = body_type.apply_substitution(body_subst)
-            scheme = generalize(
-                env.apply_substitution(body_subst).free_type_vars(),
-                final_type,
-            )
-            # Set the AST node's type
-            func_def.ty = final_type
-            return scheme, env.extend(func_def.function_name, scheme)
-
-        # Function with parameters - create function type
-        param_types = [self.fresh_type_var() for _ in func_def.patterns]
-
-        # Extend environment with pattern bindings
-        extended_env = env
-        current_subst = TypeSubstitution()
-
-        for pattern, param_type in zip(func_def.patterns, param_types):
-            pattern_env, pattern_subst = self.infer_pattern(
-                pattern,
-                param_type.apply_substitution(current_subst),
-                extended_env.apply_substitution(current_subst),
-            )
-            extended_env = pattern_env
-            current_subst = current_subst.compose(pattern_subst)
-
-        # Infer body type
-        body_type, body_subst = self.infer_expr(
-            func_def.body,
-            extended_env.apply_substitution(current_subst),
-        )
-        final_subst = current_subst.compose(body_subst)
-
-        # Create function type
-        func_type = body_type.apply_substitution(final_subst)
-        for param_type in reversed(param_types):
-            func_type = FunctionType(
-                param_type.apply_substitution(final_subst),
-                func_type,
-            )
-
-        # Generalize
-        scheme = generalize(
-            env.apply_substitution(final_subst).free_type_vars(),
-            func_type,
-        )
-        # Set the AST node's type
-        func_def.ty = func_type
-        return scheme, env.extend(func_def.function_name, scheme)
-
-    def infer_function_group(
-        self,
-        func_defs: List[FunctionDefinition],
-        env: TypeEnvironment,
-    ) -> Tuple[TypeScheme, TypeEnvironment]:
-        if not func_defs:
-            raise TypeInferenceError("Empty function group")
-
-        function_name = func_defs[0].function_name
-
-        # All function clauses must have the same arity
-        first_arity = len(func_defs[0].patterns)
-        for func_def in func_defs[1:]:
-            if len(func_def.patterns) != first_arity:
-                raise TypeInferenceError(
-                    f"Function {function_name} has clauses with different arities",
-                )
-
-        if first_arity == 0:
-            # Nullary functions - all clauses should return the same type
-            clause_types = []
-            final_subst = TypeSubstitution()
-
-            for func_def in func_defs:
-                body_type, body_subst = self.infer_expr(
-                    func_def.body,
-                    env.apply_substitution(final_subst),
-                )
-                final_subst = final_subst.compose(body_subst)
-                clause_types.append(body_type.apply_substitution(final_subst))
-
-            # Unify all clause return types
-            unified_type = clause_types[0]
-            for clause_type in clause_types[1:]:
-                try:
-                    unify_subst = unify_one(
-                        unified_type.apply_substitution(final_subst),
-                        clause_type,
-                    )
-                    final_subst = final_subst.compose(unify_subst)
-                    unified_type = unified_type.apply_substitution(unify_subst)
-                except UnificationError as e:
-                    raise TypeInferenceError(
-                        f"Function {function_name} clauses have incompatible return types: {e}",
-                    )
-
-            final_type = unified_type.apply_substitution(final_subst)
-            scheme = generalize(
-                env.apply_substitution(final_subst).free_type_vars(),
-                final_type,
-            )
-
-            # Set types on all function definitions
-            for func_def in func_defs:
-                func_def.ty = final_type
-
-            return scheme, env.extend(function_name, scheme)
-
-        # Functions with parameters - create shared parameter types
-        param_types = [self.fresh_type_var() for _ in range(first_arity)]
-        clause_return_types = []
-        final_subst = TypeSubstitution()
-
-        for func_def in func_defs:
-            # Extend environment with pattern bindings for this clause
-            clause_env = env
-            clause_subst = final_subst
-
-            for pattern, param_type in zip(func_def.patterns, param_types):
-                pattern_env, pattern_subst = self.infer_pattern(
-                    pattern,
-                    param_type.apply_substitution(clause_subst),
-                    clause_env.apply_substitution(clause_subst),
-                )
-                clause_env = pattern_env
-                clause_subst = clause_subst.compose(pattern_subst)
-
-            # Infer body type for this clause
-            body_type, body_subst = self.infer_expr(
-                func_def.body,
-                clause_env.apply_substitution(clause_subst),
-            )
-            clause_subst = clause_subst.compose(body_subst)
-            final_subst = final_subst.compose(clause_subst)
-
-            clause_return_types.append(body_type.apply_substitution(final_subst))
-
-        # Unify all clause return types
-        unified_return_type = clause_return_types[0]
-        for clause_return_type in clause_return_types[1:]:
-            try:
-                unify_subst = unify_one(
-                    unified_return_type.apply_substitution(final_subst),
-                    clause_return_type.apply_substitution(final_subst),
-                )
-                final_subst = final_subst.compose(unify_subst)
-                unified_return_type = unified_return_type.apply_substitution(
-                    unify_subst,
-                )
-            except UnificationError as e:
-                raise TypeInferenceError(
-                    f"Function {function_name} clauses have incompatible return types: {e}",
-                )
-
-        # Create function type
-        func_type = unified_return_type.apply_substitution(final_subst)
-        for param_type in reversed(param_types):
-            func_type = FunctionType(
-                param_type.apply_substitution(final_subst),
-                func_type,
-            )
-
-        # Generalize
-        scheme = generalize(
-            env.apply_substitution(final_subst).free_type_vars(),
-            func_type,
-        )
-
-        # Set types on all function definitions
-        for func_def in func_defs:
-            func_def.ty = func_type
-
-        return scheme, env.extend(function_name, scheme)
-
-    def infer_do_block(
-        self,
-        statements: List["Statement"],
-        env: TypeEnvironment,
-    ) -> InferenceResult:
-        if not statements:
-            return UNIT_TYPE, TypeSubstitution()
-
-        current_env = env
-        current_subst = TypeSubstitution()
-
-        # Process all statements except the last
-        for stmt in statements[:-1]:
-            match stmt:
-                case LetStatement(variable=let_variable, value=let_value):
-                    # Handle let statements
-                    value_type, value_subst = self.infer_expr(
-                        let_value,
-                        current_env,
-                    )
-                    current_subst = current_subst.compose(value_subst)
-
-                    # Generalize and add to environment
-                    var_scheme = generalize(
-                        current_env.apply_substitution(
-                            current_subst,
-                        ).free_type_vars(),
-                        value_type,
-                    )
-                    current_env = current_env.extend(let_variable, var_scheme)
-
-                # Check if it's an expression (not a declaration)
-                case (
-                    IntLiteral()
-                    | FloatLiteral()
-                    | StringLiteral()
-                    | CharLiteral()
-                    | BoolLiteral()
-                    | ListLiteral()
-                    | TupleLiteral()
-                    | Variable()
-                    | Constructor()
-                    | AddOperation()
-                    | SubOperation()
-                    | MulOperation()
-                    | DivOperation()
-                    | PowIntOperation()
-                    | PowFloatOperation()
-                    | EqualOperation()
-                    | NotEqualOperation()
-                    | LessThanOperation()
-                    | LessEqualOperation()
-                    | GreaterThanOperation()
-                    | GreaterEqualOperation()
-                    | AndOperation()
-                    | OrOperation()
-                    | NotOperation()
-                    | NegOperation()
-                    | ConcatOperation()
-                    | IndexOperation()
-                    | IfElse()
-                    | DoBlock()
-                    | FunctionApplication()
-                    | ConstructorExpression()
-                    | GroupedExpression()
-                    | NegativeInt()
-                    | NegativeFloat() as expr_stmt
-                ):
-                    # Type check but ignore result for intermediate expressions
-                    _, stmt_subst = self.infer_expr(
-                        expr_stmt,
-                        current_env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(stmt_subst)
-
-        # Process the last statement and return its type
-        last_stmt = statements[-1]
-        match last_stmt:
-            case LetStatement(variable=let_variable, value=let_value):
-                # Handle let statement
-                value_type, value_subst = self.infer_expr(let_value, current_env)
-                final_subst = current_subst.compose(value_subst)
-
-                # Generalize and add to environment
-                var_scheme = generalize(
-                    current_env.apply_substitution(
-                        final_subst,
-                    ).free_type_vars(),
-                    value_type,
-                )
-                current_env = current_env.extend(let_variable, var_scheme)
-
-                return UNIT_TYPE, final_subst  # Let statements don't return values
-
+                    raise TypeInferenceError(f"Unknown variable: {name}")
+                return scheme.instantiate(self.fresh_var_gen), TypeSubstitution()
             case (
-                IntLiteral()
-                | FloatLiteral()
-                | StringLiteral()
-                | CharLiteral()
-                | BoolLiteral()
-                | ListLiteral()
-                | TupleLiteral()
-                | Variable()
-                | Constructor()
-                | AddOperation()
+                AddOperation()
                 | SubOperation()
                 | MulOperation()
                 | DivOperation()
                 | PowIntOperation()
                 | PowFloatOperation()
-                | EqualOperation()
+            ):
+                return self.infer_numeric(expr, env)
+            case (
+                EqualOperation()
                 | NotEqualOperation()
                 | LessThanOperation()
                 | LessEqualOperation()
                 | GreaterThanOperation()
                 | GreaterEqualOperation()
-                | AndOperation()
-                | OrOperation()
-                | NotOperation()
-                | NegOperation()
-                | ConcatOperation()
-                | IndexOperation()
-                | IfElse()
-                | DoBlock()
-                | FunctionApplication()
-                | ConstructorExpression()
-                | GroupedExpression()
-                | NegativeInt()
-                | NegativeFloat() as expr_stmt
             ):
-                # It's an expression - return its type
-                return self.infer_expr(
-                    expr_stmt,
-                    current_env.apply_substitution(current_subst),
+                left, right, subst = self.infer_operands(expr, env)
+                subst = self.unify(
+                    left, right, "Comparison requires operands of same type"
+                ).compose(subst)
+                return BOOL_TYPE, subst
+            case AndOperation() | OrOperation():
+                left, right, subst = self.infer_operands(expr, env)
+                for operand in (left, right):
+                    subst = self.unify(
+                        operand.apply_substitution(subst),
+                        BOOL_TYPE,
+                        "Logical operation requires Bool operands",
+                    ).compose(subst)
+                return BOOL_TYPE, subst
+            case ConcatOperation():
+                left, right, subst = self.infer_operands(expr, env)
+                subst = self.unify(
+                    left, right, "Concatenation operands must have same type"
+                ).compose(subst)
+                return left.apply_substitution(subst), subst
+            case NotOperation(operand=operand):
+                t, subst = self.infer_expr(operand, env)
+                subst = self.unify(
+                    t, BOOL_TYPE, "'not' requires a Bool operand"
+                ).compose(subst)
+                return BOOL_TYPE, subst
+            case NegOperation(operand=operand):
+                t, subst = self.infer_expr(operand, env)
+                return self.numeric_type(
+                    t, subst, "Negation requires a numeric operand"
                 )
+            case IndexOperation(list_expr=list_expr, index_expr=index_expr):
+                list_type, subst = self.infer_expr(list_expr, env)
+                index_type, subst = self.infer_next(index_expr, env, subst)
+                subst = self.unify(
+                    index_type, INT_TYPE, "List index must be Int"
+                ).compose(subst)
+                element = self.fresh()
+                subst = self.unify(
+                    list_type.apply_substitution(subst),
+                    list_of(element),
+                    "Index operation requires a List",
+                ).compose(subst)
+                return element.apply_substitution(subst), subst
+            case IfElse(condition=condition, then_expr=then_expr, else_expr=else_expr):
+                condition_type, subst = self.infer_expr(condition, env)
+                subst = self.unify(
+                    condition_type, BOOL_TYPE, "If condition must be Bool"
+                ).compose(subst)
+                then_type, subst = self.infer_next(then_expr, env, subst)
+                else_type, subst = self.infer_next(else_expr, env, subst)
+                subst = self.unify(
+                    then_type.apply_substitution(subst),
+                    else_type,
+                    "If branches have incompatible types",
+                ).compose(subst)
+                return then_type.apply_substitution(subst), subst
+            case FunctionApplication(function=f, argument=argument):
+                function_type, subst = self.infer_expr(f, env)
+                argument_type, subst = self.infer_next(argument, env, subst)
+                result = self.fresh()
+                subst = self.unify(
+                    function_type.apply_substitution(subst),
+                    FunctionType(argument_type, result),
+                    "Function application type mismatch",
+                ).compose(subst)
+                return result.apply_substitution(subst), subst
+            case GroupedExpression(expression=inner):
+                return self.infer_expr(inner, env)
+            case DoBlock(statements=statements):
+                return self.infer_block(statements, env)
+            case ConstructorExpression(constructor_name=name, fields=fields):
+                return self.infer_record(name, fields, env)
+        raise TypeInferenceError(f"Unhandled expression type: {type(expr).__name__}")
 
-            case _:
-                # Other statement types (like declarations) don't return values
-                return UNIT_TYPE, current_subst
-
-    def infer_constructor_expr(
+    def infer_next(
         self,
-        expr: ConstructorExpression,
+        expr: Expression,
+        env: TypeEnvironment,
+        subst: TypeSubstitution,
+    ) -> InferenceResult:
+        """Infer ``expr`` after the substitution ``subst`` has been found."""
+        t, more = self.infer_expr(expr, env.apply_substitution(subst))
+        return t, more.compose(subst)
+
+    def infer_operands(
+        self,
+        expr: BinaryOperation,
+        env: TypeEnvironment,
+    ) -> tuple[Type, Type, TypeSubstitution]:
+        left, subst = self.infer_expr(expr.left, env)
+        right, subst = self.infer_next(expr.right, env, subst)
+        return left.apply_substitution(subst), right.apply_substitution(subst), subst
+
+    def infer_numeric(
+        self, expr: BinaryOperation, env: TypeEnvironment
+    ) -> InferenceResult:
+        left, right, subst = self.infer_operands(expr, env)
+        subst = self.unify(
+            left,
+            right,
+            "Binary numeric operation requires operands of same type",
+        ).compose(subst)
+        return self.numeric_type(
+            left.apply_substitution(subst),
+            subst,
+            "Numeric operation requires Int or Float",
+        )
+
+    def numeric_type(
+        self,
+        t: Type,
+        subst: TypeSubstitution,
+        what: str,
+    ) -> InferenceResult:
+        """``t`` as a numeric type: ``Int`` or ``Float``, defaulting to ``Int``."""
+        if t in (INT_TYPE, FLOAT_TYPE):
+            return t, subst
+        for candidate in (INT_TYPE, FLOAT_TYPE):
+            try:
+                return candidate, unify_one(t, candidate).compose(subst)
+            except UnificationError:
+                continue
+        raise TypeInferenceError(f"{what}, got {t}")
+
+    def infer_block(
+        self,
+        statements: Sequence[Statement],
         env: TypeEnvironment,
     ) -> InferenceResult:
-        # Look up constructor in environment
-        constructor_name = expr.constructor_name
-        if constructor_name not in env:
-            raise TypeInferenceError(f"Unknown constructor: {constructor_name}")
+        result: Type = UNIT_TYPE
+        subst = TypeSubstitution()
+        for stmt in statements:
+            match stmt:
+                case LetStatement(variable=name, value=value):
+                    t, subst = self.infer_next(value, env, subst)
+                    scheme = generalize(
+                        env.apply_substitution(subst).free_type_vars(),
+                        t.apply_substitution(subst),
+                    )
+                    env = env.extend(name, scheme)
+                    result = UNIT_TYPE
+                case _:
+                    assert is_expression(stmt)
+                    result, subst = self.infer_next(stmt, env, subst)
+        return result.apply_substitution(subst), subst
 
-        constructor_scheme = env[constructor_name]
-        constructor_type = constructor_scheme.instantiate(self.fresh_var_gen)
-
-        # Constructor type should be a function type from field types to result type
-        # For now, assume simple case and return the result type
-        # This is a simplification - full implementation would check field types
-        current_subst = TypeSubstitution()
-
-        # Infer types of field expressions
-        for field in expr.fields:
-            field_type, field_subst = self.infer_expr(
-                field.value,
-                env.apply_substitution(current_subst),
+    def infer_record(
+        self,
+        name: str,
+        fields: Sequence,
+        env: TypeEnvironment,
+    ) -> InferenceResult:
+        """``C { f_1 = e_1, ... }``: every declared field exactly once."""
+        scheme = env.lookup(name)
+        field_names = self.record_fields.get(name)
+        if scheme is None or field_names is None:
+            raise TypeInferenceError(f"Unknown record constructor: {name}")
+        params, result = unfold_function(scheme.instantiate(self.fresh_var_gen))
+        declared = dict(zip(field_names, params))
+        given = [f.field_name for f in fields]
+        if sorted(given) != sorted(field_names):
+            raise TypeInferenceError(
+                f"Constructor {name} expects fields {field_names}, got {given}",
             )
-            current_subst = current_subst.compose(field_subst)
+        subst = TypeSubstitution()
+        for f in fields:
+            t, subst = self.infer_next(f.value, env, subst)
+            subst = self.unify(
+                t,
+                declared[f.field_name].apply_substitution(subst),
+                f"Field {f.field_name} of {name} has the wrong type",
+            ).compose(subst)
+        return result.apply_substitution(subst), subst
 
-        match constructor_type:
-            case FunctionType():
-                # Walk through function type to get final return type
-                result_type: Type = constructor_type
-                while True:
-                    match result_type:
-                        case FunctionType():
-                            result_type = result_type.result
-                        case _:
-                            break
-                return result_type, current_subst
-            case _:
-                return constructor_type, current_subst
+    # --- patterns ---------------------------------------------------------------
 
     def infer_pattern(
         self,
         pattern: Pattern,
         pattern_type: Type,
         env: TypeEnvironment,
-    ) -> Tuple[TypeEnvironment, TypeSubstitution]:
+    ) -> tuple[TypeEnvironment, TypeSubstitution]:
+        """Bind the variables of ``pattern``, which matches values of ``pattern_type``."""
         match pattern:
             case VariablePattern(name=name):
-                # Variable patterns bind the variable to the pattern type
-                param_scheme = TypeScheme(set(), pattern_type)
-                return env.extend(name, param_scheme), TypeSubstitution()
-
-            case ConstructorPattern(constructor=constructor, patterns=patterns):
-                # Constructor patterns need to unify with constructor type
-                current_subst = TypeSubstitution()
-                extended_env = env
-
-                # Look up constructor type
-                if constructor not in env:
-                    raise TypeInferenceError(
-                        f"Unknown constructor in pattern: {constructor}",
-                    )
-
-                constructor_scheme = env[constructor]
-                constructor_type = constructor_scheme.instantiate(self.fresh_var_gen)
-
-                # Unify pattern type with constructor result type
-                match constructor_type:
-                    case FunctionType():
-                        # Walk through function type to get result type
-                        result_type: Type = constructor_type
-                        param_types = []
-                        while True:
-                            match result_type:
-                                case FunctionType():
-                                    param_types.append(result_type.param)
-                                    result_type = result_type.result
-                                case _:
-                                    break
-
-                        # Unify pattern type with constructor result type
-                        unify_subst = unify_one(pattern_type, result_type)
-                        current_subst = current_subst.compose(unify_subst)
-
-                        # Infer sub-patterns with their corresponding parameter types
-                        if len(patterns) != len(param_types):
-                            raise TypeInferenceError(
-                                f"Constructor {constructor} expects {len(param_types)} arguments, got {len(patterns)}",
-                            )
-
-                        for subpattern, param_type in zip(
-                            patterns,
-                            param_types,
-                        ):
-                            sub_env, sub_subst = self.infer_pattern(
-                                subpattern,
-                                param_type.apply_substitution(current_subst),
-                                extended_env.apply_substitution(current_subst),
-                            )
-                            extended_env = sub_env
-                            current_subst = current_subst.compose(sub_subst)
-                    case _:
-                        # Constructor with no parameters
-                        unify_subst = unify_one(pattern_type, constructor_type)
-                        current_subst = current_subst.compose(unify_subst)
-
-                return extended_env, current_subst
-
-            case ConsPattern(head=head, tail=tail):
-                # Cons pattern (head : tail) - both head and tail must be compatible
-                current_subst = TypeSubstitution()
-
-                # Pattern type should be List of some type
-                elem_type = self.fresh_type_var()
-                list_type = TypeApp(TypeCon("List"), elem_type)
-
-                # Unify pattern type with list type
-                unify_subst = unify_one(pattern_type, list_type)
-                current_subst = current_subst.compose(unify_subst)
-
-                # Infer head pattern with element type
-                head_env, head_subst = self.infer_pattern(
-                    head,
-                    elem_type.apply_substitution(current_subst),
-                    env.apply_substitution(current_subst),
-                )
-                current_subst = current_subst.compose(head_subst)
-
-                # Infer tail pattern with list type
-                tail_env, tail_subst = self.infer_pattern(
-                    tail,
-                    list_type.apply_substitution(current_subst),
-                    head_env.apply_substitution(current_subst),
-                )
-                current_subst = current_subst.compose(tail_subst)
-
-                return tail_env, current_subst
-
-            case TuplePattern(patterns=patterns):
-                # Tuple pattern - patterns must match corresponding tuple elements
-                current_subst = TypeSubstitution()
-                current_env = env
-
-                # Infer types for each sub-pattern
-                pattern_types: List[Type] = []
-                for i, sub_pattern in enumerate(patterns):
-                    sub_pattern_type = self.fresh_type_var()
-                    pattern_types.append(sub_pattern_type)
-
-                    sub_env, sub_subst = self.infer_pattern(
-                        sub_pattern,
-                        sub_pattern_type.apply_substitution(current_subst),
-                        current_env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(sub_subst)
-                    current_env = (
-                        sub_env  # This accumulates bindings from each sub-pattern
-                    )
-
-                # Create tuple type from pattern types
-                tuple_type = SharedTupleType(
-                    tuple(pt.apply_substitution(current_subst) for pt in pattern_types),
-                )
-
-                # Unify pattern type with tuple type
-                unify_subst = unify_one(pattern_type, tuple_type)
-                current_subst = current_subst.compose(unify_subst)
-
-                return current_env, current_subst
-
-            case ListPattern(patterns=patterns):
-                # List pattern - patterns must match corresponding list elements
-                current_subst = TypeSubstitution()
-                current_env = env
-
-                # Pattern type should be List of some type
-                elem_type = self.fresh_type_var()
-                list_type = TypeApp(TypeCon("List"), elem_type)
-
-                # Unify pattern type with list type
-                unify_subst = unify_one(pattern_type, list_type)
-                current_subst = current_subst.compose(unify_subst)
-
-                # If empty list pattern, we're done
-                if not patterns:
-                    return current_env, current_subst
-
-                # For non-empty list patterns, all elements should have the same type
-                for sub_pattern in patterns:
-                    sub_env, sub_subst = self.infer_pattern(
-                        sub_pattern,
-                        elem_type.apply_substitution(current_subst),
-                        current_env.apply_substitution(current_subst),
-                    )
-                    current_subst = current_subst.compose(sub_subst)
-                    current_env = (
-                        sub_env  # This accumulates bindings from each sub-pattern
-                    )
-
-                return current_env, current_subst
-
+                return env.extend(name, mono(pattern_type)), TypeSubstitution()
             case LiteralPattern(value=value):
-                # Literal patterns constrain the pattern type to the literal's type
-                literal_type: Type
-                if isinstance(value, bool):
-                    literal_type = BOOL_TYPE
-                elif isinstance(value, int):
-                    literal_type = INT_TYPE
-                elif isinstance(value, float):
-                    literal_type = FLOAT_TYPE
-                elif isinstance(value, str):
-                    literal_type = STRING_TYPE
-                elif isinstance(value, list) and len(value) == 0:
-                    # Empty list pattern [] - constrain to List of some type
-                    elem_type = self.fresh_type_var()
-                    literal_type = TypeApp(TypeCon("List"), elem_type)
-                else:
+                return env, self.unify(
+                    pattern_type,
+                    self.literal_type(value),
+                    "Literal pattern has the wrong type",
+                )
+            case NegativeIntPattern():
+                return env, self.unify(
+                    pattern_type, INT_TYPE, "Pattern has the wrong type"
+                )
+            case NegativeFloatPattern():
+                return env, self.unify(
+                    pattern_type, FLOAT_TYPE, "Pattern has the wrong type"
+                )
+            case ConstructorPattern(constructor=name, patterns=subpatterns):
+                scheme = env.lookup(name)
+                if scheme is None:
+                    raise TypeInferenceError(f"Unknown constructor in pattern: {name}")
+                params, result = unfold_function(scheme.instantiate(self.fresh_var_gen))
+                if len(params) != len(subpatterns):
                     raise TypeInferenceError(
-                        f"Unsupported literal pattern type: {type(value)} with value: {value}",
+                        f"Constructor {name} expects {len(params)} arguments, "
+                        f"got {len(subpatterns)}",
                     )
+                subst = self.unify(
+                    pattern_type, result, "Constructor pattern type mismatch"
+                )
+                return self.infer_subpatterns(subpatterns, params, env, subst)
+            case ConsPattern(head=head, tail=tail):
+                element = self.fresh()
+                list_type = list_of(element)
+                subst = self.unify(
+                    pattern_type, list_type, "Cons pattern requires a List"
+                )
+                return self.infer_subpatterns(
+                    [head, tail], [element, list_type], env, subst
+                )
+            case ListPattern(patterns=subpatterns):
+                element = self.fresh()
+                subst = self.unify(
+                    pattern_type, list_of(element), "List pattern requires a List"
+                )
+                return self.infer_subpatterns(
+                    subpatterns,
+                    [element] * len(subpatterns),
+                    env,
+                    subst,
+                )
+            case TuplePattern(patterns=subpatterns):
+                elements: list[Type] = [self.fresh() for _ in subpatterns]
+                env, subst = self.infer_subpatterns(
+                    subpatterns,
+                    elements,
+                    env,
+                    TypeSubstitution(),
+                )
+                tuple_type = TupleType(
+                    tuple(e.apply_substitution(subst) for e in elements)
+                )
+                subst = self.unify(
+                    pattern_type, tuple_type, "Tuple pattern type mismatch"
+                ).compose(subst)
+                return env, subst
+        raise TypeInferenceError(f"Unhandled pattern: {type(pattern).__name__}")
 
-                # Unify pattern type with literal type
-                unify_subst = unify_one(pattern_type, literal_type)
-                return env, unify_subst
+    def infer_subpatterns(
+        self,
+        patterns: Sequence[Pattern],
+        types: Sequence[Type],
+        env: TypeEnvironment,
+        subst: TypeSubstitution,
+    ) -> tuple[TypeEnvironment, TypeSubstitution]:
+        for pattern, t in zip(patterns, types):
+            env, more = self.infer_pattern(
+                pattern,
+                t.apply_substitution(subst),
+                env.apply_substitution(subst),
+            )
+            subst = more.compose(subst)
+        return env, subst
 
-            case _:
-                # Other pattern types (literals, etc.)
-                return env, TypeSubstitution()
+    @staticmethod
+    def literal_type(value: object) -> Type:
+        match value:
+            case bool():  # before int: bool is a subclass of int
+                return BOOL_TYPE
+            case int():
+                return INT_TYPE
+            case float():
+                return FLOAT_TYPE
+            case str():
+                return STRING_TYPE
+        raise TypeInferenceError(f"Unsupported literal pattern: {value!r}")
+
+    # --- functions and programs -------------------------------------------------
+
+    def infer_function_group(
+        self,
+        clauses: Sequence[FunctionDefinition],
+        env: TypeEnvironment,
+        outer: TypeEnvironment,
+    ) -> TypeScheme:
+        """The clauses ``f p_1 ... p_n = e`` of one function share one type.
+
+        ``env`` binds the functions of the program monomorphically (for the
+        recursive uses); the result is generalised with respect to ``outer``,
+        the environment without those provisional bindings."""
+        name = clauses[0].function_name
+        arity = len(clauses[0].patterns)
+        if any(len(clause.patterns) != arity for clause in clauses):
+            raise TypeInferenceError(
+                f"Function {name} has clauses with different arities"
+            )
+        param_types = [self.fresh() for _ in range(arity)]
+        result_type = self.fresh()
+        subst = TypeSubstitution()
+        for clause in clauses:
+            clause_env, subst = self.infer_subpatterns(
+                clause.patterns,
+                param_types,
+                env,
+                subst,
+            )
+            body_type, subst = self.infer_next(clause.body, clause_env, subst)
+            subst = self.unify(
+                result_type.apply_substitution(subst),
+                body_type,
+                f"Function {name} clauses have incompatible return types",
+            ).compose(subst)
+        function_type = function(*param_types, result_type).apply_substitution(subst)
+        for clause in clauses:
+            clause.ty = function_type
+        return generalize(
+            outer.apply_substitution(subst).free_type_vars(), function_type
+        )
 
     def infer_program(self, ast: Program) -> TypeEnvironment:
-        env = TypeEnvironment()
-
-        # Add built-in functions
-        # putStr :: String -> IO ()
-        putstr_type = FunctionType(TypeCon("String"), TypeApp(TypeCon("IO"), UNIT_TYPE))
-        env = env.extend("putStr", TypeScheme(set(), putstr_type))
-
-        # show :: a -> String
-        show_type = FunctionType(TypeVar("a"), TypeCon("String"))
-        env = env.extend("show", TypeScheme({"a"}, show_type))
-
-        # error :: String -> a
-        error_type = FunctionType(STRING_TYPE, TypeVar("a"))
-        env = env.extend("error", TypeScheme({"a"}, error_type))
-
-        # Comparison operators
-        # (==) :: a -> a -> Bool
-        eq_type = FunctionType(
-            TypeVar("a"),
-            FunctionType(TypeVar("a"), TypeCon("Bool")),
-        )
-        env = env.extend("==", TypeScheme({"a"}, eq_type))
-
-        # First pass: collect data declarations
+        env = builtin_env()
+        groups: dict[str, list[FunctionDefinition]] = {}
         for stmt in ast.statements:
             match stmt:
-                case DataDeclaration() as data_decl:
-                    data_env = self.infer_data_decl(data_decl)
-                    env = env.extend_many(data_env.bindings)
-                case _:
-                    continue
-
-        # Second pass: create forward declarations for all functions
-        # This allows functions to refer to each other regardless of order
-        function_names = []
-        for stmt in ast.statements:
-            match stmt:
-                case FunctionDefinition(function_name=function_name):
-                    function_names.append(function_name)
-                    # Create a fresh type variable for each function
-                    func_type_var = self.fresh_type_var()
-                    env = env.extend(
-                        function_name,
-                        TypeScheme(set(), func_type_var),
-                    )
-                case _:
-                    continue
-
-        # Third pass: group function definitions and infer them together
-        function_groups: Dict[str, List[FunctionDefinition]] = defaultdict(list)
-
-        # Group function definitions by name
-        for stmt in ast.statements:
-            match stmt:
-                case FunctionDefinition(function_name=function_name) as func_def:
-                    function_groups[function_name].append(func_def)
-                case _:
-                    continue
-
-        # Process each group of function definitions
-        for function_name, func_defs in function_groups.items():
+                case DataDeclaration():
+                    env = env.extend_many(self.infer_data_decl(stmt))
+                case FunctionDefinition(function_name=name):
+                    groups.setdefault(name, []).append(stmt)
+        # every function is bound beforehand (monomorphically), so bodies may
+        # refer to functions defined later or to themselves
+        provisional = {name: mono(self.fresh()) for name in groups}
+        for name, clauses in groups.items():
             try:
-                if len(func_defs) == 1:
-                    # Single function definition
-                    scheme, _ = self.infer_function(func_defs[0], env)
-                    env = env.extend(function_name, scheme)
-                else:
-                    # Multiple function clauses - group them together
-                    scheme, _ = self.infer_function_group(func_defs, env)
-                    env = env.extend(function_name, scheme)
+                scheme = self.infer_function_group(
+                    clauses,
+                    env.extend_many(provisional),
+                    env,
+                )
             except TypeInferenceError as e:
-                # Continue with other functions even if one fails
                 raise TypeInferenceError(
-                    f"Failed to infer type for function {function_name}: {e}",
+                    f"Failed to infer type for function {name}: {e}",
                 ) from e
-
+            env = env.extend(name, scheme)
+            del provisional[name]
         return env
 
 
 def type_check_ast(ast: Program) -> TypeEnvironment:
-    inferrer = TypeInferrer()
-    return inferrer.infer_program(ast)
+    return TypeInferrer().infer_program(ast)
